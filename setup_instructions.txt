@@ -34,10 +34,10 @@ Environmental Setup with VSCode in Windows 11.
         py -X.Y -m venv venv
     ''
     
-    For example, to create a virtual environment using Python 3.9:
+    For example, to create a virtual environment using Python 3.10:
 
     powershell '''
-        py -3.9 -m venv venv
+        py -3.10 -m venv venv
     '''
 
     This creates a venv folder inside your project directory.
@@ -64,6 +64,12 @@ Environmental Setup with VSCode in Windows 11.
         py --version
     '''
     
+    Update pip, setuptools, and wheel packages inside the Virtual Environment
+    
+    power shell '''
+         python -m pip install --upgrade pip setuptools wheel
+    '''
+
     Deactivate the Virtual Environment
     When you're done, deactivate the virtual environment by running:
 
