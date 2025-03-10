@@ -7,6 +7,8 @@ __pycache__/
 
 # Installation assets
 assets/
+.assets/
+
 # Virtual environment
 venv/
 .env/
@@ -59,3 +61,4 @@ htmlcov/
 .env.local
 config.json
 secrets.json
+assets/readme.txt
