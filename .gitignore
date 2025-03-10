@@ -5,6 +5,8 @@ __pycache__/
 *.dll
 *.dylib
 
+# Installation assets
+assets/
 # Virtual environment
 venv/
 .env/
