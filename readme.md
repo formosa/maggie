@@ -57,14 +57,23 @@ Before installing, you'll need to download:
     - Or, use the direct link for the Python 3.10.11 Installer: [python-3.10.11-amd64.exe](https://www.python.org/ftp/python/3.10.11/python-3.10.11-amd64.exe)
    - Download from [https://www.python.org/downloads/windows/](https://www.python.org/ftp/python/3.10.11/python-3.10.11-amd64.exe)
 
-1. **Mistral 7B Instruct Model (GPTQ 4-bit)**
+2. **CUDA Toolkit 11.8**
+   - [https://developer.nvidia.com/cuda-11-8-0-download-archive](https://developer.nvidia.com/cuda-11-8-0-download-archive)
+
+3. **cuDNN for CUDA 11.x**
+   - [https://developer.nvidia.com/cudnn](https://developer.nvidia.com/cudnn)
+
+4. **Visual C++ Redistributable** (Windows only)
+   - [https://aka.ms/vs/17/release/vc_redist.x64.exe](https://aka.ms/vs/17/release/vc_redist.x64.exe)
+
+5. **Porcupine Wake Word Engine License**
+   - Get a free access key from [Picovoice Console](https://console.picovoice.ai/)
+
+6. **Mistral 7B Instruct Model (GPTQ 4-bit)**
    - Download from [Hugging Face](https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.3-GPTQ)
 
-2. **Piper TTS Voice Models**
+7. **Piper TTS Voice Models**
    - Download from [Hugging Face](https://huggingface.co/rhasspy/piper-voices/tree/main/en/en_US)
-
-3. **Porcupine Wake Word Engine License**
-   - Get a free access key from [Picovoice Console](https://console.picovoice.ai/)
 
 
 ### Quick Installation (Windows PowerShell)
