@@ -1,4 +1,6 @@
 # Maggie AI Assistant - Dependencies
+# REQUIRES PYTHON 3.10.x - Other versions are not supported
+
 # Core dependencies
 pvporcupine==2.2.0
 SpeechRecognition==3.10.0
@@ -20,9 +22,8 @@ tqdm==4.66.1
 mammoth==1.7.0
 
 # Hardware acceleration
-# Note: For CUDA 11.8 specific build. Can be installed separately with:
-# pip install torch==2.0.1+cu118 --extra-index-url https://download.pytorch.org/whl/cu118
-#torch>=2.0.1
+# For CUDA 11.8 specific build:
+torch==2.0.1+cu118 --extra-index-url https://download.pytorch.org/whl/cu118
 onnxruntime-gpu==1.15.1
 
 # Utility packages

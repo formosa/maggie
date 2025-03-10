@@ -108,11 +108,12 @@ def verify_system():
     """
     logger.info("Verifying system configuration...")
     
-    # Check Python version
+    # Check Python version - require exactly 3.10.x
     python_version = platform.python_version_tuple()
     if int(python_version[0]) != 3 or int(python_version[1]) != 10:
         logger.error(f"Unsupported Python version: {platform.python_version()}")
-        logger.error("Maggie requires Python 3.10.x")
+        logger.error("Maggie requires Python 3.10.x specifically. Other versions are not compatible.")
+        logger.error("Please install Python 3.10 and try again.")
         return False
     
     try:

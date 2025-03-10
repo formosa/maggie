@@ -10,14 +10,19 @@ Before installing Maggie, ensure your system meets the following requirements:
 - **GPU**: NVIDIA GeForce RTX 3080 with 10GB VRAM or equivalent
 - **RAM**: 32GB DDR4-3200 or faster
 - **OS**: Windows 11 Pro (64-bit) or Ubuntu 22.04+ (64-bit)
-- **Python**: 3.10.x
+- **Python**: Exactly version 3.10.x (Python 3.11+ is NOT compatible)
 - **CUDA**: CUDA 11.8 and cuDNN
 
 ## Required Downloads
 
 1. **Python 3.10**
-   - Windows: [https://www.python.org/downloads/windows/](https://www.python.org/downloads/windows/)
-   - Linux: Use your distribution's package manager or [https://www.python.org/downloads/source/](https://www.python.org/downloads/source/)
+   - Windows: 
+      - Download Python 3.10 64bit Windows installer: [https://www.python.org/downloads/windows/](https://www.python.org/downloads/windows/)
+      - Or, directly: [https://www.python.org/ftp/python/3.10.11/python-3.10.11-amd64.exe](https://www.python.org/ftp/python/3.10.11/python-3.10.11-amd64.exe)
+   - Linux: `sudo apt install python3.10 python3.10-venv python3.10-dev`
+   - If you have multiple Python versions installed:
+     - Windows: Use `py -3.10 -m venv venv` to create virtual environment
+     - Linux: Use `python3.10 -m venv venv` to create virtual environment
 
 2. **CUDA Toolkit 11.8**
    - [https://developer.nvidia.com/cuda-11-8-0-download-archive](https://developer.nvidia.com/cuda-11-8-0-download-archive)

@@ -31,24 +31,31 @@ for dir in "${dirs[@]}"; do
     fi
 done
 
-# Check for Python 3.10
+# Check for Python 3.10 specifically
 if command -v python3.10 &> /dev/null; then
-    echo -e "${GREEN}Found $(python3.10 --version)${NC}"
-    PYTHON_CMD=python3.10
-elif command -v python3 &> /dev/null && python3 --version | grep -q "Python 3\.10"; then
-    echo -e "${GREEN}Found $(python3 --version)${NC}"
-    PYTHON_CMD=python3
-else
-    echo -e "${YELLOW}Python 3.10 not found. Checking for alternatives...${NC}"
-    if command -v python3 &> /dev/null; then
-        echo -e "${YELLOW}Found $(python3 --version), will use this instead${NC}"
-        echo -e "${YELLOW}Note: Python 3.10 is recommended${NC}"
-        PYTHON_CMD=python3
+    PYTHON_VERSION=$(python3.10 --version)
+    if [[ $PYTHON_VERSION == *"3.10."* ]]; then
+        echo -e "${GREEN}Found $PYTHON_VERSION - Compatible version${NC}"
+        PYTHON_CMD=python3.10
     else
-        echo -e "${RED}Python 3.x not found. Please install Python 3.10:${NC}"
-        echo -e "${RED}sudo apt update && sudo apt install python3.10 python3.10-venv python3.10-dev${NC}"
+        echo -e "${RED}Unexpected version output: $PYTHON_VERSION${NC}"
         exit 1
     fi
+elif command -v python3 &> /dev/null; then
+    PYTHON_VERSION=$(python3 --version)
+    if [[ $PYTHON_VERSION == *"3.10."* ]]; then
+        echo -e "${GREEN}Found $PYTHON_VERSION - Compatible version${NC}"
+        PYTHON_CMD=python3
+    else
+        echo -e "${RED}Incompatible Python version: $PYTHON_VERSION${NC}"
+        echo -e "${RED}Maggie requires Python 3.10.x specifically. Other versions will not work.${NC}"
+        echo -e "${RED}Please install Python 3.10 and try again.${NC}"
+        exit 1
+    fi
+else
+    echo -e "${RED}Python 3.10 not found. Please install Python 3.10:${NC}"
+    echo -e "${RED}sudo apt update && sudo apt install python3.10 python3.10-venv python3.10-dev${NC}"
+    exit 1
 fi
 
 # Check for CUDA

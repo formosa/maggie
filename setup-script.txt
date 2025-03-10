@@ -27,16 +27,19 @@ foreach ($dir in $dirs) {
     }
 }
 
-# Check for Python 3.10
+# Check specifically for Python 3.10
 try {
     $pythonVersion = python --version 2>&1
     if ($pythonVersion -match "Python 3\.10\.\d+") {
-        Write-Host "Found $pythonVersion" -ForegroundColor Green
+        Write-Host "Found $pythonVersion - Compatible version" -ForegroundColor Green
     } else {
-        Write-Host "Warning: Python 3.10.x is recommended, but found $pythonVersion" -ForegroundColor Yellow
+        Write-Host "Incompatible Python version: $pythonVersion" -ForegroundColor Red
+        Write-Host "Maggie requires Python 3.10.x specifically. Other versions will not work." -ForegroundColor Red
+        Write-Host "Please install Python 3.10 from https://www.python.org/downloads/release/python-3104/" -ForegroundColor Red
+        exit 1
     }
 } catch {
-    Write-Host "Python not found. Please install Python 3.10.x from https://www.python.org/downloads/windows/" -ForegroundColor Red
+    Write-Host "Python not found. Please install Python 3.10.x from https://www.python.org/downloads/release/python-3104/" -ForegroundColor Red
     exit 1
 }
 

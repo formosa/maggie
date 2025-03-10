@@ -22,7 +22,16 @@ Maggie is a Python-based AI assistant implementing a Finite State Machine (FSM) 
 - **GPU**: NVIDIA GeForce RTX 3080 with 10GB VRAM (or equivalent)
 - **RAM**: 32GB DDR4-3200 (or faster)
 - **OS**: Windows 11 Pro (64-bit)
-- **Python**: 3.10.x
+- **Python**: Version 3.10.x ONLY (3.10.0 to 3.10.12)
+
+## Python Version Compatibility
+
+Maggie requires Python 3.10.x specifically. Python 3.11, 3.12, and 3.13 are NOT compatible due to:
+1. CUDA and PyTorch integration dependencies
+2. Version-specific dependencies in ML libraries
+3. Breaking changes in newer Python versions that affect the codebase
+
+If you have multiple Python versions installed, ensure you use Python 3.10 when creating your virtual environment.
 
 ## Documentation
 
