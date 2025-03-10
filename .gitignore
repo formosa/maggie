@@ -1,0 +1,59 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*.so
+*.dll
+*.dylib
+
+# Virtual environment
+venv/
+.env/
+.venv/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# VSCode settings
+.vscode/
+*.code-workspace
+
+# PyCharm settings
+.idea/
+
+# Logs and temporary files
+logs/
+*.log
+*.out
+*.pid
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# Python packaging
+*.egg-info/
+dist/
+build/
+*.manifest
+*.spec
+
+# Cache and dependency directories
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Testing / coverage reports
+.coverage
+.tox/
+nosetests.xml
+coverage.xml
+htmlcov/
+
+# Ignore database and data files
+*.sqlite3
+*.db
+
+# Ignore environment variables or secrets files
+.env
+.env.local
+config.json
+secrets.json

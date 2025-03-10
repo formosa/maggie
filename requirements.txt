@@ -1,0 +1,29 @@
+# Maggie AI Assistant - Dependencies
+# Core dependencies
+pvporcupine==2.2.0
+SpeechRecognition==3.10.0
+PyAudio==0.2.13
+whisper-streaming==0.2.1
+faster-whisper==0.9.0
+piper-tts==1.2.0
+ctransformers==0.2.27
+llama-cpp-python==0.2.11
+PyQt6==6.5.0
+python-docx==0.8.11
+transitions==0.9.0
+numpy==1.24.2
+PyYAML==6.0
+loguru==0.7.0
+soundfile==0.12.1
+requests==2.31.0
+tqdm==4.66.1
+mammoth==1.7.0
+
+# Hardware acceleration
+# Note: For CUDA 11.8 specific build. Can be installed separately with:
+# pip install torch==2.0.1+cu118 --extra-index-url https://download.pytorch.org/whl/cu118
+#torch>=2.0.1
+onnxruntime-gpu==1.15.1
+
+# Utility packages
+psutil==5.9.5  # For system monitoring

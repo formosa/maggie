@@ -1,0 +1,51 @@
+# Maggie AI Assistant Configuration
+# Optimized for AMD Ryzen 9 5900X and NVIDIA GeForce RTX 3080
+
+# Wake word detection configuration
+wake_word:
+  sensitivity: 0.5
+  keyword_path: null  # Set this to a custom keyword file path or keep null to use default "maggie"
+  porcupine_access_key: ""  # Your Porcupine access key - REQUIRED
+  cpu_threshold: 5.0  # Maximum CPU usage percentage
+
+# Speech processing configuration
+speech:
+  whisper:
+    model_size: "base"  # Options: tiny, base, small, medium, large
+    compute_type: "float16"  # Optimized for RTX 3080
+  tts:
+    voice_model: "en_US-kathleen-medium"
+    model_path: "models/tts"
+    sample_rate: 22050
+
+# LLM configuration
+llm:
+  model_path: "models/mistral-7b-instruct-v0.3-GPTQ-4bit"
+  model_type: "mistral"
+  gpu_layers: 32  # Optimized for RTX 3080 10GB
+  gpu_layer_auto_adjust: true  # NEW: Allow automatic adjustment based on available VRAM
+
+# System configuration
+inactivity_timeout: 300  # 5 minutes in seconds
+
+# Logging configuration
+logging:
+  path: "logs"
+  console_level: "INFO"  # Options: DEBUG, INFO, WARNING, ERROR
+  file_level: "DEBUG"    # NEW: Separate level for file logging
+
+# Utility modules configuration
+utilities:
+  recipe_creator:
+    output_dir: "recipes"
+    template_path: "templates/recipe_template.docx"
+
+# Threading configuration for Ryzen 9 5900X
+threading:
+  max_workers: 8  # Using 8 of the 12 available cores
+  thread_timeout: 30  # NEW: Timeout for thread operations in seconds
+
+# Memory management for 32GB system
+memory:
+  max_percent: 75  # Use up to 75% of system memory (24GB)
+  model_unload_threshold: 85  # NEW: Unload models if memory usage exceeds this percentage
