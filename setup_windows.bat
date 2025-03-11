@@ -14,7 +14,17 @@ echo Working directory set to: %CD%
 echo Maggie - Windows Setup
 echo ===================================
 
-REM Check for admin rights
+REM Check for essential commands
+for %%c in (find.exe) do (
+    if not exist "%SystemRoot%\System32\%%c" (
+        echo [ERROR] Essential command %%c not found in %SystemRoot%\System32
+        echo Please ensure your Windows installation is intact.
+        pause
+        exit /B 1
+    )
+)
+
+REM Check for admin rights using fsutil
 echo Checking administrator privileges...
 fsutil dirty query C: >nul 2>&1
 if %errorLevel% EQU 0 (
@@ -58,7 +68,7 @@ if errorlevel 1 (
     pause
     exit /B 1
 )
-type pythonversion.txt | find "Python 3.10" > nul
+type pythonversion.txt | %SystemRoot%\System32\find.exe "Python 3.10" > nul
 if errorlevel 1 (
     echo [ERROR] Python 3.10.x is required for Maggie
     echo Current version:
@@ -82,13 +92,13 @@ echo.
 echo Checking NVIDIA GPU and CUDA support...
 python -c "import torch; print(f'CUDA Available: {torch.cuda.is_available()}'); print(f'GPU: {torch.cuda.get_device_name(0)}') if torch.cuda.is_available() else print('No CUDA-capable GPU detected')" > gpucheck.txt 2>&1
 set CUDA_CHECK_ERROR=0
-type gpucheck.txt | find "No module named" > nul
+type gpucheck.txt | %SystemRoot%\System32\find.exe "No module named" > nul
 if not errorlevel 1 set CUDA_CHECK_ERROR=1
 if %CUDA_CHECK_ERROR% == 1 (
     echo PyTorch not installed yet, will install with CUDA support
 ) else (
     type gpucheck.txt
-    type gpucheck.txt | find "RTX 3080" > nul
+    type gpucheck.txt | %SystemRoot%\System32\find.exe "RTX 3080" > nul
     if not errorlevel 1 (
         echo RTX 3080 detected - Using optimal configuration
     )
