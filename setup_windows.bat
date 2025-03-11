@@ -1,4 +1,6 @@
 @echo off
+setlocal enabledelayedexpansion
+
 REM =====================================================
 REM Maggie - Windows Setup Script
 REM =====================================================
@@ -22,27 +24,6 @@ for %%c in (find.exe) do (
         pause
         exit /B 1
     )
-)
-
-REM Check for admin rights using fsutil
-echo Checking administrator privileges...
-fsutil dirty query C: >nul 2>&1
-if %errorLevel% EQU 0 (
-    echo Running with administrator privileges - full functionality available
-) else (
-    echo [WARNING] Not running with administrator privileges
-    echo Some features may not work correctly without admin rights
-    echo Particularly: system-wide dependencies and GPU optimizations
-    echo.
-    set "continue_anyway="
-    set /P continue_anyway="Continue anyway? (y/n): "
-    if not defined continue_anyway set "continue_anyway=n"
-    if /I "%continue_anyway%" NEQ "y" (
-        echo Setup canceled. Please restart with administrator privileges.
-        pause
-        exit /B 1
-    )
-    echo Continuing with limited privileges...
 )
 
 REM Create directories
@@ -91,10 +72,10 @@ REM Check CUDA support for RTX 3080
 echo.
 echo Checking NVIDIA GPU and CUDA support...
 python -c "import torch; print(f'CUDA Available: {torch.cuda.is_available()}'); print(f'GPU: {torch.cuda.get_device_name(0)}') if torch.cuda.is_available() else print('No CUDA-capable GPU detected')" > gpucheck.txt 2>&1
-set CUDA_CHECK_ERROR=0
+set "CUDA_CHECK_ERROR=0"
 type gpucheck.txt | %SystemRoot%\System32\find.exe "No module named" > nul
-if not errorlevel 1 set CUDA_CHECK_ERROR=1
-if %CUDA_CHECK_ERROR% == 1 (
+if not errorlevel 1 set "CUDA_CHECK_ERROR=1"
+if !CUDA_CHECK_ERROR! == 1 (
     echo PyTorch not installed yet, will install with CUDA support
 ) else (
     type gpucheck.txt
@@ -123,25 +104,56 @@ if errorlevel 1 (
 )
 echo Virtual environment activated
 
-REM Upgrade pip and setuptools
+REM Upgrade pip and setuptools aggressively
 echo.
 echo Upgrading pip and setuptools...
-python -m pip install --upgrade pip setuptools wheel
+python -m pip install --upgrade --force-reinstall pip setuptools wheel
 
 REM Install PyTorch with CUDA support for RTX 3080
 echo.
 echo Installing PyTorch with CUDA 11.8 support (optimized for RTX 3080)...
 pip install torch==2.0.1+cu118 --extra-index-url https://download.pytorch.org/whl/cu118
 
-REM Install dependencies
+REM Install Maggie dependencies with corrected error handling
 echo.
 echo Installing Maggie dependencies...
-pip install -e .
+pip install -e . >nul 2>&1 ^&
+if errorlevel 1 ( ^
+    echo [ERROR] Failed to install Maggie dependencies. ^&
+    if exist setup.py ( ^
+        echo Found setup.py. Please ensure it is compatible with editable installs. ^&
+        echo Open setup.py and verify the setup() function is defined correctly. ^&
+        pause ^&
+        exit /B 1 ^
+    ) else ( ^
+        echo No setup.py found. This might be a project configuration issue. ^&
+        echo Please ensure pyproject.toml or setup.cfg is correctly configured. ^&
+        pause ^&
+        exit /B 1 ^
+    ) ^
+) else ( ^
+    echo Maggie dependencies installed successfully ^
+)
 
-REM Install GPU dependencies
+REM Install GPU-specific dependencies with corrected error handling
 echo.
 echo Installing GPU-specific dependencies...
-pip install -e ".[gpu]"
+pip install -e ".[gpu]" >nul 2>&1 ^&
+if errorlevel 1 ( ^
+    echo [ERROR] Failed to install GPU-specific dependencies. ^&
+    if exist setup.py ( ^
+        echo Found setup.py. Please ensure it supports 'gpu' extra requirements. ^&
+        echo Open setup.py and verify the extras_require dictionary. ^&
+        pause ^&
+        exit /B 1 ^
+    ) else ( ^
+        echo No setup.py found. Check pyproject.toml for 'gpu' extras. ^&
+        pause ^&
+        exit /B 1 ^
+    ) ^
+) else ( ^
+    echo GPU-specific dependencies installed successfully ^
+)
 
 REM Create configuration file
 echo.
@@ -167,7 +179,7 @@ echo (May take significant time and bandwidth)
 set "download_models="
 set /P download_models="Download models? (y/n): "
 
-if /I "%download_models%"=="y" (
+if /I "!download_models!"=="y" (
     REM Check git-lfs
     echo.
     echo Checking for Git LFS...
@@ -183,9 +195,9 @@ if /I "%download_models%"=="y" (
     echo.
     echo Checking Mistral LLM model...
     set "mistral_dir=models\mistral-7b-instruct-v0.3-GPTQ-4bit"
-    if not exist "%mistral_dir%" (
+    if not exist "!mistral_dir!" (
         echo Downloading Mistral 7B model... (this may take a while)
-        git clone https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.3-GPTQ "%mistral_dir%"
+        git clone https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.3-GPTQ "!mistral_dir!"
     ) else (
         echo Mistral model directory already exists
     )
@@ -194,19 +206,19 @@ if /I "%download_models%"=="y" (
     echo.
     echo Checking TTS voice model...
     set "voice_dir=models\tts\en_US-kathleen-medium"
-    set "onnx_file=%voice_dir%\en_US-kathleen-medium.onnx"
-    set "json_file=%voice_dir%\en_US-kathleen-medium.json"
+    set "onnx_file=!voice_dir!\en_US-kathleen-medium.onnx"
+    set "json_file=!voice_dir!\en_US-kathleen-medium.json"
     
-    if not exist "%onnx_file%" (
+    if not exist "!onnx_file!" (
         echo Downloading Piper TTS voice model...
-        powershell -Command "(New-Object System.Net.WebClient).DownloadFile('https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/kathleen/medium/en_US-kathleen-medium.onnx', '%onnx_file%')"
+        powershell -Command "(New-Object System.Net.WebClient).DownloadFile('https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/kathleen/medium/en_US-kathleen-medium.onnx', '!onnx_file!')"
     ) else (
         echo Piper TTS ONNX file already exists
     )
     
-    if not exist "%json_file%" (
+    if not exist "!json_file!" (
         echo Downloading Piper TTS JSON config...
-        powershell -Command "(New-Object System.Net.WebClient).DownloadFile('https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/kathleen/medium/en_US-kathleen-medium.json', '%json_file%')"
+        powershell -Command "(New-Object System.Net.WebClient).DownloadFile('https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/kathleen/medium/en_US-kathleen-medium.json', '!json_file!')"
     ) else (
         echo Piper TTS JSON file already exists
     )
@@ -241,7 +253,7 @@ REM Ask to start Maggie
 echo.
 set "run_app="
 set /P run_app="Would you like to start Maggie now? (y/n): "
-if /I "%run_app%"=="y" (
+if /I "!run_app!"=="y" (
     echo Starting Maggie...
     python main.py
 ) else (
