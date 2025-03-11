@@ -1,300 +1,663 @@
-#!/usr/bin/env python3
 """
-Maggie AI Assistant - Comprehensive Setup and Resource Management
+Maggie AI Assistant - Unified Installation Script
+=============================================
+Handles installation and setup of the Maggie AI Assistant.
 
-This module provides an advanced, automated installation and resource 
-acquisition system for the Maggie AI Assistant project.
-
-Key Features:
-- Intelligent dependency management
-- Automated model and resource downloads
-- GPU and system optimization
-- Comprehensive error handling
-- Flexible configuration options
-
-Dependencies:
-- Python 3.10+
-- setuptools
-- wheel
-- requests
-- huggingface_hub
-- torch
-- transformers
-
-Author: Maggie Development Team
-Version: 0.2.0
+This script provides a unified installation experience for
+Windows and Linux, with specific optimizations for
+AMD Ryzen 9 5900X and NVIDIA RTX 3080 hardware.
 """
 
 import os
 import sys
-import json
-import shutil
 import platform
 import subprocess
-import requests
-from typing import List, Dict, Optional, Tuple
+import argparse
+import shutil
+from typing import List, Dict, Any, Optional, Tuple
 from pathlib import Path
 
-try:
-    from setuptools import setup, find_packages
-    import torch
-    import huggingface_hub
-except ImportError:
-    subprocess.check_call([sys.executable, '-m', 'pip', 'install', 
-                            'setuptools', 'wheel', 'requests', 
-                            'huggingface_hub', 'torch'])
-
-class MaggieResourceManager:
+class MaggieInstaller:
     """
-    Comprehensive resource management and download utility for Maggie AI Assistant.
-
-    Handles intelligent acquisition of AI models, TTS voices, and other 
-    project-critical resources with robust error handling and optimization.
-
-    Attributes
+    Unified installer for Maggie AI Assistant.
+    
+    Provides platform-specific installation and configuration
+    for Windows and Linux systems, with optimizations for
+    AMD Ryzen 9 5900X and NVIDIA RTX 3080.
+    
+    Parameters
     ----------
-    _base_dir : Path
-        Base directory for resource downloads
-    _config : Dict
-        Configuration dictionary for resource locations
-    _system_info : Dict
-        Detected system hardware and configuration details
+    verbose : bool, optional
+        Whether to display verbose output, by default False
     """
-
-    def __init__(self, base_dir: Optional[Path] = None):
+    
+    def __init__(self, verbose: bool = False):
         """
-        Initialize the Maggie Resource Manager.
-
+        Initialize the installer.
+        
         Parameters
         ----------
-        base_dir : Path, optional
-            Base directory for resource downloads. 
-            Defaults to './models' if not specified.
+        verbose : bool, optional
+            Whether to display verbose output, by default False
         """
-        self._base_dir = base_dir or Path('./models')
-        self._base_dir.mkdir(parents=True, exist_ok=True)
+        self.verbose = verbose
+        self.platform = platform.system()
+        self.base_dir = Path(os.path.dirname(os.path.abspath(__file__)))
         
-        self._config = self._load_resource_config()
-        self._system_info = self._detect_system_configuration()
-
-    def _load_resource_config(self) -> Dict:
-        """
-        Load resource configuration from a JSON file.
-
-        Returns
-        -------
-        Dict
-            Resource configuration dictionary
-        """
-        config_path = Path('resource_config.json')
-        default_config = {
-            "models": {
-                "llm": {
-                    "name": "TheBloke/Mistral-7B-Instruct-v0.3-GPTQ",
-                    "path": "models/mistral-7b-instruct"
-                },
-                "tts": {
-                    "name": "rhasspy/piper-voices",
-                    "voice": "en_US/kathleen/medium",
-                    "path": "models/tts/en_US-kathleen-medium"
-                }
-            }
-        }
-
-        if config_path.exists():
-            with open(config_path, 'r') as f:
-                return json.load(f)
-        return default_config
-
-    def _detect_system_configuration(self) -> Dict:
-        """
-        Detect and analyze system hardware and configuration.
-
-        Returns
-        -------
-        Dict
-            Comprehensive system configuration details
-        """
-        system_info = {
-            "os": platform.system(),
-            "release": platform.release(),
-            "python_version": platform.python_version(),
-            "processor": platform.processor(),
-            "machine": platform.machine()
-        }
-
-        try:
-            import torch
-            system_info.update({
-                "cuda_available": torch.cuda.is_available(),
-                "cuda_device_name": torch.cuda.get_device_name(0) if torch.cuda.is_available() else None,
-                "cuda_device_capability": torch.cuda.get_device_capability() if torch.cuda.is_available() else None
-            })
-        except ImportError:
-            system_info.update({
-                "cuda_available": False,
-                "cuda_device_name": None,
-                "cuda_device_capability": None
-            })
-
-        return system_info
-
-    def download_model(self, model_type: str = 'llm') -> Path:
-        """
-        Download and configure AI models with intelligent management.
-
-        Parameters
-        ----------
-        model_type : str, optional
-            Type of model to download (default: 'llm')
-
-        Returns
-        -------
-        Path
-            Path to the downloaded model
-        
-        Raises
-        ------
-        RuntimeError
-            If model download fails
-        """
-        try:
-            model_config = self._config['models'].get(model_type, {})
-            model_name = model_config.get('name')
-            model_path = self._base_dir / model_config.get('path', f'{model_type}_model')
+        # Define colors for output
+        if self.platform == "Windows":
+            os.system("")  # Enable VT100 escape sequences on Windows
             
-            if not model_path.exists():
-                print(f"Downloading {model_type} model: {model_name}")
-                huggingface_hub.snapshot_download(
-                    repo_id=model_name, 
-                    local_dir=model_path,
-                    local_dir_use_symlinks=False
-                )
-            
-            return model_path
+        # ANSI color codes
+        self.colors = {
+            "reset": "\033[0m",
+            "red": "\033[91m",
+            "green": "\033[92m",
+            "yellow": "\033[93m",
+            "blue": "\033[94m",
+            "magenta": "\033[95m",
+            "cyan": "\033[96m"
+        }
         
-        except Exception as e:
-            print(f"Error downloading {model_type} model: {e}")
-            raise RuntimeError(f"Model download failed for {model_type}")
-
-    def download_tts_voice(self) -> Path:
-        """
-        Download Text-to-Speech voice model with advanced configuration.
-
-        Returns
-        -------
-        Path
-            Path to the downloaded TTS voice model
-        """
-        tts_config = self._config['models'].get('tts', {})
-        voice_name = tts_config.get('voice', 'en_US/kathleen/medium')
-        tts_path = self._base_dir / tts_config.get('path', 'models/tts')
-        
-        # Construct download URLs dynamically
-        base_url = "https://huggingface.co/rhasspy/piper-voices/resolve/main"
-        
-        files_to_download = [
-            f"{base_url}/{voice_name}.onnx",
-            f"{base_url}/{voice_name}.json"
+        # Required directories
+        self.required_dirs = [
+            "logs",
+            "models",
+            "models/tts",
+            "models/tts/en_US-kathleen-medium",
+            "recipes",
+            "templates",
+            "cache",
+            "cache/tts"
         ]
         
-        tts_path.mkdir(parents=True, exist_ok=True)
+        # Check if running as admin/root
+        self.is_admin = self._check_admin()
         
-        for file_url in files_to_download:
-            filename = Path(file_url).name
-            target_path = tts_path / filename
+    def _print(self, message: str, color: str = None):
+        """
+        Print a message with optional color.
+        
+        Parameters
+        ----------
+        message : str
+            Message to print
+        color : str, optional
+            Color name, by default None
+        """
+        if color and color in self.colors:
+            print(f"{self.colors[color]}{message}{self.colors['reset']}")
+        else:
+            print(message)
             
-            if not target_path.exists():
-                print(f"Downloading TTS file: {filename}")
-                response = requests.get(file_url, stream=True)
-                response.raise_for_status()
+    def _check_admin(self) -> bool:
+        """
+        Check if running with administrative privileges.
+        
+        Returns
+        -------
+        bool
+            True if running as admin/root, False otherwise
+        """
+        if self.platform == "Windows":
+            try:
+                import ctypes
+                return ctypes.windll.shell32.IsUserAnAdmin() != 0
+            except:
+                return False
+        else:
+            return os.geteuid() == 0
+            
+    def _run_command(self, cmd: List[str], check: bool = True, shell: bool = False) -> Tuple[int, str, str]:
+        """
+        Run a command and return the result.
+        
+        Parameters
+        ----------
+        cmd : List[str]
+            Command to run
+        check : bool, optional
+            Whether to check for errors, by default True
+        shell : bool, optional
+            Whether to run as shell command, by default False
+            
+        Returns
+        -------
+        Tuple[int, str, str]
+            Return code, stdout, stderr
+        """
+        if self.verbose:
+            self._print(f"Running command: {' '.join(cmd)}", "cyan")
+            
+        try:
+            process = subprocess.Popen(
+                cmd if not shell else " ".join(cmd),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                shell=shell,
+                text=True
+            )
+            
+            stdout, stderr = process.communicate()
+            
+            if check and process.returncode != 0:
+                self._print(f"Command failed: {' '.join(cmd)}", "red")
+                self._print(f"Error: {stderr}", "red")
                 
-                with open(target_path, 'wb') as f:
-                    shutil.copyfileobj(response.raw, f)
+            return process.returncode, stdout, stderr
+            
+        except Exception as e:
+            self._print(f"Error running command: {e}", "red")
+            return -1, "", str(e)
+            
+    def _check_python_version(self) -> bool:
+        """
+        Check if Python version is 3.10.x.
         
-        return tts_path
+        Returns
+        -------
+        bool
+            True if Python version is compatible, False otherwise
+        """
+        version = platform.python_version_tuple()
+        
+        if int(version[0]) != 3 or int(version[1]) != 10:
+            self._print(f"ERROR: Unsupported Python version: {platform.python_version()}", "red")
+            self._print("Maggie requires Python 3.10.x specifically", "red")
+            
+            # Suggest installation instructions
+            if self.platform == "Windows":
+                self._print("Please install Python 3.10 from: https://www.python.org/downloads/release/python-31011/", "yellow")
+            else:
+                self._print("Please install Python 3.10 using:", "yellow")
+                self._print("sudo apt update && sudo apt install python3.10 python3.10-venv python3.10-dev", "yellow")
+                
+            return False
+            
+        self._print(f"Found Python {platform.python_version()} - Compatible version", "green")
+        return True
+        
+    def _check_gpu(self) -> Dict[str, Any]:
+        """
+        Check GPU availability and capabilities.
+        
+        Returns
+        -------
+        Dict[str, Any]
+            GPU information
+        """
+        gpu_info = {
+            "available": False,
+            "name": None,
+            "is_rtx_3080": False,
+            "cuda_available": False,
+            "cuda_version": None
+        }
+        
+        try:
+            # Check if PyTorch is installed
+            import_returncode, _, _ = self._run_command(
+                [sys.executable, "-c", "import torch; print('PyTorch available')"],
+                check=False
+            )
+            
+            if import_returncode != 0:
+                self._print("PyTorch not installed yet, will install with CUDA support", "yellow")
+                return gpu_info
+                
+            # Check CUDA availability
+            returncode, stdout, _ = self._run_command([
+                sys.executable, 
+                "-c", 
+                "import torch; print(f'CUDA available: {torch.cuda.is_available()}'); print(f'GPU: {torch.cuda.get_device_name(0)}') if torch.cuda.is_available() else print('No CUDA-capable GPU detected')"
+            ], check=False)
+            
+            if returncode != 0:
+                self._print("Error checking GPU capabilities", "yellow")
+                return gpu_info
+                
+            # Parse output
+            for line in stdout.splitlines():
+                if "CUDA available: True" in line:
+                    gpu_info["available"] = True
+                    gpu_info["cuda_available"] = True
+                elif "GPU:" in line:
+                    gpu_name = line.split("GPU:")[1].strip()
+                    gpu_info["name"] = gpu_name
+                    
+                    if "3080" in gpu_name:
+                        gpu_info["is_rtx_3080"] = True
+                        self._print(f"RTX 3080 detected - Will use optimized settings", "green")
+                    
+            # Check CUDA version if available
+            if gpu_info["cuda_available"]:
+                returncode, stdout, _ = self._run_command([
+                    sys.executable,
+                    "-c",
+                    "import torch; print(f'CUDA Version: {torch.version.cuda}')"
+                ], check=False)
+                
+                if returncode == 0 and "CUDA Version:" in stdout:
+                    gpu_info["cuda_version"] = stdout.split("CUDA Version:")[1].strip()
+                    self._print(f"CUDA Version: {gpu_info['cuda_version']}", "green")
+                    
+                    # Check if CUDA 11.8 (optimal for RTX 3080)
+                    if gpu_info["cuda_version"].startswith("11.8"):
+                        self._print("Optimal CUDA version 11.8 detected", "green")
+                    else:
+                        self._print(f"Note: CUDA 11.8 recommended for best performance with RTX 3080", "yellow")
+                        
+        except Exception as e:
+            self._print(f"Error checking GPU: {e}", "yellow")
+            
+        return gpu_info
+        
+    def _create_directories(self) -> bool:
+        """
+        Create required directories.
+        
+        Returns
+        -------
+        bool
+            True if all directories created successfully, False otherwise
+        """
+        self._print("\nCreating required directories...", "cyan")
+        
+        success = True
+        for directory in self.required_dirs:
+            dir_path = os.path.join(self.base_dir, directory)
+            if not os.path.exists(dir_path):
+                try:
+                    os.makedirs(dir_path, exist_ok=True)
+                    self._print(f"Created directory: {directory}", "green")
+                except Exception as e:
+                    self._print(f"Error creating directory {directory}: {e}", "red")
+                    success = False
+            else:
+                self._print(f"Directory already exists: {directory}", "yellow")
+                
+        return success
+        
+    def _setup_virtual_env(self) -> bool:
+        """
+        Set up virtual environment.
+        
+        Returns
+        -------
+        bool
+            True if virtual environment created successfully, False otherwise
+        """
+        self._print("\nSetting up Python virtual environment...", "cyan")
+        
+        venv_dir = os.path.join(self.base_dir, "venv")
+        
+        # Check if venv already exists
+        if os.path.exists(venv_dir):
+            self._print("Virtual environment already exists", "yellow")
+            return True
+            
+        # Create venv
+        python_cmd = sys.executable
+        returncode, stdout, stderr = self._run_command([python_cmd, "-m", "venv", venv_dir])
+        
+        if returncode != 0:
+            self._print(f"Error creating virtual environment: {stderr}", "red")
+            return False
+            
+        self._print("Virtual environment created successfully", "green")
+        return True
+        
+    def _install_dependencies(self) -> bool:
+        """
+        Install dependencies in virtual environment.
+        
+        Returns
+        -------
+        bool
+            True if dependencies installed successfully, False otherwise
+        """
+        self._print("\nInstalling dependencies...", "cyan")
+        
+        # Determine pip command based on platform
+        if self.platform == "Windows":
+            pip_cmd = os.path.join(self.base_dir, "venv", "Scripts", "pip")
+            python_cmd = os.path.join(self.base_dir, "venv", "Scripts", "python")
+        else:
+            pip_cmd = os.path.join(self.base_dir, "venv", "bin", "pip")
+            python_cmd = os.path.join(self.base_dir, "venv", "bin", "python")
+            
+        # Upgrade pip, setuptools, wheel
+        self._print("Upgrading pip, setuptools, and wheel...", "cyan")
+        returncode, _, _ = self._run_command([pip_cmd, "install", "--upgrade", "pip", "setuptools", "wheel"])
+        
+        if returncode != 0:
+            self._print("Error upgrading pip, setuptools, and wheel", "red")
+            return False
+            
+        # Install PyTorch with CUDA support
+        self._print("Installing PyTorch with CUDA 11.8 support (optimized for RTX 3080)...", "cyan")
+        returncode, _, _ = self._run_command([
+            pip_cmd, "install", "torch==2.0.1+cu118", "--extra-index-url", "https://download.pytorch.org/whl/cu118"
+        ])
+        
+        if returncode != 0:
+            self._print("Error installing PyTorch with CUDA support", "red")
+            return False
+            
+        # Install project dependencies
+        self._print("Installing Maggie dependencies...", "cyan")
+        returncode, _, _ = self._run_command([pip_cmd, "install", "-e", "."])
+        
+        if returncode != 0:
+            self._print("Error installing Maggie dependencies", "red")
+            return False
+            
+        # Install GPU-specific dependencies
+        self._print("Installing GPU-specific dependencies...", "cyan")
+        returncode, _, _ = self._run_command([pip_cmd, "install", "-e", ".[gpu]"])
+        
+        if returncode != 0:
+            self._print("Error installing GPU-specific dependencies", "red")
+            return False
+            
+        self._print("Dependencies installed successfully", "green")
+        return True
+        
+    def _setup_config(self) -> bool:
+        """
+        Set up configuration file.
+        
+        Returns
+        -------
+        bool
+            True if configuration set up successfully, False otherwise
+        """
+        self._print("\nSetting up configuration...", "cyan")
+        
+        config_path = os.path.join(self.base_dir, "config.yaml")
+        example_path = os.path.join(self.base_dir, "config.yaml.example")
+        
+        # Check if config already exists
+        if os.path.exists(config_path):
+            self._print("Configuration file already exists", "yellow")
+            return True
+            
+        # Check if example exists
+        if not os.path.exists(example_path):
+            self._print("Configuration example file not found", "red")
+            return False
+            
+        # Copy example to config
+        try:
+            shutil.copy(example_path, config_path)
+            self._print("Configuration file created from example", "green")
+            self._print("NOTE: You need to edit config.yaml to add your Picovoice access key", "yellow")
+            return True
+        except Exception as e:
+            self._print(f"Error creating configuration file: {e}", "red")
+            return False
+            
+    def _download_models(self) -> bool:
+        """
+        Download required models.
+        
+        Returns
+        -------
+        bool
+            True if models downloaded successfully, False otherwise
+        """
+        self._print("\nChecking model downloads...", "cyan")
+        
+        # Ask user if they want to download models
+        response = input(f"{self.colors['magenta']}Download models? This may take significant time and bandwidth (y/n): {self.colors['reset']}")
+        
+        if response.lower() != "y":
+            self._print("Skipping model downloads", "yellow")
+            return True
+            
+        # Check for git-lfs
+        self._print("Checking for Git LFS...", "cyan")
+        returncode, _, _ = self._run_command(["git", "lfs", "version"], check=False)
+        
+        if returncode != 0:
+            self._print("Installing Git LFS...", "cyan")
+            if self.platform == "Windows":
+                self._run_command(["git", "lfs", "install"], check=False)
+            else:
+                if self.is_admin:
+                    self._run_command(["apt", "install", "-y", "git-lfs"], check=False)
+                else:
+                    self._run_command(["sudo", "apt", "install", "-y", "git-lfs"], check=False)
+                self._run_command(["git", "lfs", "install"], check=False)
+                
+        # Download Mistral model
+        mistral_dir = os.path.join(self.base_dir, "models", "mistral-7b-instruct-v0.3-GPTQ-4bit")
+        if not os.path.exists(mistral_dir):
+            self._print("Downloading Mistral 7B model... (this may take a while)", "cyan")
+            returncode, _, _ = self._run_command([
+                "git", "clone", "https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.3-GPTQ", mistral_dir
+            ])
+            
+            if returncode != 0:
+                self._print("Error downloading Mistral model", "red")
+                return False
+        else:
+            self._print("Mistral model directory already exists", "yellow")
+            
+        # Download TTS voice model
+        voice_dir = os.path.join(self.base_dir, "models", "tts", "en_US-kathleen-medium")
+        onnx_file = os.path.join(voice_dir, "en_US-kathleen-medium.onnx")
+        json_file = os.path.join(voice_dir, "en_US-kathleen-medium.json")
+        
+        if not os.path.exists(onnx_file):
+            self._print("Downloading TTS ONNX model...", "cyan")
+            if self.platform == "Windows":
+                # Use PowerShell for Windows
+                self._run_command([
+                    "powershell", "-Command",
+                    f"(New-Object System.Net.WebClient).DownloadFile('https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/kathleen/medium/en_US-kathleen-medium.onnx', '{onnx_file}')"
+                ], shell=True)
+            else:
+                # Use wget for Linux
+                self._run_command(["wget", "-O", onnx_file, "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/kathleen/medium/en_US-kathleen-medium.onnx"])
+        else:
+            self._print("TTS ONNX file already exists", "yellow")
+            
+        if not os.path.exists(json_file):
+            self._print("Downloading TTS JSON config...", "cyan")
+            if self.platform == "Windows":
+                # Use PowerShell for Windows
+                self._run_command([
+                    "powershell", "-Command",
+                    f"(New-Object System.Net.WebClient).DownloadFile('https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/kathleen/medium/en_US-kathleen-medium.json', '{json_file}')"
+                ], shell=True)
+            else:
+                # Use wget for Linux
+                self._run_command(["wget", "-O", json_file, "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/kathleen/medium/en_US-kathleen-medium.json"])
+        else:
+            self._print("TTS JSON file already exists", "yellow")
+            
+        self._print("Model downloads completed", "green")
+        return True
+        
+    def _create_recipe_template(self) -> bool:
+        """
+        Create recipe template.
+        
+        Returns
+        -------
+        bool
+            True if template created successfully, False otherwise
+        """
+        self._print("\nCreating recipe template...", "cyan")
+        
+        # Determine python command based on platform
+        if self.platform == "Windows":
+            python_cmd = os.path.join(self.base_dir, "venv", "Scripts", "python")
+        else:
+            python_cmd = os.path.join(self.base_dir, "venv", "bin", "python")
+            
+        returncode, _, _ = self._run_command([python_cmd, "main.py", "--create-template"])
+        
+        if returncode != 0:
+            self._print("Error creating recipe template", "red")
+            return False
+            
+        self._print("Recipe template created successfully", "green")
+        return True
+        
+    def _optimize_config(self) -> bool:
+        """
+        Optimize configuration for detected hardware.
+        
+        Returns
+        -------
+        bool
+            True if configuration optimized successfully, False otherwise
+        """
+        self._print("\nOptimizing configuration for detected hardware...", "cyan")
+        
+        # Determine python command based on platform
+        if self.platform == "Windows":
+            python_cmd = os.path.join(self.base_dir, "venv", "Scripts", "python")
+        else:
+            python_cmd = os.path.join(self.base_dir, "venv", "bin", "python")
+            
+        returncode, _, _ = self._run_command([python_cmd, "main.py", "--optimize"])
+        
+        if returncode != 0:
+            self._print("Error optimizing configuration", "red")
+            return False
+            
+        self._print("Configuration optimized for your hardware", "green")
+        return True
+        
+    def _verify_system(self) -> bool:
+        """
+        Verify system configuration.
+        
+        Returns
+        -------
+        bool
+            True if system verification passed, False otherwise
+        """
+        self._print("\nVerifying system configuration...", "cyan")
+        
+        # Determine python command based on platform
+        if self.platform == "Windows":
+            python_cmd = os.path.join(self.base_dir, "venv", "Scripts", "python")
+        else:
+            python_cmd = os.path.join(self.base_dir, "venv", "bin", "python")
+            
+        returncode, stdout, _ = self._run_command([python_cmd, "main.py", "--verify"])
+        
+        if returncode != 0:
+            self._print("System verification failed", "red")
+            return False
+            
+        self._print("System verification passed", "green")
+        return True
+        
+    def install(self) -> bool:
+        """
+        Run the full installation process.
+        
+        Returns
+        -------
+        bool
+            True if installation successful, False otherwise
+        """
+        self._print("=== Maggie AI Assistant Installation ===", "cyan")
+        self._print(f"Platform: {self.platform}", "cyan")
+        
+        if not self.is_admin:
+            if self.platform == "Windows":
+                self._print("Note: Running without Administrator privileges", "yellow")
+                self._print("Some optimizations may not be applied", "yellow")
+            else:
+                self._print("Note: Running without root privileges", "yellow")
+                self._print("Some optimizations may not be applied", "yellow")
+        
+        # Check Python version
+        if not self._check_python_version():
+            return False
+            
+        # Check GPU
+        gpu_info = self._check_gpu()
+        
+        # Create directories
+        if not self._create_directories():
+            return False
+            
+        # Setup virtual environment
+        if not self._setup_virtual_env():
+            return False
+            
+        # Install dependencies
+        if not self._install_dependencies():
+            return False
+            
+        # Setup configuration
+        if not self._setup_config():
+            return False
+            
+        # Download models
+        if not self._download_models():
+            return False
+            
+        # Create recipe template
+        if not self._create_recipe_template():
+            return False
+            
+        # Optimize configuration
+        if not self._optimize_config():
+            return False
+            
+        # Verify system
+        if not self._verify_system():
+            return False
+            
+        # Installation complete
+        self._print("\n=== Installation Complete ===", "green")
+        self._print("Reminders:", "cyan")
+        self._print("1. Edit config.yaml to add your Picovoice access key from https://console.picovoice.ai/", "yellow")
+        self._print("2. To run Maggie:", "yellow")
+        
+        if self.platform == "Windows":
+            self._print("   .\venv\Scripts\activate", "cyan")
+            self._print("   python main.py", "cyan")
+        else:
+            self._print("   source venv/bin/activate", "cyan")
+            self._print("   python main.py", "cyan")
+            
+        # Ask if user wants to start Maggie
+        response = input(f"\n{self.colors['magenta']}Would you like to start Maggie now? (y/n): {self.colors['reset']}")
+        
+        if response.lower() == "y":
+            self._print("\nStarting Maggie...", "cyan")
+            
+            if self.platform == "Windows":
+                python_cmd = os.path.join(self.base_dir, "venv", "Scripts", "python")
+            else:
+                python_cmd = os.path.join(self.base_dir, "venv", "bin", "python")
+                
+            self._run_command([python_cmd, "main.py"])
+            
+        return True
 
-def get_long_description() -> str:
-    """
-    Read project long description from README.
-
-    Returns
-    -------
-    str
-        Long description for package metadata
-    """
-    try:
-        with open('README.md', 'r', encoding='utf-8') as f:
-            return f.read()
-    except FileNotFoundError:
-        return "Maggie AI Assistant - An advanced, intelligent assistant"
-
-setup(
-    name='maggie-ai',
-    version='0.2.0',
-    author='Maggie Development Team',
-    author_email='contact@maggieai.com',
-    description='An intelligent, configurable AI assistant',
-    long_description=get_long_description(),
-    long_description_content_type='text/markdown',
-    url='https://github.com/your-org/maggie',
-    packages=find_packages(exclude=['tests*', 'docs*']),
-    classifiers=[
-        'Development Status :: 3 - Alpha',
-        'Intended Audience :: Developers',
-        'License :: OSI Approved :: MIT License',
-        'Programming Language :: Python :: 3.10',
-        'Topic :: Scientific/Engineering :: Artificial Intelligence',
-    ],
-    python_requires='>=3.10',
-    install_requires=[
-        'torch>=2.0.1',
-        'transformers>=4.30.0',
-        'huggingface_hub',
-        'requests',
-        'pyyaml',
-        'numpy',
-    ],
-    extras_require={
-        'gpu': [
-            'nvidia-cudnn-cu11',
-            'torchvision',
-            'torchaudio'
-        ],
-        'dev': [
-            'pytest',
-            'sphinx',
-            'sphinx-napoleon'
-        ]
-    },
-    entry_points={
-        'console_scripts': [
-            'maggie=maggie.cli:main',
-        ],
-    },
-)
 
 def main():
     """
-    Primary entry point for Maggie AI installation and configuration.
-    Orchestrates resource management and system optimization.
+    Main entry point for the installer.
     """
-    resource_manager = MaggieResourceManager()
+    parser = argparse.ArgumentParser(description="Maggie AI Assistant Installer")
+    parser.add_argument("--verbose", action="store_true", help="Enable verbose output")
+    args = parser.parse_args()
     
-    print("🚀 Maggie AI Resource Configuration")
-    print(f"System Configuration: {json.dumps(resource_manager._system_info, indent=2)}")
+    installer = MaggieInstaller(verbose=args.verbose)
+    success = installer.install()
     
-    try:
-        # Automated resource downloads
-        resource_manager.download_model('llm')
-        resource_manager.download_model('tts')
-        resource_manager.download_tts_voice()
-        
-        print("✅ All resources successfully downloaded and configured.")
-    
-    except Exception as e:
-        print(f"❌ Resource configuration failed: {e}")
-        sys.exit(1)
+    return 0 if success else 1
 
-if __name__ == '__main__':
-    main()
+if __name__ == "__main__":
+    sys.exit(main())
