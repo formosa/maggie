@@ -4,30 +4,43 @@ Maggie AI Assistant - Main Script
 ===============================
 Entry point for the Maggie AI Assistant application.
 
-This script initializes and starts the Maggie AI Assistant.
-It's optimized for AMD Ryzen 9 5900X and NVIDIA GeForce RTX 3080 hardware.
+This script initializes and starts the Maggie AI Assistant with optimizations
+for AMD Ryzen 9 5900X and NVIDIA GeForce RTX 3080 hardware.
+It handles command-line arguments, logging configuration, system verification,
+and application startup.
 """
 
 import os
 import sys
 import argparse
 import platform
+import multiprocessing
 from loguru import logger
+from typing import Dict, Any, Optional, List
 
 # Import main application class
 from maggie import MaggieAI
+from utils.config_validator import ConfigValidator
 
 
-def parse_arguments():
+def parse_arguments() -> argparse.Namespace:
     """
     Parse command line arguments.
     
     Returns
     -------
     argparse.Namespace
-        Parsed command line arguments
+        Parsed command line arguments with the following fields:
+        - config: Path to configuration file
+        - debug: Boolean flag for debug logging
+        - verify: Boolean flag for system verification
+        - create_template: Boolean flag for template creation
+        - optimize: Boolean flag for hardware optimization
     """
-    parser = argparse.ArgumentParser(description="Maggie AI Assistant")
+    parser = argparse.ArgumentParser(
+        description="Maggie AI Assistant",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
     parser.add_argument(
         "--config", 
         type=str, 
@@ -49,17 +62,27 @@ def parse_arguments():
         action="store_true",
         help="Create the recipe template file if it doesn't exist"
     )
+    parser.add_argument(
+        "--optimize",
+        action="store_true",
+        help="Optimize configuration for detected hardware"
+    )
     return parser.parse_args()
 
 
-def setup_logging(debug=False):
+def setup_logging(debug: bool = False) -> None:
     """
     Set up logging configuration.
     
     Parameters
     ----------
     debug : bool, optional
-        Enable debug logging if True
+        Enable debug logging if True, by default False
+        
+    Notes
+    -----
+    This function configures the loguru logger with console and file
+    handlers, and logs system information for diagnostic purposes.
     """
     # Ensure logs directory exists
     os.makedirs("logs", exist_ok=True)
@@ -68,8 +91,8 @@ def setup_logging(debug=False):
     log_level = "DEBUG" if debug else "INFO"
     logger.configure(
         handlers=[
-            {"sink": sys.stdout, "level": log_level},
-            {"sink": "logs/maggie.log", "rotation": "10 MB", "retention": "1 week"}
+            {"sink": sys.stdout, "level": log_level, "format": "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>"},
+            {"sink": "logs/maggie.log", "rotation": "10 MB", "retention": "1 week", "format": "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} - {message}"}
         ]
     )
     
@@ -77,27 +100,50 @@ def setup_logging(debug=False):
     try:
         import platform
         import psutil
-        import torch
         
         logger.info(f"System: {platform.system()} {platform.release()}")
         logger.info(f"Python: {platform.python_version()}")
-        logger.info(f"CPU: {platform.processor()}")
+        
+        # CPU info
+        cpu_info = platform.processor()
+        cpu_cores = psutil.cpu_count(logical=False)
+        cpu_threads = psutil.cpu_count(logical=True)
+        
+        logger.info(f"CPU: {cpu_info}")
+        logger.info(f"CPU Cores: {cpu_cores} physical, {cpu_threads} logical")
+        
+        # RAM info
         ram_gb = psutil.virtual_memory().total / (1024 ** 3)
         logger.info(f"RAM: {ram_gb:.2f} GB")
         
-        if torch.cuda.is_available():
-            for i in range(torch.cuda.device_count()):
-                logger.info(f"GPU {i}: {torch.cuda.get_device_name(i)}")
-                memory_gb = torch.cuda.get_device_properties(i).total_memory / (1024 ** 3)
-                logger.info(f"GPU Memory: {memory_gb:.2f} GB")
-        else:
-            logger.warning("CUDA not available, GPU acceleration disabled")
+        # GPU info with better error handling
+        try:
+            import torch
+            if torch.cuda.is_available():
+                for i in range(torch.cuda.device_count()):
+                    gpu_name = torch.cuda.get_device_name(i)
+                    memory_gb = torch.cuda.get_device_properties(i).total_memory / (1024 ** 3)
+                    logger.info(f"GPU {i}: {gpu_name}")
+                    logger.info(f"GPU Memory: {memory_gb:.2f} GB")
+                    
+                    # Log RTX 3080 specific capabilities
+                    if "3080" in gpu_name:
+                        logger.info(f"RTX 3080 detected - Tensor Cores available")
+                        logger.info(f"Optimizing for 10GB VRAM and Ampere architecture")
+            else:
+                logger.warning("CUDA not available, GPU acceleration disabled")
+        except ImportError:
+            logger.warning("PyTorch not installed, GPU detection skipped")
+        except Exception as e:
+            logger.warning(f"Error detecting GPU information: {e}")
             
     except ImportError as e:
         logger.warning(f"System info modules not available: {e}")
+    except Exception as e:
+        logger.warning(f"Error gathering system information: {e}")
 
 
-def verify_system():
+def verify_system() -> bool:
     """
     Verify system meets requirements for Maggie.
     
@@ -105,31 +151,57 @@ def verify_system():
     -------
     bool
         True if system meets requirements, False otherwise
+        
+    Notes
+    -----
+    This function checks Python version, GPU availability, required
+    directories, and critical dependencies to ensure the system is
+    properly configured for running Maggie.
     """
+    verification_issues = []
     logger.info("Verifying system configuration...")
     
     # Check Python version - require exactly 3.10.x
     python_version = platform.python_version_tuple()
     if int(python_version[0]) != 3 or int(python_version[1]) != 10:
-        logger.error(f"Unsupported Python version: {platform.python_version()}")
+        error_msg = f"Unsupported Python version: {platform.python_version()}"
+        logger.error(error_msg)
         logger.error("Maggie requires Python 3.10.x specifically. Other versions are not compatible.")
         logger.error("Please install Python 3.10 and try again.")
-        return False
+        verification_issues.append(error_msg)
+    else:
+        logger.info(f"Python version {platform.python_version()} is compatible")
     
+    # Check for CUDA with better error handling
     try:
-        # Check for CUDA
         import torch
-        if not torch.cuda.is_available():
+        if torch.cuda.is_available():
+            logger.info(f"CUDA available: {torch.version.cuda}")
+            logger.info(f"GPU detected: {torch.cuda.get_device_name(0)}")
+            
+            # Check for RTX 3080 specifically
+            is_rtx_3080 = "3080" in torch.cuda.get_device_name(0)
+            if is_rtx_3080:
+                logger.info("RTX 3080 detected - optimal hardware configuration")
+            else:
+                gpu_memory = torch.cuda.get_device_properties(0).total_memory / (1024**3)
+                if gpu_memory < 8:
+                    logger.warning(f"GPU memory ({gpu_memory:.1f}GB) is less than recommended 10GB")
+                    logger.warning("Performance may be degraded")
+                    verification_issues.append(f"Low GPU memory: {gpu_memory:.1f}GB")
+        else:
             logger.warning("CUDA not available, GPU acceleration disabled")
             logger.warning("Performance may be significantly reduced without GPU acceleration")
-        else:
-            logger.info(f"CUDA version: {torch.version.cuda}")
+            verification_issues.append("No CUDA-capable GPU detected")
     except ImportError:
         logger.error("PyTorch not installed, GPU acceleration unavailable")
         logger.error("Install PyTorch with: pip install torch")
-        return False
+        verification_issues.append("PyTorch not installed")
+    except Exception as e:
+        logger.error(f"Error checking CUDA: {e}")
+        verification_issues.append(f"CUDA check error: {str(e)}")
     
-    # Check for required directories
+    # Check for required directories and create if necessary
     required_dirs = ["models", "models/tts", "logs", "recipes", "templates"]
     for directory in required_dirs:
         if not os.path.exists(directory):
@@ -137,7 +209,9 @@ def verify_system():
                 os.makedirs(directory, exist_ok=True)
                 logger.info(f"Created directory: {directory}")
             except Exception as e:
-                logger.error(f"Failed to create directory {directory}: {e}")
+                error_msg = f"Failed to create directory {directory}: {e}"
+                logger.error(error_msg)
+                verification_issues.append(error_msg)
                 return False
     
     # Check for PyAudio (common source of issues)
@@ -145,12 +219,13 @@ def verify_system():
         import pyaudio
         logger.info("PyAudio found")
     except ImportError:
-        logger.error("PyAudio not installed")
+        error_msg = "PyAudio not installed"
+        logger.error(error_msg)
         if platform.system() == "Windows":
             logger.error("On Windows, install with: pipwin install pyaudio")
         else:
             logger.error("On Linux, first install portaudio19-dev, then install pyaudio")
-        return False
+        verification_issues.append(error_msg)
     
     # Check for other critical dependencies
     critical_deps = [
@@ -161,20 +236,31 @@ def verify_system():
     
     for dep in critical_deps:
         try:
-            __import__(dep.replace("-", "_").replace("PyQt6", "PyQt6.QtCore"))
+            module_name = dep.replace("-", "_")
+            if dep == "PyQt6":
+                module_name = "PyQt6.QtCore"
+            __import__(module_name)
         except ImportError:
             missing_deps.append(dep)
     
     if missing_deps:
-        logger.error(f"Missing critical dependencies: {', '.join(missing_deps)}")
+        deps_str = ", ".join(missing_deps)
+        logger.error(f"Missing critical dependencies: {deps_str}")
         logger.error("Install with: pip install -r requirements.txt")
+        verification_issues.append(f"Missing dependencies: {deps_str}")
+    
+    # Final verification result
+    if verification_issues:
+        logger.error("System verification failed with the following issues:")
+        for issue in verification_issues:
+            logger.error(f"  - {issue}")
         return False
     
     logger.info("System verification completed successfully")
     return True
 
 
-def create_recipe_template():
+def create_recipe_template() -> bool:
     """
     Create the recipe template file if it doesn't exist.
     
@@ -182,6 +268,11 @@ def create_recipe_template():
     -------
     bool
         True if template created or already exists, False on error
+        
+    Notes
+    -----
+    This function creates a Microsoft Word document template for recipes,
+    which is used by the recipe creator utility.
     """
     template_path = "templates/recipe_template.docx"
     
@@ -195,15 +286,43 @@ def create_recipe_template():
         os.makedirs("templates", exist_ok=True)
         
         doc = Document()
+        
+        # Create a more detailed template
         doc.add_heading("Recipe Name", level=1)
+        
+        # Add metadata section
+        doc.add_heading("Recipe Information", level=2)
+        info_table = doc.add_table(rows=3, cols=2)
+        info_table.style = 'Table Grid'
+        info_table.cell(0, 0).text = "Preparation Time"
+        info_table.cell(0, 1).text = "00 minutes"
+        info_table.cell(1, 0).text = "Cooking Time"
+        info_table.cell(1, 1).text = "00 minutes"
+        info_table.cell(2, 0).text = "Servings"
+        info_table.cell(2, 1).text = "0 servings"
+        
+        # Add ingredients section with better formatting
         doc.add_heading("Ingredients", level=2)
         doc.add_paragraph("• Ingredient 1", style='ListBullet')
         doc.add_paragraph("• Ingredient 2", style='ListBullet')
+        doc.add_paragraph("• Ingredient 3", style='ListBullet')
+        
+        # Add instructions with numbered steps
         doc.add_heading("Instructions", level=2)
-        doc.add_paragraph("1. Step 1")
-        doc.add_paragraph("2. Step 2")
+        doc.add_paragraph("1. Step 1", style='ListNumber')
+        doc.add_paragraph("2. Step 2", style='ListNumber')
+        doc.add_paragraph("3. Step 3", style='ListNumber')
+        
+        # Add notes section
         doc.add_heading("Notes", level=2)
-        doc.add_paragraph("Add any additional notes here.")
+        doc.add_paragraph("Add any additional notes, tips, or variations here.")
+        
+        # Add nutrition section if available
+        doc.add_heading("Nutrition Information (per serving)", level=2)
+        doc.add_paragraph("Calories: 000")
+        doc.add_paragraph("Protein: 00g")
+        doc.add_paragraph("Carbohydrates: 00g")
+        doc.add_paragraph("Fat: 00g")
         
         doc.save(template_path)
         logger.info(f"Created recipe template at {template_path}")
@@ -213,7 +332,86 @@ def create_recipe_template():
         return False
 
 
-def main():
+def optimize_system() -> bool:
+    """
+    Optimize system settings for best performance.
+    
+    Returns
+    -------
+    bool
+        True if optimization succeeded, False otherwise
+        
+    Notes
+    -----
+    This function optimizes system settings for running Maggie,
+    including process priority and thread affinity on Windows,
+    and governor settings on Linux.
+    """
+    try:
+        if platform.system() == "Windows":
+            # Windows-specific optimizations
+            try:
+                import psutil
+                # Get current process
+                process = psutil.Process(os.getpid())
+                
+                # Set process priority to high
+                process.nice(psutil.HIGH_PRIORITY_CLASS)
+                logger.info("Set process priority to high")
+                
+                # CPU affinity optimization for Ryzen 9 5900X
+                # Use the first 8 cores (16 threads for Ryzen)
+                cpu_count = psutil.cpu_count(logical=True)
+                if cpu_count >= 16:  # Likely Ryzen 9 with hyperthreading
+                    # Create affinity mask for first 8 physical cores (16 threads)
+                    # For Ryzen, logical processors are arranged as:
+                    # 0, 2, 4, ... are first 12 cores, 1, 3, 5, ... are their hyperthreaded pairs
+                    affinity = list(range(16))
+                    process.cpu_affinity(affinity)
+                    logger.info(f"Set CPU affinity to first 8 physical cores: {affinity}")
+            except Exception as e:
+                logger.warning(f"Failed to apply Windows performance optimizations: {e}")
+                
+        elif platform.system() == "Linux":
+            # Linux-specific optimizations
+            try:
+                # Check if running as root (required for some optimizations)
+                is_root = os.geteuid() == 0
+                
+                if is_root:
+                    # Set CPU governor to performance
+                    os.system("echo performance | tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor")
+                    logger.info("Set CPU governor to performance mode")
+                else:
+                    logger.warning("Not running as root, skipping some system optimizations")
+                    
+                # Set process nice level
+                os.nice(-10)  # Higher priority (lower nice value)
+                logger.info("Set process nice level to -10")
+            except Exception as e:
+                logger.warning(f"Failed to apply Linux performance optimizations: {e}")
+        
+        # Apply common optimizations
+        try:
+            # Set process name for better identification
+            import setproctitle
+            setproctitle.setproctitle("maggie-ai-assistant")
+            logger.info("Set process title to 'maggie-ai-assistant'")
+        except ImportError:
+            pass
+        
+        # Set Python-specific optimizations
+        if hasattr(sys, 'set_int_max_str_digits'):
+            # Limit maximum string conversion size (Python 3.10+)
+            sys.set_int_max_str_digits(4096)
+            
+        return True
+    except Exception as e:
+        logger.error(f"Failed to optimize system: {e}")
+        return False
+
+
+def main() -> int:
     """
     Main entry point for the application.
     
@@ -221,6 +419,15 @@ def main():
     -------
     int
         Exit code (0 for success, non-zero for error)
+        
+    Notes
+    -----
+    This function handles the main program flow, including:
+    - Parsing command-line arguments
+    - Setting up logging
+    - Verifying system configuration
+    - Creating required directories and templates
+    - Initializing and starting the Maggie AI Assistant
     """
     # Parse arguments
     args = parse_arguments()
@@ -232,8 +439,25 @@ def main():
     # Set up logging
     setup_logging(args.debug)
     
-    # Log startup
+    # Log startup and system information
     logger.info("Starting Maggie AI Assistant")
+    logger.info(f"Running on Python {platform.python_version()}")
+    logger.info(f"Process ID: {os.getpid()}")
+    
+    # Enable multiprocessing support
+    try:
+        multiprocessing.set_start_method('spawn')
+        logger.info("Set multiprocessing start method to 'spawn'")
+    except RuntimeError:
+        # Already set
+        pass
+    
+    # Optimize system if requested
+    if args.optimize:
+        if optimize_system():
+            logger.info("System optimized for performance")
+        else:
+            logger.warning("System optimization failed")
     
     # Create recipe template if requested
     if args.create_template:
@@ -257,11 +481,27 @@ def main():
     try:
         # Initialize and start Maggie AI
         maggie = MaggieAI(config_path=args.config)
+        
+        # Register signal handlers for graceful shutdown
+        try:
+            import signal
+            def signal_handler(sig, frame):
+                logger.info(f"Received signal {sig}, shutting down gracefully")
+                maggie.shutdown()
+                sys.exit(0)
+                
+            signal.signal(signal.SIGINT, signal_handler)
+            signal.signal(signal.SIGTERM, signal_handler)
+            logger.info("Registered signal handlers for graceful shutdown")
+        except Exception as e:
+            logger.warning(f"Failed to register signal handlers: {e}")
+        
+        # Start Maggie
         exit_code = maggie.start()
         
         return exit_code
     except Exception as e:
-        logger.error(f"Error starting Maggie AI: {e}")
+        logger.exception(f"Error starting Maggie AI: {e}")
         return 1
 
 
