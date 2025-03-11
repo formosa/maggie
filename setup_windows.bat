@@ -16,8 +16,10 @@ echo ===================================
 
 REM Check for admin rights
 echo Checking administrator privileges...
-net session >nul 2>&1
-if %errorLevel% NEQ 0 (
+whoami /groups | find "S-1-5-32-544" >nul 2>&1
+if %errorLevel% EQU 0 (
+    echo Running with administrator privileges - full functionality available
+) else (
     echo [WARNING] Not running with administrator privileges
     echo Some features may not work correctly without admin rights
     echo Particularly: system-wide dependencies and GPU optimizations
@@ -31,8 +33,6 @@ if %errorLevel% NEQ 0 (
         exit /B 1
     )
     echo Continuing with limited privileges...
-) else (
-    echo Running with administrator privileges - full functionality available
 )
 
 REM Create directories
