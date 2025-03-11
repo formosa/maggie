@@ -215,7 +215,7 @@ This utility demonstrates how the system combines speech recognition, natural la
 
 2. **Run the Installation Script**
    ```bash
-   python setup.py
+   python install.py
    ```
 
 3. **Detailed Setup Process Steps**
