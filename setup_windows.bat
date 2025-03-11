@@ -15,12 +15,22 @@ echo Maggie - Windows Setup
 echo ===================================
 
 REM Check for admin rights
+echo Checking administrator privileges...
 net session >nul 2>&1
 if %errorLevel% neq 0 (
-    echo [ERROR] This script requires administrator privileges
-    echo Please right-click and select "Run as administrator"
-    pause
-    exit /b 1
+    echo [WARNING] Not running with administrator privileges
+    echo Some features may not work correctly without admin rights
+    echo Particularly: system-wide dependencies and GPU optimizations
+    
+    set /p continue_anyway=Continue anyway? (y/n): 
+    if /i "%continue_anyway%" neq "y" (
+        echo Setup canceled. Please restart with administrator privileges.
+        pause
+        exit /b 1
+    )
+    echo Continuing with limited privileges...
+) else (
+    echo Running with administrator privileges - full functionality available
 )
 
 REM Create directories
