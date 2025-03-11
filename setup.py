@@ -1,200 +1,300 @@
+#!/usr/bin/env python3
 """
-Maggie AI Assistant - Interactive Installation CLI
+Maggie AI Assistant - Comprehensive Setup and Resource Management
 
-Provides a comprehensive, user-friendly installation and configuration 
-interface for Maggie AI, with advanced system integration and 
-hardware-optimized setup.
+This module provides an advanced, automated installation and resource 
+acquisition system for the Maggie AI Assistant project.
+
+Key Features:
+- Intelligent dependency management
+- Automated model and resource downloads
+- GPU and system optimization
+- Comprehensive error handling
+- Flexible configuration options
+
+Dependencies:
+- Python 3.10+
+- setuptools
+- wheel
+- requests
+- huggingface_hub
+- torch
+- transformers
+
+Author: Maggie Development Team
+Version: 0.2.0
 """
 
 import os
 import sys
-import argparse
-import subprocess
 import json
-from typing import Dict, Any, Optional
+import shutil
+import platform
+import subprocess
+import requests
+from typing import List, Dict, Optional, Tuple
+from pathlib import Path
 
-# Local module imports
-from hardware_optimizer import HardwareOptimizer
-from maggie_telemetry import MaggieTelemetryManager
+try:
+    from setuptools import setup, find_packages
+    import torch
+    import huggingface_hub
+except ImportError:
+    subprocess.check_call([sys.executable, '-m', 'pip', 'install', 
+                            'setuptools', 'wheel', 'requests', 
+                            'huggingface_hub', 'torch'])
 
-class MaggieInstaller:
+class MaggieResourceManager:
     """
-    Interactive command-line installer for Maggie AI Assistant.
+    Comprehensive resource management and download utility for Maggie AI Assistant.
 
-    Orchestrates system analysis, resource management, and 
-    user-guided installation process with advanced configuration options.
+    Handles intelligent acquisition of AI models, TTS voices, and other 
+    project-critical resources with robust error handling and optimization.
 
     Attributes
     ----------
-    _hardware_optimizer : HardwareOptimizer
-        System hardware analysis and optimization utility
-    _telemetry_manager : MaggieTelemetryManager
-        Logging and telemetry management system
+    _base_dir : Path
+        Base directory for resource downloads
+    _config : Dict
+        Configuration dictionary for resource locations
+    _system_info : Dict
+        Detected system hardware and configuration details
     """
 
-    def __init__(self):
+    def __init__(self, base_dir: Optional[Path] = None):
         """
-        Initialize Maggie AI installation utility with 
-        comprehensive system analysis.
-        """
-        self._hardware_optimizer = HardwareOptimizer()
-        self._telemetry_manager = MaggieTelemetryManager()
+        Initialize the Maggie Resource Manager.
 
-    def _validate_system_requirements(self) -> bool:
+        Parameters
+        ----------
+        base_dir : Path, optional
+            Base directory for resource downloads. 
+            Defaults to './models' if not specified.
         """
-        Validate system meets minimum requirements for Maggie AI.
+        self._base_dir = base_dir or Path('./models')
+        self._base_dir.mkdir(parents=True, exist_ok=True)
+        
+        self._config = self._load_resource_config()
+        self._system_info = self._detect_system_configuration()
+
+    def _load_resource_config(self) -> Dict:
+        """
+        Load resource configuration from a JSON file.
 
         Returns
         -------
-        bool
-            True if system meets requirements, False otherwise
+        Dict
+            Resource configuration dictionary
         """
-        system_info = self._hardware_optimizer._system_info
-        
-        # Minimum system requirements
-        requirements = {
-            "cpu_cores": 8,
-            "memory_gb": 16,
-            "cuda_capable": True
+        config_path = Path('resource_config.json')
+        default_config = {
+            "models": {
+                "llm": {
+                    "name": "TheBloke/Mistral-7B-Instruct-v0.3-GPTQ",
+                    "path": "models/mistral-7b-instruct"
+                },
+                "tts": {
+                    "name": "rhasspy/piper-voices",
+                    "voice": "en_US/kathleen/medium",
+                    "path": "models/tts/en_US-kathleen-medium"
+                }
+            }
         }
 
-        # Detailed system requirement checks
-        checks = [
-            system_info['cpu']['physical_cores'] >= requirements['cpu_cores'],
-            system_info['memory']['total_gb'] >= requirements['memory_gb'],
-            system_info['gpu']['cuda_available'] == requirements['cuda_capable']
-        ]
+        if config_path.exists():
+            with open(config_path, 'r') as f:
+                return json.load(f)
+        return default_config
 
-        return all(checks)
-
-    def interactive_installation(self):
+    def _detect_system_configuration(self) -> Dict:
         """
-        Guide user through an interactive, optimized installation process.
+        Detect and analyze system hardware and configuration.
 
-        Provides a step-by-step configuration experience with 
-        intelligent defaults and hardware-specific optimizations.
+        Returns
+        -------
+        Dict
+            Comprehensive system configuration details
         """
-        print("🚀 Maggie AI Assistant - Interactive Installer")
-        print("=" * 50)
-
-        # System Compatibility Check
-        if not self._validate_system_requirements():
-            print("⚠️  System may not meet optimal performance requirements.")
-            continue_anyway = input("Continue with installation? (y/n): ").lower()
-            if continue_anyway != 'y':
-                print("Installation canceled.")
-                return
-
-        # Generate and display performance report
-        print("\n📊 System Performance Analysis:")
-        print(self._hardware_optimizer.generate_performance_report())
-
-        # Installation Options
-        print("\n🔧 Installation Configuration:")
-        options = {
-            "1": "Full Installation (Recommended)",
-            "2": "Custom Installation",
-            "3": "Minimal Installation"
+        system_info = {
+            "os": platform.system(),
+            "release": platform.release(),
+            "python_version": platform.python_version(),
+            "processor": platform.processor(),
+            "machine": platform.machine()
         }
 
-        for key, value in options.items():
-            print(f"{key}. {value}")
+        try:
+            import torch
+            system_info.update({
+                "cuda_available": torch.cuda.is_available(),
+                "cuda_device_name": torch.cuda.get_device_name(0) if torch.cuda.is_available() else None,
+                "cuda_device_capability": torch.cuda.get_device_capability() if torch.cuda.is_available() else None
+            })
+        except ImportError:
+            system_info.update({
+                "cuda_available": False,
+                "cuda_device_name": None,
+                "cuda_device_capability": None
+            })
 
-        choice = input("\nSelect installation type [1]: ") or "1"
+        return system_info
 
-        # Installation type handling
-        if choice == "1":
-            self._full_installation()
-        elif choice == "2":
-            self._custom_installation()
-        elif choice == "3":
-            self._minimal_installation()
-        else:
-            print("Invalid selection. Defaulting to full installation.")
-            self._full_installation()
-
-    def _full_installation(self):
+    def download_model(self, model_type: str = 'llm') -> Path:
         """
-        Perform a comprehensive Maggie AI installation with 
-        all recommended components and optimizations.
-        """
-        print("\n🔬 Initiating Full Installation")
+        Download and configure AI models with intelligent management.
+
+        Parameters
+        ----------
+        model_type : str, optional
+            Type of model to download (default: 'llm')
+
+        Returns
+        -------
+        Path
+            Path to the downloaded model
         
-        # Telemetry consent
-        telemetry_consent = input("Allow anonymous usage statistics? (y/n): ").lower() == 'y'
-        self._telemetry_manager._config['telemetry']['opt_in'] = telemetry_consent
-
-        # Core installation steps
-        installation_steps = [
-            self._prepare_virtual_environment,
-            self._install_core_dependencies,
-            self._download_ai_models,
-            self._configure_system_optimizations
-        ]
-
-        for step in installation_steps:
-            try:
-                step()
-            except Exception as e:
-                print(f"❌ Installation step failed: {e}")
-                self._telemetry_manager.log_installation_event(
-                    "installation_error", 
-                    {"step": step.__name__, "error": str(e)}
+        Raises
+        ------
+        RuntimeError
+            If model download fails
+        """
+        try:
+            model_config = self._config['models'].get(model_type, {})
+            model_name = model_config.get('name')
+            model_path = self._base_dir / model_config.get('path', f'{model_type}_model')
+            
+            if not model_path.exists():
+                print(f"Downloading {model_type} model: {model_name}")
+                huggingface_hub.snapshot_download(
+                    repo_id=model_name, 
+                    local_dir=model_path,
+                    local_dir_use_symlinks=False
                 )
-                break
+            
+            return model_path
+        
+        except Exception as e:
+            print(f"Error downloading {model_type} model: {e}")
+            raise RuntimeError(f"Model download failed for {model_type}")
 
-        print("✅ Full Installation Completed")
+    def download_tts_voice(self) -> Path:
+        """
+        Download Text-to-Speech voice model with advanced configuration.
 
-    def _prepare_virtual_environment(self):
+        Returns
+        -------
+        Path
+            Path to the downloaded TTS voice model
         """
-        Create and configure Python virtual environment.
-        """
-        subprocess.run([sys.executable, '-m', 'venv', 'maggie_env'], check=True)
-        print("🌐 Virtual environment created")
+        tts_config = self._config['models'].get('tts', {})
+        voice_name = tts_config.get('voice', 'en_US/kathleen/medium')
+        tts_path = self._base_dir / tts_config.get('path', 'models/tts')
+        
+        # Construct download URLs dynamically
+        base_url = "https://huggingface.co/rhasspy/piper-voices/resolve/main"
+        
+        files_to_download = [
+            f"{base_url}/{voice_name}.onnx",
+            f"{base_url}/{voice_name}.json"
+        ]
+        
+        tts_path.mkdir(parents=True, exist_ok=True)
+        
+        for file_url in files_to_download:
+            filename = Path(file_url).name
+            target_path = tts_path / filename
+            
+            if not target_path.exists():
+                print(f"Downloading TTS file: {filename}")
+                response = requests.get(file_url, stream=True)
+                response.raise_for_status()
+                
+                with open(target_path, 'wb') as f:
+                    shutil.copyfileobj(response.raw, f)
+        
+        return tts_path
 
-    def _install_core_dependencies(self):
-        """
-        Install core Maggie AI dependencies with pip.
-        """
-        subprocess.run([
-            'maggie_env/bin/pip', 'install', 
-            '--upgrade', 'pip', 'setuptools', 'wheel'
-        ], check=True)
-        subprocess.run([
-            'maggie_env/bin/pip', 'install', 
-            '-r', 'requirements.txt'
-        ], check=True)
-        print("📦 Core dependencies installed")
+def get_long_description() -> str:
+    """
+    Read project long description from README.
 
-    def _download_ai_models(self):
-        """
-        Download necessary AI models with progress tracking.
-        """
-        # Placeholder for model download logic
-        print("🤖 Downloading AI models")
+    Returns
+    -------
+    str
+        Long description for package metadata
+    """
+    try:
+        with open('README.md', 'r', encoding='utf-8') as f:
+            return f.read()
+    except FileNotFoundError:
+        return "Maggie AI Assistant - An advanced, intelligent assistant"
 
-    def _configure_system_optimizations(self):
-        """
-        Apply hardware-specific PyTorch and system optimizations.
-        """
-        optimizations = self._hardware_optimizer.optimize_pytorch_configuration()
-        print("⚙️  Applied system optimizations:", json.dumps(optimizations, indent=2))
+setup(
+    name='maggie-ai',
+    version='0.2.0',
+    author='Maggie Development Team',
+    author_email='contact@maggieai.com',
+    description='An intelligent, configurable AI assistant',
+    long_description=get_long_description(),
+    long_description_content_type='text/markdown',
+    url='https://github.com/your-org/maggie',
+    packages=find_packages(exclude=['tests*', 'docs*']),
+    classifiers=[
+        'Development Status :: 3 - Alpha',
+        'Intended Audience :: Developers',
+        'License :: OSI Approved :: MIT License',
+        'Programming Language :: Python :: 3.10',
+        'Topic :: Scientific/Engineering :: Artificial Intelligence',
+    ],
+    python_requires='>=3.10',
+    install_requires=[
+        'torch>=2.0.1',
+        'transformers>=4.30.0',
+        'huggingface_hub',
+        'requests',
+        'pyyaml',
+        'numpy',
+    ],
+    extras_require={
+        'gpu': [
+            'nvidia-cudnn-cu11',
+            'torchvision',
+            'torchaudio'
+        ],
+        'dev': [
+            'pytest',
+            'sphinx',
+            'sphinx-napoleon'
+        ]
+    },
+    entry_points={
+        'console_scripts': [
+            'maggie=maggie.cli:main',
+        ],
+    },
+)
 
 def main():
     """
-    Entry point for Maggie AI installation utility.
+    Primary entry point for Maggie AI installation and configuration.
+    Orchestrates resource management and system optimization.
     """
-    parser = argparse.ArgumentParser(description="Maggie AI Installation Utility")
-    parser.add_argument('--interactive', action='store_true', 
-                        help="Launch interactive installation")
-    args = parser.parse_args()
-
-    installer = MaggieInstaller()
+    resource_manager = MaggieResourceManager()
     
-    if args.interactive:
-        installer.interactive_installation()
-    else:
-        print("Use --interactive for guided installation")
+    print("🚀 Maggie AI Resource Configuration")
+    print(f"System Configuration: {json.dumps(resource_manager._system_info, indent=2)}")
+    
+    try:
+        # Automated resource downloads
+        resource_manager.download_model('llm')
+        resource_manager.download_model('tts')
+        resource_manager.download_tts_voice()
+        
+        print("✅ All resources successfully downloaded and configured.")
+    
+    except Exception as e:
+        print(f"❌ Resource configuration failed: {e}")
+        sys.exit(1)
 
 if __name__ == '__main__':
     main()
