@@ -377,16 +377,18 @@ class MaggieInstaller:
         # Install individual dependencies from requirements.txt directly
         self._print("Installing Maggie dependencies...", "cyan")
         
-        # Create a temporary requirements file that excludes PyTorch (already installed)
+        # Create a temporary requirements file that excludes special dependencies we'll install separately
         temp_req_path = os.path.join(self.base_dir, "temp_requirements.txt")
         try:
             with open(os.path.join(self.base_dir, "requirements.txt"), "r") as f:
                 req_content = f.read()
             
-            # Remove torch line and CUDA specific lines
+            # Remove lines for dependencies that require special handling
             filtered_content = "\n".join([
                 line for line in req_content.split("\n") 
-                if not line.startswith("torch") and not "cu118" in line
+                if not line.startswith("torch") and not "cu118" in line 
+                and not "whisper" in line.lower() 
+                and not "piper" in line.lower()
             ])
             
             with open(temp_req_path, "w") as f:
@@ -399,8 +401,39 @@ class MaggieInstaller:
             os.remove(temp_req_path)
             
             if returncode != 0:
-                self._print("Error installing Maggie dependencies", "red")
+                self._print("Error installing base dependencies from requirements", "red")
                 return False
+            
+            # Install GitHub dependencies in the correct order
+            # 1. Install piper-phonemize from GitHub (dependency for piper-tts)
+            self._print("Installing piper-phonemize from GitHub...", "cyan")
+            returncode, _, stderr = self._run_command([
+                pip_cmd, "install", "git+https://github.com/rhasspy/piper-phonemize.git"
+            ])
+            
+            if returncode != 0:
+                self._print(f"Error installing piper-phonemize from GitHub: {stderr}", "red")
+                self._print("Continuing installation despite piper-phonemize error", "yellow")
+            
+            # 2. Now install piper-tts after its dependency is installed
+            self._print("Installing piper-tts...", "cyan")
+            returncode, _, stderr = self._run_command([
+                pip_cmd, "install", "piper-tts==1.2.0"
+            ])
+            
+            if returncode != 0:
+                self._print(f"Error installing piper-tts: {stderr}", "red")
+                self._print("Continuing installation process", "yellow")
+                
+            # 3. Install whisper-streaming from GitHub
+            self._print("Installing whisper-streaming from GitHub...", "cyan")
+            returncode, _, stderr = self._run_command([
+                pip_cmd, "install", "git+https://github.com/ufal/whisper_streaming.git"
+            ])
+            
+            if returncode != 0:
+                self._print(f"Error installing whisper-streaming from GitHub: {stderr}", "red")
+                self._print("Continuing installation despite whisper-streaming error", "yellow")
                 
         except Exception as e:
             self._print(f"Error processing requirements file: {e}", "red")
