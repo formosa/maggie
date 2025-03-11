@@ -234,3 +234,7 @@ echo Setup completed successfully
 echo.
 echo Thank you for installing Maggie AI Assistant!
 pause
+
+echo.
+echo Script completed - press any key to close this window
+pause > nul
