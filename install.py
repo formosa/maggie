@@ -17,6 +17,7 @@ import shutil
 import re
 import urllib.request
 import time
+import zipfile
 from typing import List, Dict, Any, Optional, Tuple
 from pathlib import Path
 
@@ -72,7 +73,8 @@ class MaggieInstaller:
             "templates",
             "cache",
             "cache/tts",
-            "downloads"  # Directory for downloaded files
+            "downloads",  # Directory for downloaded files
+            "site-packages"  # Directory for manually installed packages
         ]
         
         # Check if running as admin/root
@@ -511,7 +513,7 @@ class MaggieInstaller:
             return False
             
         # Install other basic dependencies
-        basic_deps = ["wheel", "setuptools", "urllib3"]
+        basic_deps = ["wheel", "setuptools", "urllib3", "tqdm"]
         self._print(f"Installing basic packages: {', '.join(basic_deps)}...", "cyan")
         returncode, _, _ = self._run_command([pip_cmd, "install", "--upgrade"] + basic_deps)
         
@@ -607,15 +609,11 @@ class MaggieInstaller:
             if not self._download_file_with_requests(download_url, zip_path):
                 return False
                 
-            # Import required modules
-            import zipfile
-            import shutil
-            
             # Extract the zip file
             self._print(f"Extracting {zip_path}...", "cyan")
             
             # Ensure destination directory exists
-            os.makedirs(dest_dir, exist_ok=True)
+            os.makedirs(os.path.dirname(dest_dir), exist_ok=True)
             
             # Extract the zip file
             with zipfile.ZipFile(zip_path, 'r') as zip_ref:
@@ -640,144 +638,6 @@ class MaggieInstaller:
         except Exception as e:
             self._print(f"Error downloading GitHub repository: {e}", "red")
             return False
-    
-    def _install_piper_phonemize(self, pip_cmd: str) -> bool:
-        """
-        Install piper-phonemize package without using Git.
-        
-        Parameters
-        ----------
-        pip_cmd : str
-            Path to pip executable
-            
-        Returns
-        -------
-        bool
-            True if installation successful, False otherwise
-        """
-        self._print("Installing piper-phonemize directly...", "cyan")
-        
-        try:
-            # Create temporary directory for the package
-            package_dir = os.path.join(self.base_dir, "downloads", "piper-phonemize")
-            
-            # Download the repository
-            if not self._download_github_repo("rhasspy/piper-phonemize", "master", package_dir):
-                return False
-                
-            # Install the package from the directory
-            returncode, _, stderr = self._run_command([
-                pip_cmd, "install", "-e", package_dir
-            ])
-            
-            if returncode != 0:
-                self._print(f"Error installing piper-phonemize: {stderr}", "red")
-                return False
-                
-            self._print("Successfully installed piper-phonemize from sources", "green")
-            return True
-            
-        except Exception as e:
-            self._print(f"Error installing piper-phonemize: {e}", "red")
-            return False
-            
-    def _install_whisper_streaming(self, pip_cmd: str) -> bool:
-        """
-        Install whisper-streaming package without using Git.
-        
-        Parameters
-        ----------
-        pip_cmd : str
-            Path to pip executable
-            
-        Returns
-        -------
-        bool
-            True if installation successful, False otherwise
-        """
-        self._print("Installing whisper-streaming directly...", "cyan")
-        
-        try:
-            # Create temporary directory for the package
-            package_dir = os.path.join(self.base_dir, "downloads", "whisper-streaming")
-            
-            # Download the repository
-            if not self._download_github_repo("ufal/whisper_streaming", "master", package_dir):
-                return False
-                
-            # Install the package from the directory
-            returncode, _, stderr = self._run_command([
-                pip_cmd, "install", "-e", package_dir
-            ])
-            
-            if returncode != 0:
-                self._print(f"Error installing whisper-streaming: {stderr}", "red")
-                return False
-                
-            self._print("Successfully installed whisper-streaming from sources", "green")
-            return True
-            
-        except Exception as e:
-            self._print(f"Error installing whisper-streaming: {e}", "red")
-            return False
-    
-    def _find_prebuilt_wheel_urls(self) -> Dict[str, str]:
-        """
-        Find pre-built wheel URLs for required packages.
-        
-        Returns
-        -------
-        Dict[str, str]
-            Dictionary mapping package names to wheel URLs
-        """
-        wheel_urls = {}
-        py_version = f"cp{sys.version_info.major}{sys.version_info.minor}"
-        platform_tag = "win_amd64" if self.platform == "Windows" else "linux_x86_64"
-        
-        try:
-            import requests
-            
-            # 1. Find llama-cpp-python wheel
-            self._print("Looking for pre-built llama-cpp-python wheel...", "cyan")
-            
-            # Try GitHub releases
-            try:
-                response = requests.get("https://github.com/abetlen/llama-cpp-python/releases")
-                if response.status_code == 200:
-                    # Look for version 0.2.11 specifically in the HTML content
-                    import re
-                    wheel_pattern = re.compile(rf'href="([^"]+llama_cpp_python-0\.2\.11[^"]+{py_version}[^"]+{platform_tag}[^"]+\.whl)"')
-                    matches = wheel_pattern.findall(response.text)
-                    
-                    if matches:
-                        wheel_url = f"https://github.com{matches[0]}"
-                        wheel_urls["llama-cpp-python"] = wheel_url
-                        self._print(f"Found pre-built wheel for llama-cpp-python: {wheel_url}", "green")
-            except Exception as e:
-                self._print(f"Error searching GitHub for llama-cpp-python wheels: {e}", "yellow")
-            
-            # If we didn't find a wheel on GitHub, try PyPI
-            if "llama-cpp-python" not in wheel_urls:
-                try:
-                    response = requests.get("https://pypi.org/pypi/llama-cpp-python/0.2.11/json")
-                    if response.status_code == 200:
-                        pypi_data = response.json()
-                        for url_info in pypi_data.get("urls", []):
-                            if (url_info["packagetype"] == "bdist_wheel" and 
-                                py_version in url_info["filename"] and 
-                                platform_tag in url_info["filename"]):
-                                wheel_urls["llama-cpp-python"] = url_info["url"]
-                                self._print(f"Found pre-built wheel for llama-cpp-python on PyPI: {url_info['url']}", "green")
-                                break
-                except Exception as e:
-                    self._print(f"Error searching PyPI for llama-cpp-python wheels: {e}", "yellow")
-            
-            # 2. Add other packages that might need wheels here
-            
-        except ImportError:
-            self._print("Could not import requests module for finding wheels", "yellow")
-            
-        return wheel_urls
     
     def _install_from_wheel_url(self, pip_cmd: str, package_name: str, wheel_url: str) -> bool:
         """
@@ -825,6 +685,271 @@ class MaggieInstaller:
         except Exception as e:
             self._print(f"Error installing {package_name} from wheel: {e}", "red")
             return False
+
+    def _install_piper_phonemize_bin(self, pip_cmd: str) -> bool:
+        """
+        Install pre-built piper-phonemize wheel.
+        
+        Parameters
+        ----------
+        pip_cmd : str
+            Path to pip executable
+            
+        Returns
+        -------
+        bool
+            True if installation successful, False otherwise
+        """
+        try:
+            self._print("Installing pre-built piper-phonemize wheel...", "cyan")
+            
+            # Define URL for the pre-built wheel for Python 3.10 on Windows
+            wheel_url = "https://github.com/rhasspy/piper-phonemize/releases/download/v1.2.0/piper_phonemize-1.2.0-cp310-cp310-win_amd64.whl"
+            
+            # Download and install the wheel
+            wheel_dir = os.path.join(self.base_dir, "downloads", "wheels")
+            os.makedirs(wheel_dir, exist_ok=True)
+            
+            wheel_path = os.path.join(wheel_dir, "piper_phonemize-1.2.0-cp310-cp310-win_amd64.whl")
+            
+            if not self._download_file_with_requests(wheel_url, wheel_path):
+                return False
+            
+            # Install the wheel
+            returncode, _, stderr = self._run_command([
+                pip_cmd, "install", wheel_path
+            ])
+            
+            if returncode != 0:
+                self._print(f"Error installing piper-phonemize wheel: {stderr}", "red")
+                return False
+                
+            self._print("Successfully installed piper-phonemize from wheel", "green")
+            return True
+            
+        except Exception as e:
+            self._print(f"Error installing piper-phonemize from wheel: {e}", "red")
+            return False
+
+    def _install_piper_phonemize(self, pip_cmd: str) -> bool:
+        """
+        Install piper-phonemize package using non-editable mode.
+        
+        Parameters
+        ----------
+        pip_cmd : str
+            Path to pip executable
+            
+        Returns
+        -------
+        bool
+            True if installation successful, False otherwise
+        """
+        self._print("Installing piper-phonemize directly...", "cyan")
+        
+        # First try pre-built wheel
+        if self.platform == "Windows":
+            if self._install_piper_phonemize_bin(pip_cmd):
+                return True
+        
+        # If wheel installation fails and we have Git, try direct installation (non-editable)
+        if self.has_git:
+            self._print("Installing piper-phonemize from GitHub (non-editable)...", "cyan")
+            returncode, _, stderr = self._run_command([
+                pip_cmd, "install", "git+https://github.com/rhasspy/piper-phonemize.git"
+            ])
+            
+            if returncode == 0:
+                self._print("Successfully installed piper-phonemize from GitHub", "green")
+                return True
+            
+            self._print(f"Error installing piper-phonemize from GitHub: {stderr}", "red")
+            
+        # If we get here, try downloading the repository and installing
+        try:
+            # Create temporary directory for the package
+            package_dir = os.path.join(self.base_dir, "downloads", "piper-phonemize")
+            
+            # Download the repository
+            if not self._download_github_repo("rhasspy/piper-phonemize", "master", package_dir):
+                return False
+            
+            # Try to install in non-editable mode
+            self._print("Installing piper-phonemize from sources (non-editable)...", "cyan")
+            returncode, _, stderr = self._run_command([
+                pip_cmd, "install", package_dir
+            ])
+            
+            if returncode == 0:
+                self._print("Successfully installed piper-phonemize from sources", "green")
+                return True
+                
+            self._print(f"Error installing piper-phonemize from sources: {stderr}", "red")
+            self._print("This package requires Visual C++ Build Tools", "yellow")
+            return False
+            
+        except Exception as e:
+            self._print(f"Error installing piper-phonemize: {e}", "red")
+            return False
+            
+    def _install_whisper_streaming(self, pip_cmd: str, python_cmd: str) -> bool:
+        """
+        Install whisper-streaming package directly.
+        
+        Parameters
+        ----------
+        pip_cmd : str
+            Path to pip executable
+        python_cmd : str
+            Path to python executable
+            
+        Returns
+        -------
+        bool
+            True if installation successful, False otherwise
+        """
+        self._print("Installing whisper-streaming directly...", "cyan")
+        
+        try:
+            # Create temporary directory for the package
+            package_dir = os.path.join(self.base_dir, "downloads", "whisper-streaming")
+            
+            # Download the repository
+            if not self._download_github_repo("ufal/whisper_streaming", "master", package_dir):
+                return False
+            
+            # Check the repository structure
+            if not os.path.exists(os.path.join(package_dir, "setup.py")) and \
+               not os.path.exists(os.path.join(package_dir, "pyproject.toml")):
+                # This isn't a standard Python package - inspect the structure
+                self._print("Repository isn't a standard Python package", "yellow")
+                
+                # Look for Python files in the root
+                python_files = [f for f in os.listdir(package_dir) if f.endswith('.py')]
+                self._print(f"Found Python files: {', '.join(python_files)}", "cyan")
+                
+                # Create a site-packages directory
+                site_packages_dir = os.path.join(self.base_dir, "site-packages")
+                os.makedirs(site_packages_dir, exist_ok=True)
+                
+                # Copy all Python files to the site-packages directory
+                for py_file in python_files:
+                    shutil.copy(
+                        os.path.join(package_dir, py_file),
+                        os.path.join(site_packages_dir, py_file)
+                    )
+                    
+                # Create __init__.py to make it a package
+                with open(os.path.join(site_packages_dir, "__init__.py"), "w") as f:
+                    f.write("# Whisper Streaming package\n")
+                    
+                # Add site-packages directory to Python path in venv by creating .pth file
+                venv_site_packages = None
+                
+                if self.platform == "Windows":
+                    venv_site_packages = os.path.join(self.base_dir, "venv", "Lib", "site-packages")
+                else:
+                    # Try to find site-packages directory for Linux
+                    for lib_dir in ["lib", "lib64"]:
+                        for py_dir in ["python3.10", "python3"]:
+                            test_path = os.path.join(self.base_dir, "venv", lib_dir, py_dir, "site-packages")
+                            if os.path.exists(test_path):
+                                venv_site_packages = test_path
+                                break
+                        if venv_site_packages:
+                            break
+                            
+                if venv_site_packages:
+                    with open(os.path.join(venv_site_packages, "whisper_streaming.pth"), "w") as f:
+                        f.write(site_packages_dir)
+                        
+                    self._print(f"Added {site_packages_dir} to Python path", "green")
+                    
+                    # Install any requirements from the repository
+                    req_file = os.path.join(package_dir, "requirements.txt")
+                    if os.path.exists(req_file):
+                        self._print("Installing whisper-streaming requirements...", "cyan")
+                        returncode, _, stderr = self._run_command([
+                            pip_cmd, "install", "-r", req_file
+                        ])
+                        
+                        if returncode != 0:
+                            self._print(f"Error installing whisper-streaming requirements: {stderr}", "red")
+                            
+                    self._print("Successfully set up whisper-streaming module", "green")
+                    return True
+                else:
+                    self._print("Could not find site-packages directory in virtual environment", "red")
+                    return False
+            else:
+                # Standard Python package - install it
+                self._print("Installing whisper-streaming as a standard package...", "cyan")
+                returncode, _, stderr = self._run_command([
+                    pip_cmd, "install", package_dir
+                ])
+                
+                if returncode != 0:
+                    self._print(f"Error installing whisper-streaming: {stderr}", "red")
+                    return False
+                    
+                self._print("Successfully installed whisper-streaming", "green")
+                return True
+                
+        except Exception as e:
+            self._print(f"Error installing whisper-streaming: {e}", "red")
+            return False
+    
+    def _find_prebuilt_wheel_urls(self) -> Dict[str, str]:
+        """
+        Find pre-built wheel URLs for required packages.
+        
+        Returns
+        -------
+        Dict[str, str]
+            Dictionary mapping package names to wheel URLs
+        """
+        wheel_urls = {}
+        py_version = f"cp{sys.version_info.major}{sys.version_info.minor}"
+        platform_tag = "win_amd64" if self.platform == "Windows" else "linux_x86_64"
+        
+        try:
+            import requests
+            
+            # 1. Find llama-cpp-python wheel
+            self._print("Looking for pre-built llama-cpp-python wheel...", "cyan")
+            
+            # Try GitHub releases
+            try:
+                # For Windows with Python 3.10
+                if self.platform == "Windows":
+                    # Hardcoded URL to a known compatible wheel
+                    wheel_urls["llama-cpp-python"] = "https://github.com/abetlen/llama-cpp-python/releases/download/v0.2.11/llama_cpp_python-0.2.11-cp310-cp310-win_amd64.whl"
+                    self._print(f"Found pre-built wheel for llama-cpp-python", "green")
+                else:
+                    # For Linux, search the releases
+                    response = requests.get("https://api.github.com/repos/abetlen/llama-cpp-python/releases/tags/v0.2.11")
+                    if response.status_code == 200:
+                        release_data = response.json()
+                        for asset in release_data.get("assets", []):
+                            asset_name = asset["name"]
+                            if (f"llama_cpp_python-0.2.11" in asset_name and 
+                                f"{py_version}" in asset_name and 
+                                f"{platform_tag}" in asset_name):
+                                wheel_urls["llama-cpp-python"] = asset["browser_download_url"]
+                                self._print(f"Found pre-built wheel for llama-cpp-python: {asset_name}", "green")
+                                break
+            except Exception as e:
+                self._print(f"Error searching GitHub for llama-cpp-python wheels: {e}", "yellow")
+            
+            # 2. Add piper-phonemize wheel for Windows
+            if self.platform == "Windows":
+                wheel_urls["piper-phonemize"] = "https://github.com/rhasspy/piper-phonemize/releases/download/v1.2.0/piper_phonemize-1.2.0-cp310-cp310-win_amd64.whl"
+                self._print("Found pre-built wheel for piper-phonemize", "green")
+            
+        except ImportError:
+            self._print("Could not import requests module for finding wheels", "yellow")
+            
+        return wheel_urls
     
     def _install_dependencies(self) -> bool:
         """
@@ -906,24 +1031,19 @@ class MaggieInstaller:
                 self._print("Error installing standard dependencies", "red")
                 self._print("Continuing with installation of critical components", "yellow")
             
-            # Install GitHub/special dependencies in the correct order
+            # Install specialized dependencies in the correct order
             
             # 1. Install piper-phonemize (dependency for piper-tts)
-            if self.has_git:
-                self._print("Installing piper-phonemize from GitHub...", "cyan")
-                returncode, _, stderr = self._run_command([
-                    pip_cmd, "install", "git+https://github.com/rhasspy/piper-phonemize.git"
-                ])
-                
-                if returncode != 0:
-                    self._print(f"Error installing piper-phonemize from GitHub: {stderr}", "red")
-                    self._print("Trying alternative installation method...", "yellow")
-                    piper_phonemize_installed = self._install_piper_phonemize(pip_cmd)
-                else:
-                    piper_phonemize_installed = True
-                    self._print("Successfully installed piper-phonemize", "green")
-            else:
-                # No Git, use direct download method
+            piper_phonemize_installed = False
+            
+            # First try pre-built wheel if available for Windows
+            if "piper-phonemize" in wheel_urls:
+                piper_phonemize_installed = self._install_from_wheel_url(
+                    pip_cmd, "piper-phonemize", wheel_urls["piper-phonemize"]
+                )
+            
+            # If wheel installation failed, try other methods
+            if not piper_phonemize_installed:
                 piper_phonemize_installed = self._install_piper_phonemize(pip_cmd)
             
             # 2. Now install piper-tts after its dependency is installed
@@ -939,23 +1059,8 @@ class MaggieInstaller:
             else:
                 self._print("Skipping piper-tts installation due to missing dependency", "yellow")
                 
-            # 3. Install whisper-streaming
-            if self.has_git:
-                self._print("Installing whisper-streaming from GitHub...", "cyan")
-                returncode, _, stderr = self._run_command([
-                    pip_cmd, "install", "git+https://github.com/ufal/whisper_streaming.git"
-                ])
-                
-                if returncode != 0:
-                    self._print(f"Error installing whisper-streaming from GitHub: {stderr}", "red")
-                    self._print("Trying alternative installation method...", "yellow")
-                    whisper_installed = self._install_whisper_streaming(pip_cmd)
-                else:
-                    whisper_installed = True
-                    self._print("Successfully installed whisper-streaming", "green")
-            else:
-                # No Git, use direct download method
-                whisper_installed = self._install_whisper_streaming(pip_cmd)
+            # 3. Install whisper-streaming using our custom method
+            whisper_installed = self._install_whisper_streaming(pip_cmd, python_cmd)
                 
             if not whisper_installed:
                 self._print("Warning: whisper-streaming installation failed", "yellow")
