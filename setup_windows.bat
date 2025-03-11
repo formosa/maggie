@@ -1,12 +1,14 @@
 @echo off
 REM =====================================================
-REM Maggie AI Assistant - Windows Setup Script
-REM =====================================================
-REM This script automates the installation of Maggie AI Assistant 
-REM on Windows systems, optimized for AMD Ryzen 9 5900X and RTX 3080
+REM Maggie - Windows Setup Script
 REM =====================================================
 
-echo Maggie AI Assistant - Windows Setup
+REM Get the directory where the script is located and change to it
+SET SCRIPT_DIR=%~dp0
+cd /d %SCRIPT_DIR%
+echo Working directory set to: %CD%
+
+echo Maggie - Windows Setup
 echo ===================================
 
 REM Check for admin rights
