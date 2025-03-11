@@ -15,6 +15,8 @@ import subprocess
 import argparse
 import shutil
 import re
+import urllib.request
+import time
 from typing import List, Dict, Any, Optional, Tuple
 from pathlib import Path
 
@@ -69,7 +71,8 @@ class MaggieInstaller:
             "recipes",
             "templates",
             "cache",
-            "cache/tts"
+            "cache/tts",
+            "downloads"  # Directory for downloaded files
         ]
         
         # Check if running as admin/root
@@ -77,7 +80,8 @@ class MaggieInstaller:
         
         # Flags for special handling
         self.has_cpp_compiler = False
-        
+        self.has_git = False
+    
     def _print(self, message: str, color: str = None):
         """
         Print a message with optional color.
@@ -153,7 +157,90 @@ class MaggieInstaller:
         except Exception as e:
             self._print(f"Error running command: {e}", "red")
             return -1, "", str(e)
+    
+    def _download_file(self, url: str, destination: str) -> bool:
+        """
+        Download a file from a URL.
+        
+        Parameters
+        ----------
+        url : str
+            URL to download from
+        destination : str
+            Path to save the file to
             
+        Returns
+        -------
+        bool
+            True if download was successful, False otherwise
+        """
+        try:
+            self._print(f"Downloading {url}...", "cyan")
+            
+            # Ensure directory exists
+            os.makedirs(os.path.dirname(destination), exist_ok=True)
+            
+            # Try to download with progress reporting
+            with urllib.request.urlopen(url) as response, open(destination, 'wb') as out_file:
+                file_size = int(response.info().get('Content-Length', 0))
+                downloaded = 0
+                block_size = 1024 * 8  # 8KB blocks
+                
+                while True:
+                    buffer = response.read(block_size)
+                    if not buffer:
+                        break
+                    
+                    downloaded += len(buffer)
+                    out_file.write(buffer)
+                    
+                    # Show progress
+                    if file_size > 0:
+                        percent = int(downloaded * 100 / file_size)
+                        sys.stdout.write(f"\rDownloaded: {downloaded} / {file_size} bytes ({percent}%)")
+                        sys.stdout.flush()
+            
+            if file_size > 0:
+                sys.stdout.write("\n")
+                
+            self._print(f"Download completed: {destination}", "green")
+            return True
+            
+        except Exception as e:
+            self._print(f"Error downloading file: {e}", "red")
+            return False
+            
+    def _check_git(self) -> bool:
+        """
+        Check if Git is installed and in PATH.
+        
+        Returns
+        -------
+        bool
+            True if Git is available, False otherwise
+        """
+        try:
+            returncode, stdout, _ = self._run_command(["git", "--version"], check=False)
+            
+            if returncode == 0 and "git version" in stdout:
+                self._print("Git found: " + stdout.strip(), "green")
+                self.has_git = True
+                return True
+            
+            # Git not found, provide instructions
+            self._print("Git not found in PATH", "yellow")
+            self._print("Some dependencies require Git for installation", "yellow")
+            self._print("To install Git on Windows:", "yellow")
+            self._print("1. Download from https://git-scm.com/download/win", "yellow")
+            self._print("2. Install with default options", "yellow")
+            self._print("3. Restart this installation after installing Git", "yellow")
+            
+            return False
+            
+        except Exception as e:
+            self._print(f"Error checking for Git: {e}", "red")
+            return False
+    
     def _check_cpp_compiler(self) -> bool:
         """
         Check if C++ compiler is available for building wheels.
@@ -399,57 +486,346 @@ class MaggieInstaller:
         self._print("Virtual environment created successfully", "green")
         return True
         
-    def _find_prebuilt_wheel_url(self, package_name, python_version, platform_tag):
+    def _install_basic_dependencies(self, pip_cmd: str) -> bool:
         """
-        Find pre-built wheel URL for a package if available.
+        Install basic dependencies needed for further installation.
         
         Parameters
         ----------
-        package_name : str
-            Name of the package to find
-        python_version : str
-            Python version (e.g., 'cp310')
-        platform_tag : str
-            Platform tag (e.g., 'win_amd64')
+        pip_cmd : str
+            Path to pip executable
             
         Returns
         -------
-        Optional[str]
-            URL of the wheel if found, None otherwise
+        bool
+            True if installation successful, False otherwise
         """
-        # For llama-cpp-python, we can check specific repositories
-        if package_name == "llama-cpp-python":
-            # Get the latest version
-            try:
-                import requests
-                
-                # Check the GitHub releases for pre-built wheels
-                response = requests.get("https://api.github.com/repos/abetlen/llama-cpp-python/releases/latest")
-                if response.status_code == 200:
-                    release_data = response.json()
-                    for asset in release_data.get("assets", []):
-                        asset_name = asset["name"]
-                        # Look for a matching wheel for our Python version and platform
-                        if (f"llama_cpp_python-" in asset_name and 
-                            f"{python_version}" in asset_name and 
-                            f"{platform_tag}" in asset_name):
-                            return asset["browser_download_url"]
-                            
-                # If no match found in GitHub releases, check PyPI
-                response = requests.get(f"https://pypi.org/pypi/llama-cpp-python/json")
-                if response.status_code == 200:
-                    pypi_data = response.json()
-                    for url_info in pypi_data.get("urls", []):
-                        if (url_info["packagetype"] == "bdist_wheel" and 
-                            f"{python_version}" in url_info["filename"] and 
-                            f"{platform_tag}" in url_info["filename"]):
-                            return url_info["url"]
-                            
-            except Exception as e:
-                self._print(f"Error finding pre-built wheel for {package_name}: {e}", "yellow")
-                
-        return None
+        self._print("Installing basic dependencies...", "cyan")
         
+        # Install requests for URL operations
+        self._print("Installing requests package...", "cyan")
+        returncode, _, _ = self._run_command([pip_cmd, "install", "requests"])
+        
+        if returncode != 0:
+            self._print("Error installing requests package", "red")
+            return False
+            
+        # Install other basic dependencies
+        basic_deps = ["wheel", "setuptools", "urllib3"]
+        self._print(f"Installing basic packages: {', '.join(basic_deps)}...", "cyan")
+        returncode, _, _ = self._run_command([pip_cmd, "install", "--upgrade"] + basic_deps)
+        
+        if returncode != 0:
+            self._print("Error installing basic packages", "red")
+            return False
+            
+        return True
+        
+    def _download_file_with_requests(self, url: str, destination: str) -> bool:
+        """
+        Download a file using the requests library with progress reporting.
+        
+        Parameters
+        ----------
+        url : str
+            URL to download from
+        destination : str
+            Path to save the file to
+            
+        Returns
+        -------
+        bool
+            True if download was successful, False otherwise
+        """
+        try:
+            import requests
+            from tqdm import tqdm
+            
+            self._print(f"Downloading {url}...", "cyan")
+            
+            # Ensure directory exists
+            os.makedirs(os.path.dirname(destination), exist_ok=True)
+            
+            # Create a streaming request to get content
+            with requests.get(url, stream=True) as r:
+                r.raise_for_status()
+                total_size = int(r.headers.get('content-length', 0))
+                
+                # Use tqdm for progress bar if available
+                with open(destination, 'wb') as f:
+                    for chunk in tqdm(r.iter_content(chunk_size=8192), 
+                                      total=total_size//8192, 
+                                      unit='KB',
+                                      desc=os.path.basename(destination)):
+                        f.write(chunk)
+                        
+            self._print(f"Download completed: {destination}", "green")
+            return True
+            
+        except ImportError:
+            # Fall back to urllib if requests is not available
+            return self._download_file(url, destination)
+            
+        except Exception as e:
+            self._print(f"Error downloading file: {e}", "red")
+            return False
+        
+    def _download_github_repo(self, repo_url: str, branch: str, dest_dir: str) -> bool:
+        """
+        Download a GitHub repository without using git.
+        
+        Parameters
+        ----------
+        repo_url : str
+            GitHub repository URL (format: username/repository)
+        branch : str
+            Branch to download (usually "main" or "master")
+        dest_dir : str
+            Destination directory for the repository
+            
+        Returns
+        -------
+        bool
+            True if download was successful, False otherwise
+        """
+        try:
+            # Format the repository URL for the zip download
+            if repo_url.startswith("https://github.com/"):
+                repo_path = repo_url.replace("https://github.com/", "")
+            else:
+                repo_path = repo_url
+                
+            # Remove .git extension if present
+            repo_path = repo_path.replace(".git", "")
+            
+            # Create the download URL
+            download_url = f"https://github.com/{repo_path}/archive/refs/heads/{branch}.zip"
+            
+            # Download the zip file
+            zip_path = os.path.join(self.base_dir, "downloads", f"{repo_path.replace('/', '_')}_{branch}.zip")
+            
+            if not self._download_file_with_requests(download_url, zip_path):
+                return False
+                
+            # Import required modules
+            import zipfile
+            import shutil
+            
+            # Extract the zip file
+            self._print(f"Extracting {zip_path}...", "cyan")
+            
+            # Ensure destination directory exists
+            os.makedirs(dest_dir, exist_ok=True)
+            
+            # Extract the zip file
+            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                zip_ref.extractall(os.path.dirname(dest_dir))
+                
+                # Get the name of the extracted directory (should be repo-branch)
+                extracted_dir = os.path.join(os.path.dirname(dest_dir), 
+                                            zip_ref.namelist()[0].split('/')[0])
+                
+            # Move the extracted directory to the destination
+            if os.path.exists(dest_dir):
+                shutil.rmtree(dest_dir)
+                
+            shutil.move(extracted_dir, dest_dir)
+            
+            # Clean up the zip file
+            os.remove(zip_path)
+            
+            self._print(f"Downloaded and extracted repository to {dest_dir}", "green")
+            return True
+            
+        except Exception as e:
+            self._print(f"Error downloading GitHub repository: {e}", "red")
+            return False
+    
+    def _install_piper_phonemize(self, pip_cmd: str) -> bool:
+        """
+        Install piper-phonemize package without using Git.
+        
+        Parameters
+        ----------
+        pip_cmd : str
+            Path to pip executable
+            
+        Returns
+        -------
+        bool
+            True if installation successful, False otherwise
+        """
+        self._print("Installing piper-phonemize directly...", "cyan")
+        
+        try:
+            # Create temporary directory for the package
+            package_dir = os.path.join(self.base_dir, "downloads", "piper-phonemize")
+            
+            # Download the repository
+            if not self._download_github_repo("rhasspy/piper-phonemize", "master", package_dir):
+                return False
+                
+            # Install the package from the directory
+            returncode, _, stderr = self._run_command([
+                pip_cmd, "install", "-e", package_dir
+            ])
+            
+            if returncode != 0:
+                self._print(f"Error installing piper-phonemize: {stderr}", "red")
+                return False
+                
+            self._print("Successfully installed piper-phonemize from sources", "green")
+            return True
+            
+        except Exception as e:
+            self._print(f"Error installing piper-phonemize: {e}", "red")
+            return False
+            
+    def _install_whisper_streaming(self, pip_cmd: str) -> bool:
+        """
+        Install whisper-streaming package without using Git.
+        
+        Parameters
+        ----------
+        pip_cmd : str
+            Path to pip executable
+            
+        Returns
+        -------
+        bool
+            True if installation successful, False otherwise
+        """
+        self._print("Installing whisper-streaming directly...", "cyan")
+        
+        try:
+            # Create temporary directory for the package
+            package_dir = os.path.join(self.base_dir, "downloads", "whisper-streaming")
+            
+            # Download the repository
+            if not self._download_github_repo("ufal/whisper_streaming", "master", package_dir):
+                return False
+                
+            # Install the package from the directory
+            returncode, _, stderr = self._run_command([
+                pip_cmd, "install", "-e", package_dir
+            ])
+            
+            if returncode != 0:
+                self._print(f"Error installing whisper-streaming: {stderr}", "red")
+                return False
+                
+            self._print("Successfully installed whisper-streaming from sources", "green")
+            return True
+            
+        except Exception as e:
+            self._print(f"Error installing whisper-streaming: {e}", "red")
+            return False
+    
+    def _find_prebuilt_wheel_urls(self) -> Dict[str, str]:
+        """
+        Find pre-built wheel URLs for required packages.
+        
+        Returns
+        -------
+        Dict[str, str]
+            Dictionary mapping package names to wheel URLs
+        """
+        wheel_urls = {}
+        py_version = f"cp{sys.version_info.major}{sys.version_info.minor}"
+        platform_tag = "win_amd64" if self.platform == "Windows" else "linux_x86_64"
+        
+        try:
+            import requests
+            
+            # 1. Find llama-cpp-python wheel
+            self._print("Looking for pre-built llama-cpp-python wheel...", "cyan")
+            
+            # Try GitHub releases
+            try:
+                response = requests.get("https://github.com/abetlen/llama-cpp-python/releases")
+                if response.status_code == 200:
+                    # Look for version 0.2.11 specifically in the HTML content
+                    import re
+                    wheel_pattern = re.compile(rf'href="([^"]+llama_cpp_python-0\.2\.11[^"]+{py_version}[^"]+{platform_tag}[^"]+\.whl)"')
+                    matches = wheel_pattern.findall(response.text)
+                    
+                    if matches:
+                        wheel_url = f"https://github.com{matches[0]}"
+                        wheel_urls["llama-cpp-python"] = wheel_url
+                        self._print(f"Found pre-built wheel for llama-cpp-python: {wheel_url}", "green")
+            except Exception as e:
+                self._print(f"Error searching GitHub for llama-cpp-python wheels: {e}", "yellow")
+            
+            # If we didn't find a wheel on GitHub, try PyPI
+            if "llama-cpp-python" not in wheel_urls:
+                try:
+                    response = requests.get("https://pypi.org/pypi/llama-cpp-python/0.2.11/json")
+                    if response.status_code == 200:
+                        pypi_data = response.json()
+                        for url_info in pypi_data.get("urls", []):
+                            if (url_info["packagetype"] == "bdist_wheel" and 
+                                py_version in url_info["filename"] and 
+                                platform_tag in url_info["filename"]):
+                                wheel_urls["llama-cpp-python"] = url_info["url"]
+                                self._print(f"Found pre-built wheel for llama-cpp-python on PyPI: {url_info['url']}", "green")
+                                break
+                except Exception as e:
+                    self._print(f"Error searching PyPI for llama-cpp-python wheels: {e}", "yellow")
+            
+            # 2. Add other packages that might need wheels here
+            
+        except ImportError:
+            self._print("Could not import requests module for finding wheels", "yellow")
+            
+        return wheel_urls
+    
+    def _install_from_wheel_url(self, pip_cmd: str, package_name: str, wheel_url: str) -> bool:
+        """
+        Install a package from a wheel URL.
+        
+        Parameters
+        ----------
+        pip_cmd : str
+            Path to pip executable
+        package_name : str
+            Name of the package
+        wheel_url : str
+            URL to the wheel file
+            
+        Returns
+        -------
+        bool
+            True if installation successful, False otherwise
+        """
+        try:
+            self._print(f"Installing {package_name} from wheel...", "cyan")
+            
+            # Download the wheel
+            wheel_dir = os.path.join(self.base_dir, "downloads", "wheels")
+            os.makedirs(wheel_dir, exist_ok=True)
+            
+            wheel_filename = os.path.basename(wheel_url)
+            wheel_path = os.path.join(wheel_dir, wheel_filename)
+            
+            if not self._download_file_with_requests(wheel_url, wheel_path):
+                return False
+                
+            # Install the wheel
+            returncode, _, stderr = self._run_command([
+                pip_cmd, "install", wheel_path
+            ])
+            
+            if returncode != 0:
+                self._print(f"Error installing {package_name} from wheel: {stderr}", "red")
+                return False
+                
+            self._print(f"Successfully installed {package_name} from wheel", "green")
+            return True
+            
+        except Exception as e:
+            self._print(f"Error installing {package_name} from wheel: {e}", "red")
+            return False
+    
     def _install_dependencies(self) -> bool:
         """
         Install dependencies in virtual environment.
@@ -461,7 +837,10 @@ class MaggieInstaller:
         """
         self._print("\nInstalling dependencies...", "cyan")
         
-        # Check for C++ compiler first
+        # Check for Git first
+        self._check_git()
+        
+        # Check for C++ compiler
         self._check_cpp_compiler()
         
         # Determine pip command based on platform
@@ -480,6 +859,10 @@ class MaggieInstaller:
             self._print("Error upgrading pip, setuptools, and wheel", "red")
             return False
             
+        # Install basic dependencies needed for further installation
+        if not self._install_basic_dependencies(pip_cmd):
+            self._print("Warning: Failed to install basic dependencies, continuing anyway", "yellow")
+        
         # Install PyTorch with CUDA support
         self._print("Installing PyTorch with CUDA 11.8 support (optimized for RTX 3080)...", "cyan")
         returncode, _, _ = self._run_command([
@@ -488,34 +871,10 @@ class MaggieInstaller:
         
         if returncode != 0:
             self._print("Error installing PyTorch with CUDA support", "red")
-            return False
-            
-        # Get current Python version for wheel compatibility
-        py_version = f"cp{sys.version_info.major}{sys.version_info.minor}"
-        platform_tag = "win_amd64" if self.platform == "Windows" else "linux_x86_64"
+            self._print("Continuing with installation, but GPU acceleration may not work", "yellow")
         
-        # Handle llama-cpp-python separately (needs C++ compiler)
-        llama_installed = False
-        
-        # First, try a pre-built wheel for llama-cpp-python
-        if not self.has_cpp_compiler:
-            self._print("Looking for pre-built wheel for llama-cpp-python...", "cyan")
-            wheel_url = self._find_prebuilt_wheel_url("llama-cpp-python", py_version, platform_tag)
-            
-            if wheel_url:
-                self._print(f"Found pre-built wheel: {wheel_url}", "green")
-                
-                returncode, _, stderr = self._run_command([
-                    pip_cmd, "install", wheel_url
-                ])
-                
-                if returncode == 0:
-                    self._print("Successfully installed llama-cpp-python from wheel", "green")
-                    llama_installed = True
-                else:
-                    self._print(f"Error installing llama-cpp-python from wheel: {stderr}", "red")
-            else:
-                self._print("No pre-built wheel found for llama-cpp-python", "yellow")
+        # Get pre-built wheels if possible
+        wheel_urls = self._find_prebuilt_wheel_urls()
         
         # Create a temporary requirements file that excludes special dependencies we'll install separately
         temp_req_path = os.path.join(self.base_dir, "temp_requirements.txt")
@@ -526,57 +885,92 @@ class MaggieInstaller:
             # Remove lines for dependencies that require special handling
             filtered_content = "\n".join([
                 line for line in req_content.split("\n") 
-                if not line.startswith("torch") and not "cu118" in line 
-                and not "whisper" in line.lower() 
-                and not "piper" in line.lower()
-                and not "llama-cpp-python" in line.lower()
+                if line and not line.startswith("#") and  # Skip comments and empty lines
+                not line.startswith("torch") and not "cu118" in line and
+                not "whisper" in line.lower() and 
+                not "piper" in line.lower() and
+                not "llama-cpp-python" in line.lower()
             ])
             
             with open(temp_req_path, "w") as f:
                 f.write(filtered_content)
                 
             # Install from the temporary requirements file
+            self._print("Installing standard dependencies...", "cyan")
             returncode, _, _ = self._run_command([pip_cmd, "install", "-r", temp_req_path])
             
             # Clean up
             os.remove(temp_req_path)
             
             if returncode != 0:
-                self._print("Error installing base dependencies from requirements", "red")
-                return False
+                self._print("Error installing standard dependencies", "red")
+                self._print("Continuing with installation of critical components", "yellow")
             
-            # Install GitHub dependencies in the correct order
-            # 1. Install piper-phonemize from GitHub (dependency for piper-tts)
-            self._print("Installing piper-phonemize from GitHub...", "cyan")
-            returncode, _, stderr = self._run_command([
-                pip_cmd, "install", "git+https://github.com/rhasspy/piper-phonemize.git"
-            ])
+            # Install GitHub/special dependencies in the correct order
             
-            if returncode != 0:
-                self._print(f"Error installing piper-phonemize from GitHub: {stderr}", "red")
-                self._print("Continuing installation despite piper-phonemize error", "yellow")
+            # 1. Install piper-phonemize (dependency for piper-tts)
+            if self.has_git:
+                self._print("Installing piper-phonemize from GitHub...", "cyan")
+                returncode, _, stderr = self._run_command([
+                    pip_cmd, "install", "git+https://github.com/rhasspy/piper-phonemize.git"
+                ])
+                
+                if returncode != 0:
+                    self._print(f"Error installing piper-phonemize from GitHub: {stderr}", "red")
+                    self._print("Trying alternative installation method...", "yellow")
+                    piper_phonemize_installed = self._install_piper_phonemize(pip_cmd)
+                else:
+                    piper_phonemize_installed = True
+                    self._print("Successfully installed piper-phonemize", "green")
+            else:
+                # No Git, use direct download method
+                piper_phonemize_installed = self._install_piper_phonemize(pip_cmd)
             
             # 2. Now install piper-tts after its dependency is installed
-            self._print("Installing piper-tts...", "cyan")
-            returncode, _, stderr = self._run_command([
-                pip_cmd, "install", "piper-tts==1.2.0"
-            ])
-            
-            if returncode != 0:
-                self._print(f"Error installing piper-tts: {stderr}", "red")
-                self._print("Continuing installation process", "yellow")
+            if piper_phonemize_installed:
+                self._print("Installing piper-tts...", "cyan")
+                returncode, _, stderr = self._run_command([
+                    pip_cmd, "install", "piper-tts==1.2.0"
+                ])
                 
-            # 3. Install whisper-streaming from GitHub
-            self._print("Installing whisper-streaming from GitHub...", "cyan")
-            returncode, _, stderr = self._run_command([
-                pip_cmd, "install", "git+https://github.com/ufal/whisper_streaming.git"
-            ])
-            
-            if returncode != 0:
-                self._print(f"Error installing whisper-streaming from GitHub: {stderr}", "red")
-                self._print("Continuing installation despite whisper-streaming error", "yellow")
+                if returncode != 0:
+                    self._print(f"Error installing piper-tts: {stderr}", "red")
+                    self._print("Continuing installation process", "yellow")
+            else:
+                self._print("Skipping piper-tts installation due to missing dependency", "yellow")
                 
-            # 4. Install llama-cpp-python if not already installed
+            # 3. Install whisper-streaming
+            if self.has_git:
+                self._print("Installing whisper-streaming from GitHub...", "cyan")
+                returncode, _, stderr = self._run_command([
+                    pip_cmd, "install", "git+https://github.com/ufal/whisper_streaming.git"
+                ])
+                
+                if returncode != 0:
+                    self._print(f"Error installing whisper-streaming from GitHub: {stderr}", "red")
+                    self._print("Trying alternative installation method...", "yellow")
+                    whisper_installed = self._install_whisper_streaming(pip_cmd)
+                else:
+                    whisper_installed = True
+                    self._print("Successfully installed whisper-streaming", "green")
+            else:
+                # No Git, use direct download method
+                whisper_installed = self._install_whisper_streaming(pip_cmd)
+                
+            if not whisper_installed:
+                self._print("Warning: whisper-streaming installation failed", "yellow")
+                self._print("Voice recognition may not work properly", "yellow")
+                
+            # 4. Install llama-cpp-python
+            llama_installed = False
+            
+            # Try pre-built wheel first
+            if "llama-cpp-python" in wheel_urls:
+                llama_installed = self._install_from_wheel_url(
+                    pip_cmd, "llama-cpp-python", wheel_urls["llama-cpp-python"]
+                )
+            
+            # If wheel installation failed or no wheel found, try source installation
             if not llama_installed:
                 self._print("Installing llama-cpp-python...", "cyan")
                 
@@ -587,6 +981,7 @@ class MaggieInstaller:
                     ])
                     
                     if returncode == 0:
+                        llama_installed = True
                         self._print("Successfully installed llama-cpp-python", "green")
                     else:
                         self._print(f"Error installing llama-cpp-python: {stderr}", "red")
@@ -601,6 +996,7 @@ class MaggieInstaller:
             
             if returncode != 0:
                 self._print("Error installing GPU-specific dependencies", "red")
+                self._print("Continuing with CPU-only operation", "yellow")
                 
             self._print("Dependencies installed successfully", "green")
             return True
@@ -655,6 +1051,43 @@ class MaggieInstaller:
             self._print(f"Error creating configuration file: {e}", "red")
             return False
             
+    def _download_models_direct(self) -> bool:
+        """
+        Download required models directly without using Git.
+        
+        Returns
+        -------
+        bool
+            True if models downloaded successfully, False otherwise
+        """
+        # 1. Download TTS voice model
+        self._print("Downloading TTS models...", "cyan")
+        
+        voice_dir = os.path.join(self.base_dir, "models", "tts", "en_US-kathleen-medium")
+        onnx_file = os.path.join(voice_dir, "en_US-kathleen-medium.onnx")
+        json_file = os.path.join(voice_dir, "en_US-kathleen-medium.json")
+        
+        os.makedirs(voice_dir, exist_ok=True)
+        
+        onnx_url = "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/kathleen/medium/en_US-kathleen-medium.onnx"
+        json_url = "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/kathleen/medium/en_US-kathleen-medium.json"
+        
+        success = True
+        
+        if not os.path.exists(onnx_file):
+            if not self._download_file_with_requests(onnx_url, onnx_file):
+                success = False
+        else:
+            self._print("TTS ONNX file already exists", "yellow")
+            
+        if not os.path.exists(json_file):
+            if not self._download_file_with_requests(json_url, json_file):
+                success = False
+        else:
+            self._print("TTS JSON file already exists", "yellow")
+            
+        return success
+            
     def _download_models(self) -> bool:
         """
         Download required models.
@@ -672,68 +1105,46 @@ class MaggieInstaller:
         if response.lower() != "y":
             self._print("Skipping model downloads", "yellow")
             return True
-            
-        # Check for git-lfs
-        self._print("Checking for Git LFS...", "cyan")
-        returncode, _, _ = self._run_command(["git", "lfs", "version"], check=False)
         
-        if returncode != 0:
-            self._print("Installing Git LFS...", "cyan")
-            if self.platform == "Windows":
-                self._run_command(["git", "lfs", "install"], check=False)
-            else:
-                if self.is_admin:
-                    self._run_command(["apt", "install", "-y", "git-lfs"], check=False)
-                else:
-                    self._run_command(["sudo", "apt", "install", "-y", "git-lfs"], check=False)
-                self._run_command(["git", "lfs", "install"], check=False)
-                
-        # Download Mistral model
-        mistral_dir = os.path.join(self.base_dir, "models", "mistral-7b-instruct-v0.3-GPTQ-4bit")
-        if not os.path.exists(mistral_dir):
-            self._print("Downloading Mistral 7B model... (this may take a while)", "cyan")
-            returncode, _, _ = self._run_command([
-                "git", "clone", "https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.3-GPTQ", mistral_dir
-            ])
+        # Download TTS models directly (doesn't require Git)
+        if not self._download_models_direct():
+            self._print("Warning: Error downloading some models", "yellow")
+            self._print("Some functionality may not work correctly", "yellow")
+            
+        # Download Mistral model - requires Git
+        if self.has_git:
+            # Check for git-lfs
+            self._print("Checking for Git LFS...", "cyan")
+            returncode, _, _ = self._run_command(["git", "lfs", "version"], check=False)
             
             if returncode != 0:
-                self._print("Error downloading Mistral model", "red")
-                return False
-        else:
-            self._print("Mistral model directory already exists", "yellow")
-            
-        # Download TTS voice model
-        voice_dir = os.path.join(self.base_dir, "models", "tts", "en_US-kathleen-medium")
-        onnx_file = os.path.join(voice_dir, "en_US-kathleen-medium.onnx")
-        json_file = os.path.join(voice_dir, "en_US-kathleen-medium.json")
-        
-        if not os.path.exists(onnx_file):
-            self._print("Downloading TTS ONNX model...", "cyan")
-            if self.platform == "Windows":
-                # Use PowerShell for Windows
-                self._run_command([
-                    "powershell", "-Command",
-                    f"(New-Object System.Net.WebClient).DownloadFile('https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/kathleen/medium/en_US-kathleen-medium.onnx', '{onnx_file}')"
-                ], shell=True)
+                self._print("Git LFS not found, installing...", "cyan")
+                if self.platform == "Windows":
+                    self._run_command(["git", "lfs", "install"], check=False)
+                else:
+                    if self.is_admin:
+                        self._run_command(["apt", "install", "-y", "git-lfs"], check=False)
+                    else:
+                        self._run_command(["sudo", "apt", "install", "-y", "git-lfs"], check=False)
+                    self._run_command(["git", "lfs", "install"], check=False)
+                    
+            # Download Mistral model
+            mistral_dir = os.path.join(self.base_dir, "models", "mistral-7b-instruct-v0.3-GPTQ-4bit")
+            if not os.path.exists(mistral_dir):
+                self._print("Downloading Mistral 7B model... (this may take a while)", "cyan")
+                returncode, _, _ = self._run_command([
+                    "git", "clone", "https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.3-GPTQ", mistral_dir
+                ])
+                
+                if returncode != 0:
+                    self._print("Error downloading Mistral model", "red")
+                    return False
             else:
-                # Use wget for Linux
-                self._run_command(["wget", "-O", onnx_file, "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/kathleen/medium/en_US-kathleen-medium.onnx"])
+                self._print("Mistral model directory already exists", "yellow")
         else:
-            self._print("TTS ONNX file already exists", "yellow")
-            
-        if not os.path.exists(json_file):
-            self._print("Downloading TTS JSON config...", "cyan")
-            if self.platform == "Windows":
-                # Use PowerShell for Windows
-                self._run_command([
-                    "powershell", "-Command",
-                    f"(New-Object System.Net.WebClient).DownloadFile('https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/kathleen/medium/en_US-kathleen-medium.json', '{json_file}')"
-                ], shell=True)
-            else:
-                # Use wget for Linux
-                self._run_command(["wget", "-O", json_file, "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/kathleen/medium/en_US-kathleen-medium.json"])
-        else:
-            self._print("TTS JSON file already exists", "yellow")
+            self._print("Git not found, skipping Mistral model download", "yellow")
+            self._print("LLM functionality will not work without the model", "yellow")
+            self._print("Please install Git and run the installation again", "yellow")
             
         self._print("Model downloads completed", "green")
         return True
@@ -842,6 +1253,7 @@ class MaggieInstaller:
         
         if returncode != 0:
             self._print("Error optimizing configuration", "red")
+            self._print("Continuing with default configuration", "yellow")
             return False
             
         self._print("Configuration optimized for your hardware", "green")
@@ -868,6 +1280,7 @@ class MaggieInstaller:
         
         if returncode != 0:
             self._print("System verification failed", "red")
+            self._print("Some functionality may not work correctly", "yellow")
             return False
             
         self._print("System verification passed", "green")
@@ -910,7 +1323,8 @@ class MaggieInstaller:
             
         # Install dependencies
         if not self._install_dependencies():
-            return False
+            self._print("Some dependencies failed to install", "yellow")
+            self._print("Continuing with installation, but some features may not work", "yellow")
             
         # Setup configuration
         if not self._setup_config():
@@ -918,23 +1332,34 @@ class MaggieInstaller:
             
         # Download models
         if not self._download_models():
-            return False
+            self._print("Some models failed to download", "yellow")
+            self._print("Continuing with installation, but some features may not work", "yellow")
             
         # Create recipe template
         if not self._create_recipe_template():
-            return False
+            self._print("Recipe template creation failed", "yellow")
+            self._print("Recipe functionality may not work properly", "yellow")
             
         # Optimize configuration
         if not self._optimize_config():
-            return False
+            self._print("Configuration optimization failed", "yellow")
+            self._print("Using default configuration", "yellow")
             
         # Verify system
-        if not self._verify_system():
-            return False
+        verify_result = self._verify_system()
             
         # Installation complete
         self._print("\n=== Installation Complete ===", "green")
-        self._print("Reminders:", "cyan")
+        
+        # Show summary of installation status
+        self._print("\nInstallation Summary:", "cyan")
+        self._print(f"Python: {platform.python_version()}", "green")
+        self._print(f"Git found: {'Yes' if self.has_git else 'No'}", "green" if self.has_git else "yellow")
+        self._print(f"C++ compiler found: {'Yes' if self.has_cpp_compiler else 'No'}", "green" if self.has_cpp_compiler else "yellow")
+        self._print(f"System verification: {'Passed' if verify_result else 'Failed'}", "green" if verify_result else "yellow")
+        
+        # Reminders
+        self._print("\nReminders:", "cyan")
         self._print("1. Edit config.yaml to add your Picovoice access key from https://console.picovoice.ai/", "yellow")
         self._print("2. To run Maggie:", "yellow")
         
@@ -944,6 +1369,16 @@ class MaggieInstaller:
         else:
             self._print("   source venv/bin/activate", "cyan")
             self._print("   python main.py", "cyan")
+        
+        # Required tools not found warnings
+        if not self.has_git:
+            self._print("\nWarning: Git not found", "yellow")
+            self._print("For full functionality, install Git from: https://git-scm.com/download/win", "yellow")
+            
+        if not self.has_cpp_compiler:
+            self._print("\nWarning: Visual C++ Build Tools not found", "yellow")
+            self._print("For full functionality, install Visual C++ Build Tools from:", "yellow")
+            self._print("https://visualstudio.microsoft.com/visual-cpp-build-tools/", "yellow")
             
         # Ask if user wants to start Maggie
         response = input(f"\n{self.colors['magenta']}Would you like to start Maggie now? (y/n): {self.colors['reset']}")
