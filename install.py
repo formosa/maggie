@@ -276,6 +276,36 @@ class MaggieInstaller:
             else:
                 self._print(f"Directory already exists: {directory}", "yellow")
                 
+        # Create maggie package directory structure for setup.py
+        maggie_dir = os.path.join(self.base_dir, "maggie")
+        if not os.path.exists(maggie_dir):
+            try:
+                os.makedirs(maggie_dir, exist_ok=True)
+                # Create __init__.py in maggie directory
+                with open(os.path.join(maggie_dir, "__init__.py"), "w") as f:
+                    f.write("# Maggie AI Assistant package\n")
+                self._print(f"Created package directory: maggie", "green")
+            except Exception as e:
+                self._print(f"Error creating package directory: {e}", "red")
+                success = False
+        else:
+            self._print(f"Package directory already exists: maggie", "yellow")
+            
+        # Create maggie/utils directory for setup.py
+        utils_dir = os.path.join(maggie_dir, "utils")
+        if not os.path.exists(utils_dir):
+            try:
+                os.makedirs(utils_dir, exist_ok=True)
+                # Create __init__.py in maggie/utils directory
+                with open(os.path.join(utils_dir, "__init__.py"), "w") as f:
+                    f.write("# Maggie AI Assistant utilities package\n")
+                self._print(f"Created package directory: maggie/utils", "green")
+            except Exception as e:
+                self._print(f"Error creating package directory: {e}", "red")
+                success = False
+        else:
+            self._print(f"Package directory already exists: maggie/utils", "yellow")
+                
         return success
         
     def _setup_virtual_env(self) -> bool:
@@ -344,17 +374,43 @@ class MaggieInstaller:
             self._print("Error installing PyTorch with CUDA support", "red")
             return False
             
-        # Install project dependencies
+        # Install individual dependencies from requirements.txt directly
         self._print("Installing Maggie dependencies...", "cyan")
-        returncode, _, _ = self._run_command([pip_cmd, "install", "-e", "."])
         
-        if returncode != 0:
-            self._print("Error installing Maggie dependencies", "red")
+        # Create a temporary requirements file that excludes PyTorch (already installed)
+        temp_req_path = os.path.join(self.base_dir, "temp_requirements.txt")
+        try:
+            with open(os.path.join(self.base_dir, "requirements.txt"), "r") as f:
+                req_content = f.read()
+            
+            # Remove torch line and CUDA specific lines
+            filtered_content = "\n".join([
+                line for line in req_content.split("\n") 
+                if not line.startswith("torch") and not "cu118" in line
+            ])
+            
+            with open(temp_req_path, "w") as f:
+                f.write(filtered_content)
+                
+            # Install from the temporary requirements file
+            returncode, _, _ = self._run_command([pip_cmd, "install", "-r", temp_req_path])
+            
+            # Clean up
+            os.remove(temp_req_path)
+            
+            if returncode != 0:
+                self._print("Error installing Maggie dependencies", "red")
+                return False
+                
+        except Exception as e:
+            self._print(f"Error processing requirements file: {e}", "red")
+            if os.path.exists(temp_req_path):
+                os.remove(temp_req_path)
             return False
             
         # Install GPU-specific dependencies
         self._print("Installing GPU-specific dependencies...", "cyan")
-        returncode, _, _ = self._run_command([pip_cmd, "install", "-e", ".[gpu]"])
+        returncode, _, _ = self._run_command([pip_cmd, "install", "onnxruntime-gpu==1.15.1"])
         
         if returncode != 0:
             self._print("Error installing GPU-specific dependencies", "red")
@@ -377,6 +433,16 @@ class MaggieInstaller:
         config_path = os.path.join(self.base_dir, "config.yaml")
         example_path = os.path.join(self.base_dir, "config.yaml.example")
         
+        # If example doesn't exist but we have config-yaml-example.txt
+        alt_example_path = os.path.join(self.base_dir, "config-yaml-example.txt")
+        if not os.path.exists(example_path) and os.path.exists(alt_example_path):
+            try:
+                shutil.copy(alt_example_path, example_path)
+                self._print(f"Created config example from {alt_example_path}", "green")
+            except Exception as e:
+                self._print(f"Error creating config example: {e}", "red")
+                return False
+        
         # Check if config already exists
         if os.path.exists(config_path):
             self._print("Configuration file already exists", "yellow")
@@ -390,7 +456,7 @@ class MaggieInstaller:
         # Copy example to config
         try:
             shutil.copy(example_path, config_path)
-            self._print("Configuration file created from example", "green")
+            self._print(f"Configuration file created from example", "green")
             self._print("NOTE: You need to edit config.yaml to add your Picovoice access key", "yellow")
             return True
         except Exception as e:
@@ -497,14 +563,71 @@ class MaggieInstaller:
         else:
             python_cmd = os.path.join(self.base_dir, "venv", "bin", "python")
             
-        returncode, _, _ = self._run_command([python_cmd, "main.py", "--create-template"])
-        
-        if returncode != 0:
-            self._print("Error creating recipe template", "red")
-            return False
+        # Try to create the template
+        try:
+            # Create the template directory if it doesn't exist
+            template_dir = os.path.join(self.base_dir, "templates")
+            os.makedirs(template_dir, exist_ok=True)
             
-        self._print("Recipe template created successfully", "green")
-        return True
+            # Check if template already exists
+            template_path = os.path.join(template_dir, "recipe_template.docx")
+            if os.path.exists(template_path):
+                self._print(f"Recipe template already exists: {template_path}", "yellow")
+                return True
+                
+            # Try to create the template using docx
+            try:
+                from docx import Document
+                
+                doc = Document()
+                doc.add_heading("Recipe Name", level=1)
+                
+                # Add metadata section
+                doc.add_heading("Recipe Information", level=2)
+                info_table = doc.add_table(rows=3, cols=2)
+                info_table.style = 'Table Grid'
+                info_table.cell(0, 0).text = "Preparation Time"
+                info_table.cell(0, 1).text = "00 minutes"
+                info_table.cell(1, 0).text = "Cooking Time"
+                info_table.cell(1, 1).text = "00 minutes"
+                info_table.cell(2, 0).text = "Servings"
+                info_table.cell(2, 1).text = "0 servings"
+                
+                # Add ingredients section
+                doc.add_heading("Ingredients", level=2)
+                doc.add_paragraph("• Ingredient 1", style='ListBullet')
+                doc.add_paragraph("• Ingredient 2", style='ListBullet')
+                doc.add_paragraph("• Ingredient 3", style='ListBullet')
+                
+                # Add instructions section
+                doc.add_heading("Instructions", level=2)
+                doc.add_paragraph("1. Step 1", style='ListNumber')
+                doc.add_paragraph("2. Step 2", style='ListNumber')
+                doc.add_paragraph("3. Step 3", style='ListNumber')
+                
+                # Add notes section
+                doc.add_heading("Notes", level=2)
+                doc.add_paragraph("Add any additional notes, tips, or variations here.")
+                
+                # Save the template
+                doc.save(template_path)
+                self._print(f"Recipe template created at {template_path}", "green")
+                return True
+                
+            except ImportError:
+                # If python-docx is not available, try running main.py with --create-template
+                returncode, _, _ = self._run_command([python_cmd, "main.py", "--create-template"])
+                
+                if returncode != 0:
+                    self._print("Error creating recipe template using main.py", "red")
+                    return False
+                    
+                self._print("Recipe template created successfully", "green")
+                return True
+                
+        except Exception as e:
+            self._print(f"Error creating recipe template: {e}", "red")
+            return False
         
     def _optimize_config(self) -> bool:
         """
