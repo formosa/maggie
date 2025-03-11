@@ -14,6 +14,7 @@ import platform
 import subprocess
 import argparse
 import shutil
+import re
 from typing import List, Dict, Any, Optional, Tuple
 from pathlib import Path
 
@@ -73,6 +74,9 @@ class MaggieInstaller:
         
         # Check if running as admin/root
         self.is_admin = self._check_admin()
+        
+        # Flags for special handling
+        self.has_cpp_compiler = False
         
     def _print(self, message: str, color: str = None):
         """
@@ -149,6 +153,64 @@ class MaggieInstaller:
         except Exception as e:
             self._print(f"Error running command: {e}", "red")
             return -1, "", str(e)
+            
+    def _check_cpp_compiler(self) -> bool:
+        """
+        Check if C++ compiler is available for building wheels.
+        
+        Returns
+        -------
+        bool
+            True if compiler is available, False otherwise
+        """
+        if self.platform == "Windows":
+            # On Windows, check for Visual C++ Build Tools
+            try:
+                # First, check for cl.exe (MSVC compiler)
+                returncode, _, _ = self._run_command(["where", "cl.exe"], check=False)
+                if returncode == 0:
+                    self._print("Visual C++ compiler (cl.exe) found", "green")
+                    self.has_cpp_compiler = True
+                    return True
+                
+                # Check if Visual Studio Build Tools are installed by checking registry
+                returncode, stdout, _ = self._run_command(
+                    ["reg", "query", "HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\VisualStudio\\14.0\\VC\\Runtimes\\x64", "/v", "Version"],
+                    check=False, shell=True
+                )
+                
+                if returncode == 0:
+                    self._print("Visual C++ Build Tools found in registry", "green")
+                    self.has_cpp_compiler = True
+                    return True
+                
+                # If we get here, compiler not found
+                self._print("Visual C++ Build Tools not found", "yellow")
+                self._print("Some packages may fail to build", "yellow")
+                self._print("To install Visual C++ Build Tools:", "yellow")
+                self._print("1. Download from https://visualstudio.microsoft.com/visual-cpp-build-tools/", "yellow")
+                self._print("2. Select 'Desktop development with C++' workload", "yellow")
+                self._print("3. Restart this installation after installing Build Tools", "yellow")
+                
+                return False
+            except Exception as e:
+                self._print(f"Error checking for Visual C++ compiler: {e}", "red")
+                return False
+        else:
+            # On Linux, check for gcc/g++
+            try:
+                returncode, _, _ = self._run_command(["which", "gcc"], check=False)
+                if returncode == 0:
+                    self._print("GCC compiler found", "green")
+                    self.has_cpp_compiler = True
+                    return True
+                
+                self._print("GCC compiler not found. Some packages may fail to build.", "yellow")
+                self._print("To install GCC on Ubuntu/Debian: sudo apt install build-essential", "yellow")
+                return False
+            except Exception as e:
+                self._print(f"Error checking for GCC compiler: {e}", "red")
+                return False
             
     def _check_python_version(self) -> bool:
         """
@@ -337,6 +399,57 @@ class MaggieInstaller:
         self._print("Virtual environment created successfully", "green")
         return True
         
+    def _find_prebuilt_wheel_url(self, package_name, python_version, platform_tag):
+        """
+        Find pre-built wheel URL for a package if available.
+        
+        Parameters
+        ----------
+        package_name : str
+            Name of the package to find
+        python_version : str
+            Python version (e.g., 'cp310')
+        platform_tag : str
+            Platform tag (e.g., 'win_amd64')
+            
+        Returns
+        -------
+        Optional[str]
+            URL of the wheel if found, None otherwise
+        """
+        # For llama-cpp-python, we can check specific repositories
+        if package_name == "llama-cpp-python":
+            # Get the latest version
+            try:
+                import requests
+                
+                # Check the GitHub releases for pre-built wheels
+                response = requests.get("https://api.github.com/repos/abetlen/llama-cpp-python/releases/latest")
+                if response.status_code == 200:
+                    release_data = response.json()
+                    for asset in release_data.get("assets", []):
+                        asset_name = asset["name"]
+                        # Look for a matching wheel for our Python version and platform
+                        if (f"llama_cpp_python-" in asset_name and 
+                            f"{python_version}" in asset_name and 
+                            f"{platform_tag}" in asset_name):
+                            return asset["browser_download_url"]
+                            
+                # If no match found in GitHub releases, check PyPI
+                response = requests.get(f"https://pypi.org/pypi/llama-cpp-python/json")
+                if response.status_code == 200:
+                    pypi_data = response.json()
+                    for url_info in pypi_data.get("urls", []):
+                        if (url_info["packagetype"] == "bdist_wheel" and 
+                            f"{python_version}" in url_info["filename"] and 
+                            f"{platform_tag}" in url_info["filename"]):
+                            return url_info["url"]
+                            
+            except Exception as e:
+                self._print(f"Error finding pre-built wheel for {package_name}: {e}", "yellow")
+                
+        return None
+        
     def _install_dependencies(self) -> bool:
         """
         Install dependencies in virtual environment.
@@ -347,6 +460,9 @@ class MaggieInstaller:
             True if dependencies installed successfully, False otherwise
         """
         self._print("\nInstalling dependencies...", "cyan")
+        
+        # Check for C++ compiler first
+        self._check_cpp_compiler()
         
         # Determine pip command based on platform
         if self.platform == "Windows":
@@ -374,8 +490,32 @@ class MaggieInstaller:
             self._print("Error installing PyTorch with CUDA support", "red")
             return False
             
-        # Install individual dependencies from requirements.txt directly
-        self._print("Installing Maggie dependencies...", "cyan")
+        # Get current Python version for wheel compatibility
+        py_version = f"cp{sys.version_info.major}{sys.version_info.minor}"
+        platform_tag = "win_amd64" if self.platform == "Windows" else "linux_x86_64"
+        
+        # Handle llama-cpp-python separately (needs C++ compiler)
+        llama_installed = False
+        
+        # First, try a pre-built wheel for llama-cpp-python
+        if not self.has_cpp_compiler:
+            self._print("Looking for pre-built wheel for llama-cpp-python...", "cyan")
+            wheel_url = self._find_prebuilt_wheel_url("llama-cpp-python", py_version, platform_tag)
+            
+            if wheel_url:
+                self._print(f"Found pre-built wheel: {wheel_url}", "green")
+                
+                returncode, _, stderr = self._run_command([
+                    pip_cmd, "install", wheel_url
+                ])
+                
+                if returncode == 0:
+                    self._print("Successfully installed llama-cpp-python from wheel", "green")
+                    llama_installed = True
+                else:
+                    self._print(f"Error installing llama-cpp-python from wheel: {stderr}", "red")
+            else:
+                self._print("No pre-built wheel found for llama-cpp-python", "yellow")
         
         # Create a temporary requirements file that excludes special dependencies we'll install separately
         temp_req_path = os.path.join(self.base_dir, "temp_requirements.txt")
@@ -389,6 +529,7 @@ class MaggieInstaller:
                 if not line.startswith("torch") and not "cu118" in line 
                 and not "whisper" in line.lower() 
                 and not "piper" in line.lower()
+                and not "llama-cpp-python" in line.lower()
             ])
             
             with open(temp_req_path, "w") as f:
@@ -435,22 +576,40 @@ class MaggieInstaller:
                 self._print(f"Error installing whisper-streaming from GitHub: {stderr}", "red")
                 self._print("Continuing installation despite whisper-streaming error", "yellow")
                 
+            # 4. Install llama-cpp-python if not already installed
+            if not llama_installed:
+                self._print("Installing llama-cpp-python...", "cyan")
+                
+                # If we have a compiler, we can try to build from source
+                if self.has_cpp_compiler:
+                    returncode, _, stderr = self._run_command([
+                        pip_cmd, "install", "llama-cpp-python==0.2.11", "--no-cache-dir"
+                    ])
+                    
+                    if returncode == 0:
+                        self._print("Successfully installed llama-cpp-python", "green")
+                    else:
+                        self._print(f"Error installing llama-cpp-python: {stderr}", "red")
+                        self._print("You may need to install llama-cpp-python manually", "yellow")
+                else:
+                    self._print("Cannot install llama-cpp-python without C++ compiler", "yellow")
+                    self._print("Please install Visual C++ Build Tools", "yellow")
+            
+            # 5. Install GPU-specific dependencies
+            self._print("Installing GPU-specific dependencies...", "cyan")
+            returncode, _, _ = self._run_command([pip_cmd, "install", "onnxruntime-gpu==1.15.1"])
+            
+            if returncode != 0:
+                self._print("Error installing GPU-specific dependencies", "red")
+                
+            self._print("Dependencies installed successfully", "green")
+            return True
+                
         except Exception as e:
             self._print(f"Error processing requirements file: {e}", "red")
             if os.path.exists(temp_req_path):
                 os.remove(temp_req_path)
             return False
-            
-        # Install GPU-specific dependencies
-        self._print("Installing GPU-specific dependencies...", "cyan")
-        returncode, _, _ = self._run_command([pip_cmd, "install", "onnxruntime-gpu==1.15.1"])
-        
-        if returncode != 0:
-            self._print("Error installing GPU-specific dependencies", "red")
-            return False
-            
-        self._print("Dependencies installed successfully", "green")
-        return True
         
     def _setup_config(self) -> bool:
         """
