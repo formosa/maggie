@@ -1,0 +1,50 @@
+{
+    "project_metadata": {
+        "name": "Maggie AI Assistant",
+        "version": "0.3.0",
+        "description": "Advanced AI Assistant with Intelligent Resource Management"
+    },
+    "system_optimization": {
+        "recommended_hardware": {
+            "cpu": {
+                "model": "AMD Ryzen 9 5900X",
+                "min_cores": 12,
+                "min_clock_speed": 3.7
+            },
+            "gpu": {
+                "model": "NVIDIA GeForce RTX 3080",
+                "min_vram": 10,
+                "cuda_version": "11.8+"
+            },
+            "memory": {
+                "min_ram": 32,
+                "recommended_type": "DDR4-3200"
+            }
+        }
+    },
+    "resource_acquisition": {
+        "models": {
+            "llm": {
+                "provider": "huggingface",
+                "name": "TheBloke/Mistral-7B-Instruct-v0.3-GPTQ",
+                "download_path": "models/mistral-7b-instruct",
+                "preferred_format": "GPTQ-4bit"
+            },
+            "tts": {
+                "provider": "rhasspy",
+                "voice": "en_US/kathleen/medium",
+                "download_path": "models/tts/en_US-kathleen-medium",
+                "file_types": ["onnx", "json"]
+            }
+        }
+    },
+    "telemetry": {
+        "opt_in": false,
+        "data_collection": [
+            "system_configuration",
+            "installation_success_rate",
+            "model_download_performance",
+            "resource_utilization"
+        ]
+    }
+}
