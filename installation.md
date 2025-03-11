@@ -64,6 +64,26 @@ Maggie is a voice-activated AI assistant implementing a Finite State Machine (FS
    - Select "Run as administrator"
    - Follow the on-screen instructions
 
+### What the Setup Script Does
+
+The `setup_windows.bat` script automates the installation process by performing these actions:
+
+- Checks for administrator privileges
+- Creates necessary directories (logs, models, etc.)
+- Verifies Python 3.10.x installation
+- Checks for NVIDIA GPU and CUDA support
+- Creates and activates a Python virtual environment
+- Upgrades pip, setuptools, and wheel
+- Installs PyTorch with CUDA 11.8 support
+- Installs Maggie's dependencies
+- Creates or verifies the configuration file
+- Offers to download ML models (Mistral and TTS)
+- Creates the recipe template
+- Verifies system configuration
+- Optimizes configuration for Ryzen 9 5900X and RTX 3080
+- Reminds about Picovoice access key requirements
+- Offers to start Maggie immediately
+
 3. **Obtain Picovoice access key**
    - Visit [https://console.picovoice.ai/](https://console.picovoice.ai/) to register
    - Get your free access key
