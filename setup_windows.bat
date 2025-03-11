@@ -16,7 +16,7 @@ echo ===================================
 
 REM Check for admin rights
 echo Checking administrator privileges...
-whoami /groups | find "S-1-5-32-544" >nul 2>&1
+fsutil dirty query C: >nul 2>&1
 if %errorLevel% EQU 0 (
     echo Running with administrator privileges - full functionality available
 ) else (
