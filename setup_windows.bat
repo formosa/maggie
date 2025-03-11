@@ -2,6 +2,9 @@
 REM =====================================================
 REM Maggie - Windows Setup Script
 REM =====================================================
+REM This script automates the installation of Maggie 
+REM on Windows systems, optimized for AMD Ryzen 9 5900X and RTX 3080
+REM =====================================================
 
 REM Get the directory where the script is located and change to it
 SET SCRIPT_DIR=%~dp0
