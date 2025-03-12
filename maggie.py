@@ -14,6 +14,7 @@ import queue
 import time
 from typing import Dict, Any, Optional, List, Callable, Tuple
 from dataclasses import dataclass
+from concurrent.futures import ThreadPoolExecutor
 from loguru import logger
 
 class State(Enum):
@@ -68,7 +69,9 @@ class EventBus:
     """
     
     def __init__(self):
-        """Initialize the event bus with empty subscribers dictionary."""
+        """
+        Initialize the event bus with empty subscribers dictionary.
+        """
         self.subscribers = {}
         self.queue = queue.PriorityQueue()
         self.running = False
@@ -177,7 +180,9 @@ class EventBus:
         return True
         
     def _process_events(self) -> None:
-        """Process events from the queue and dispatch to subscribers."""
+        """
+        Process events from the queue and dispatch to subscribers.
+        """
         while self.running:
             try:
                 priority, event = self.queue.get(timeout=0.1)
@@ -201,7 +206,7 @@ class EventBus:
             except Exception as e:
                 logger.error(f"Error processing events: {e}")
 
-class MaggieCore:
+class MaggieAI:
     """
     Core implementation of the Maggie AI Assistant.
     
@@ -310,7 +315,9 @@ class MaggieCore:
             return False
             
     def _initialize_utilities(self):
-        """Initialize utility modules based on configuration."""
+        """
+        Initialize utility modules based on configuration.
+        """
         utilities_config = self.config.get("utilities", {})
         
         # Load recipe creator if configured
@@ -523,7 +530,9 @@ class MaggieCore:
         self.thread_pool.shutdown(wait=True)
             
     def _handle_wake_word(self, _):
-        """Handle wake word detection event."""
+        """
+        Handle wake word detection event.
+        """
         if self.state == State.IDLE:
             self._transition_to(State.READY, "wake_word_detected")
             
@@ -565,7 +574,9 @@ class MaggieCore:
         self.speech_processor.speak("I didn't understand that command")
         
     def _handle_timeout(self, _):
-        """Handle inactivity timeout event."""
+        """
+        Handle inactivity timeout event.
+        """
         if self.state == State.READY:
             self.speech_processor.speak("Going to sleep due to inactivity")
             self._transition_to(State.CLEANUP, "inactivity_timeout")
@@ -583,7 +594,9 @@ class MaggieCore:
             self._transition_to(State.READY, f"utility_{utility_name}_completed")
         
     def _start_inactivity_timer(self):
-        """Start or reset the inactivity timer."""
+        """
+        Start or reset the inactivity timer.
+        """
         if self.inactivity_timer:
             self.inactivity_timer.cancel()
             
@@ -595,7 +608,9 @@ class MaggieCore:
         self.inactivity_timer.start()
         
     def _listen_for_commands(self):
-        """Listen for commands in the READY state."""
+        """
+        Listen for commands in the READY state.
+        """
         if self.state != State.READY:
             return
             
@@ -640,3 +655,45 @@ class MaggieCore:
         except Exception as e:
             logger.error(f"Error running utility {utility_name}: {e}")
             self._transition_to(State.READY, f"utility_{utility_name}_error")
+            
+    def shutdown(self):
+        """
+        Shut down the Maggie AI Assistant.
+        """
+        return self.stop()
+        
+    def timeout(self):
+        """
+        Handle manual timeout/sleep request.
+        """
+        if self.state == State.READY or self.state == State.ACTIVE:
+            self.speech_processor.speak("Going to sleep")
+            self._transition_to(State.CLEANUP, "manual_timeout")
+            
+    def process_command(self, utility=None):
+        """
+        Process a command or activate a utility directly.
+        
+        Parameters
+        ----------
+        utility : UtilityBase, optional
+            Utility to activate directly, by default None
+        
+        Returns
+        -------
+        bool
+            True if command processed successfully
+        """
+        if utility:
+            utility_name = None
+            for name, util in self.utilities.items():
+                if util == utility:
+                    utility_name = name
+                    break
+                    
+            if utility_name:
+                self._transition_to(State.ACTIVE, f"utility_{utility_name}")
+                self.thread_pool.submit(self._run_utility, utility_name)
+                return True
+                
+        return False
