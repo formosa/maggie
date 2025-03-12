@@ -225,6 +225,7 @@ This utility demonstrates how the system combines speech recognition, natural la
 4. **CUDA Toolkit 11.8**
    * Download from [NVIDIA CUDA Toolkit Archive](https://developer.nvidia.com/cuda-11-8-0-download-archive)
    * Follow the installation instructions for your operating system
+   * Make sure to install the matching cuDNN version from [NVIDIA Developer](https://developer.nvidia.com/cudnn)
 
 #### Step 2: Clone the Repository
 
@@ -402,7 +403,7 @@ Maggie implements a sophisticated Finite State Machine (FSM) architecture with t
 * **User Action**: Say "Maggie" clearly at a moderate volume
 * **System Process**:
   1. Wake word detector identifies the keyword with Porcupine engine
-  2. System transitions from IDLE to STARTUP state
+  2. System transitions from IDLE to READY state
   3. Core components initialize:
      * Speech processor activates
      * LLM model is loaded into GPU memory (32 layers on RTX 3080)
@@ -516,7 +517,7 @@ Maggie implements a sophisticated Finite State Machine (FSM) architecture with t
 
 | Command | Valid States | Description | System Response | Technical Details |
 |---------|--------------|-------------|-----------------|-------------------|
-| "Maggie" | IDLE | Wake word to activate assistant | Audio: "Initializing Maggie" followed by "Ready for your command" | - Primary keyword model trained on diverse speakers<br>- Detection sensitivity configurable (0.0-1.0)<br>- 98.7% accuracy with sensitivity 0.5 |
+| "Maggie" | IDLE | Wake word to activate assistant | Audio: "Ready for your command" | - Primary keyword model trained on diverse speakers<br>- Detection sensitivity configurable (0.0-1.0)<br>- 98.7% accuracy with sensitivity 0.5 |
 | "Sleep" or "Go to sleep" | READY, ACTIVE | Return to IDLE state and release resources | Audio: "Going to sleep" | - Releases ~7GB GPU memory<br>- Terminates speech recognition<br>- Returns to ~1% CPU usage |
 | "Shutdown" or "Turn off" | Any | Fully close the application | Audio: "Shutting down" | - Complete resource cleanup<br>- Proper thread termination<br>- Closes application process |
 | "Cancel" | ACTIVE | Abort current operation | Audio: "Operation cancelled" | - Thread-safe operation termination<br>- Returns to READY state<br>- Frees utility-specific resources |
@@ -737,25 +738,25 @@ Maggie employs a sophisticated event-driven architecture with these key componen
 
 ### Core Classes and Relationships
 
-1. **MaggieCore**:
+1. **MaggieCore** (`maggie.py`):
    * Central control class managing the FSM
    * Coordinates component interactions
    * Manages system lifecycle
    * Handles state transitions
 
-2. **EventBus**:
+2. **EventBus** (`maggie.py`):
    * Implements publisher-subscriber pattern
    * Enables decoupled component communication
    * Handles event prioritization and distribution
    * Manages asynchronous event processing
 
-3. **HardwareManager**:
+3. **HardwareManager** (`hardware_manager.py`):
    * Detects and analyzes system capabilities
    * Creates optimization profiles
    * Monitors resource utilization
    * Provides configuration recommendations
 
-4. **ConfigManager**:
+4. **ConfigManager** (`configuration_manager.py`):
    * Manages configuration loading and validation
    * Implements configuration recovery mechanisms
    * Applies hardware-specific optimizations
@@ -773,7 +774,7 @@ Maggie employs a sophisticated event-driven architecture with these key componen
    * Implements efficient text generation
    * Manages GPU memory utilization
 
-7. **UtilityBase**:
+7. **UtilityBase** (`utils/utility_base.py`):
    * Abstract base class for all utilities
    * Defines standard utility interface
    * Implements common utility behaviors
