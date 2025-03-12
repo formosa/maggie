@@ -210,13 +210,70 @@ This utility demonstrates how the system combines speech recognition, natural la
 #### Step 1: Install Required Software
 
 1. **Python 3.10.x**
-   * Download from [Python.org](https://www.python.org/downloads/release/python-31011/)
-   * Windows: Use the installer and select "Add Python to PATH"
-   * Ubuntu: `sudo apt update && sudo apt install python3.10 python3.10-venv python3.10-dev`
+   * **Windows Installation:**
+     1. Download the Python 3.10.11 installer from [Python.org](https://www.python.org/downloads/release/python-31011/) 
+        - Scroll down to Files and select "Windows installer (64-bit)"
+     2. Run the downloaded installer (python-3.10.11-amd64.exe)
+     3. **Important:** On the first screen, check the box that says "Add Python 3.10 to PATH"
+     4. Select "Install Now" for standard installation or "Customize installation" for advanced options
+     5. If you choose "Customize installation":
+        - Ensure all optional features are selected
+        - On the Advanced Options screen, select "Install for all users" if you have admin rights
+        - Check "Add Python to environment variables"
+        - Set the installation path (default is C:\Program Files\Python310)
+     6. Wait for the installation to complete
+     7. Verify installation by opening Command Prompt and running:
+        ```
+        python --version
+        ```
+        It should display "Python 3.10.11"
+   * **Ubuntu Installation:**
+     1. First, update your package index:
+        ```
+        sudo apt update
+        ```
+     2. Install software-properties-common if not already installed:
+        ```
+        sudo apt install software-properties-common -y
+        ```
+     3. Add the deadsnakes PPA for Python 3.10:
+        ```
+        sudo add-apt-repository ppa:deadsnakes/ppa -y
+        ```
+     4. Update package index again after adding the repository:
+        ```
+        sudo apt update
+        ```
+     5. Install Python 3.10 and development packages:
+        ```
+        sudo apt install python3.10 python3.10-venv python3.10-dev -y
+        ```
+     6. Verify installation:
+        ```
+        python3.10 --version
+        ```
+        It should display "Python 3.10.x" where x is the latest patch version
+     7. If you want to make Python 3.10 the default 'python3' command (optional):
+        ```
+        sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.10 1
+        ```
 
 2. **Visual C++ Build Tools** (Windows only)
-   * Download from [Microsoft Visual C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/)
-   * Select "Desktop development with C++" workload
+   * Download the installer from [Visual Studio Downloads](https://visualstudio.microsoft.com/downloads/) (look for "Build Tools for Visual Studio 2022")
+   * Run the downloaded installer (vs_BuildTools.exe)
+   * When the installer launches:
+     1. Wait for the component list to load completely
+     2. Select the "Desktop development with C++" workload checkbox
+     3. In the right panel under "Installation details", ensure the following components are selected:
+        - MSVC C++ x64/x86 build tools
+        - Windows 10/11 SDK
+        - C++ CMake tools for Windows
+     4. Click "Install" in the bottom right corner
+     5. Wait for the installation to complete (this may take 10-30 minutes depending on your internet speed)
+   * Verify installation:
+     1. Open Command Prompt or PowerShell
+     2. Run `where cl.exe` - it should return a path like "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\..."
+     3. If the command returns no results, you may need to restart your computer
 
 3. **Git**
    * Download from [Git-SCM](https://git-scm.com/download/win) for Windows
