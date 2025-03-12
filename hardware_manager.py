@@ -6,17 +6,34 @@ Comprehensive hardware detection and optimization for Maggie AI Assistant.
 This module provides centralized hardware management, including detection,
 optimization, and performance monitoring specifically tailored for
 AMD Ryzen 9 5900X and NVIDIA RTX 3080 hardware.
+
+Examples
+--------
+>>> from hardware_manager import HardwareManager
+>>> hw_manager = HardwareManager()
+>>> hw_info = hw_manager._detect_system()
+>>> print(f"CPU: {hw_info['cpu']['model']}")
+>>> print(f"GPU: {hw_info['gpu']['name']}")
+>>> # Start monitoring system resources
+>>> hw_manager.start_monitoring()
+>>> # Later, stop monitoring
+>>> hw_manager.stop_monitoring()
 """
 
+# Standard library imports
 import os
 import platform
 import subprocess
-import psutil
 import json
 import threading
 import time
 from typing import Dict, Any, Optional, List, Tuple
+
+# Third-party imports
+import psutil
 from loguru import logger
+
+__all__ = ['HardwareManager']
 
 class HardwareManager:
     """
@@ -37,6 +54,10 @@ class HardwareManager:
         Detected hardware information
     optimization_profile : Dict[str, Any]
         Hardware-specific optimization profile
+    _monitoring_enabled : bool
+        Whether resource monitoring is currently enabled
+    _monitoring_thread : Optional[threading.Thread]
+        Thread for resource monitoring
     """
     
     def __init__(self, config_path: str = "config.yaml"):
@@ -64,6 +85,11 @@ class HardwareManager:
         -------
         Dict[str, Any]
             Detailed hardware information including CPU, RAM, and GPU
+            
+        Notes
+        -----
+        Identifies system components and capabilities, with special detection
+        for AMD Ryzen 9 5900X CPU and NVIDIA RTX 3080 GPU.
         """
         system_info = {
             "os": {
@@ -125,7 +151,7 @@ class HardwareManager:
                         cpu_info["model"] = processor.Name
                         break
             except ImportError:
-                pass
+                logger.debug("WMI module not available for detailed CPU detection")
         
         return cpu_info
     
@@ -158,7 +184,7 @@ class HardwareManager:
                         memory_info["type"] = "DDR4"
                         break
             except ImportError:
-                pass
+                logger.debug("WMI module not available for detailed memory detection")
                 
         return memory_info
     
@@ -196,7 +222,7 @@ class HardwareManager:
                     gpu_info["optimal_precision"] = "float16"
                 
         except ImportError:
-            pass
+            logger.debug("PyTorch not available for GPU detection")
             
         return gpu_info
     
@@ -226,7 +252,7 @@ class HardwareManager:
         Returns
         -------
         Dict[str, Any]
-            Threading optimization parameters
+            Threading optimization parameters based on detected CPU
         """
         cpu_info = self.hardware_info["cpu"]
         
@@ -252,7 +278,7 @@ class HardwareManager:
         Returns
         -------
         Dict[str, Any]
-            Memory optimization parameters
+            Memory optimization parameters based on detected RAM
         """
         memory_info = self.hardware_info["memory"]
         
@@ -279,7 +305,7 @@ class HardwareManager:
         Returns
         -------
         Dict[str, Any]
-            GPU optimization parameters
+            GPU optimization parameters based on detected GPU
         """
         gpu_info = self.hardware_info["gpu"]
         
@@ -317,7 +343,7 @@ class HardwareManager:
         Returns
         -------
         Dict[str, Any]
-            LLM optimization parameters
+            LLM optimization parameters based on detected GPU
         """
         gpu_info = self.hardware_info["gpu"]
         
@@ -354,7 +380,7 @@ class HardwareManager:
         Returns
         -------
         Dict[str, Any]
-            Audio optimization parameters
+            Audio optimization parameters based on detected hardware
         """
         cpu_info = self.hardware_info["cpu"]
         gpu_info = self.hardware_info["gpu"]
@@ -395,7 +421,7 @@ class HardwareManager:
         Returns
         -------
         Dict[str, Any]
-            Optimized configuration dictionary
+            Optimized configuration dictionary with hardware-specific settings
         """
         # Create a copy of the config to avoid modifying the original
         optimized_config = config.copy()
@@ -455,6 +481,7 @@ class HardwareManager:
         )
         self._monitoring_thread.start()
         
+        logger.info(f"Resource monitoring started with {interval}s interval")
         return True
     
     def stop_monitoring(self) -> bool:
@@ -466,16 +493,20 @@ class HardwareManager:
         bool
             True if monitoring stopped successfully, False otherwise
         """
+        if not self._monitoring_enabled:
+            return False
+            
         self._monitoring_enabled = False
         
         if self._monitoring_thread:
             self._monitoring_thread.join(timeout=2.0)
             
+        logger.info("Resource monitoring stopped")
         return True
     
     def _monitor_resources(self, interval: float) -> None:
         """
-        Monitor system resource usage.
+        Monitor system resource usage and log warnings when thresholds are exceeded.
         
         Parameters
         ----------
@@ -488,25 +519,10 @@ class HardwareManager:
                 memory = psutil.virtual_memory()
                 
                 # Get GPU utilization if available
-                gpu_util = None
-                if self.hardware_info["gpu"]["available"]:
-                    try:
-                        import torch
-                        gpu_util = {
-                            "memory_percent": torch.cuda.memory_allocated() / torch.cuda.get_device_properties(0).total_memory * 100
-                        }
-                    except ImportError:
-                        pass
+                gpu_util = self._get_gpu_utilization()
                 
                 # Log resource usage if exceeding thresholds
-                if cpu_percent > 90:
-                    logger.warning(f"High CPU usage: {cpu_percent}%")
-                    
-                if memory.percent > self.optimization_profile["memory"]["unload_threshold"]:
-                    logger.warning(f"High memory usage: {memory.percent}%")
-                    
-                if gpu_util and gpu_util["memory_percent"] > 90:
-                    logger.warning(f"High GPU memory usage: {gpu_util['memory_percent']:.1f}%")
+                self._check_resource_thresholds(cpu_percent, memory, gpu_util)
                     
                 # Sleep for specified interval
                 time.sleep(interval)
@@ -514,3 +530,66 @@ class HardwareManager:
             except Exception as e:
                 logger.error(f"Error monitoring resources: {e}")
                 time.sleep(interval)
+    
+    def _get_gpu_utilization(self) -> Optional[Dict[str, float]]:
+        """
+        Get GPU utilization metrics if GPU is available.
+        
+        Returns
+        -------
+        Optional[Dict[str, float]]
+            GPU utilization metrics or None if not available
+        """
+        if not self.hardware_info["gpu"]["available"]:
+            return None
+            
+        try:
+            import torch
+            
+            if torch.cuda.is_available():
+                # Calculate memory usage percentage
+                allocated = torch.cuda.memory_allocated()
+                total = torch.cuda.get_device_properties(0).total_memory
+                memory_percent = allocated / total * 100
+                
+                return {
+                    "memory_allocated": allocated,
+                    "memory_total": total,
+                    "memory_percent": memory_percent
+                }
+        except ImportError:
+            pass
+        except Exception as e:
+            logger.error(f"Error getting GPU utilization: {e}")
+            
+        return None
+    
+    def _check_resource_thresholds(self, 
+                                  cpu_percent: float, 
+                                  memory: psutil._psplatform.svmem, 
+                                  gpu_util: Optional[Dict[str, float]]) -> None:
+        """
+        Check resource utilization against thresholds and log warnings when exceeded.
+        
+        Parameters
+        ----------
+        cpu_percent : float
+            CPU utilization percentage
+        memory : psutil._psplatform.svmem
+            Memory utilization information
+        gpu_util : Optional[Dict[str, float]]
+            GPU utilization information or None if not available
+        """
+        memory_threshold = self.optimization_profile["memory"]["unload_threshold"]
+        
+        if cpu_percent > 90:
+            logger.warning(f"High CPU usage: {cpu_percent:.1f}%")
+            
+        if memory.percent > memory_threshold:
+            logger.warning(f"High memory usage: {memory.percent:.1f}% " +
+                         f"(threshold: {memory_threshold}%) - " +
+                         f"available: {memory.available / (1024**3):.1f} GB")
+            
+        if gpu_util and gpu_util["memory_percent"] > 90:
+            logger.warning(f"High GPU memory usage: {gpu_util['memory_percent']:.1f}% - " +
+                         f"allocated: {gpu_util['memory_allocated'] / (1024**3):.1f} GB")
