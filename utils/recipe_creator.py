@@ -6,18 +6,36 @@ Speech-to-document recipe creation utility.
 This module provides a streamlined workflow for creating recipe documents
 from speech input, with specific optimizations for AMD Ryzen 9 5900X
 and NVIDIA RTX 3080 hardware.
+
+Examples
+--------
+>>> from utils.recipe_creator import RecipeCreator
+>>> from maggie import EventBus
+>>> event_bus = EventBus()
+>>> config = {"output_dir": "recipes", "template_path": "templates/recipe_template.docx"}
+>>> recipe_creator = RecipeCreator(event_bus, config)
+>>> recipe_creator.initialize()
+>>> recipe_creator.start()
+>>> # Later, to stop
+>>> recipe_creator.stop()
 """
 
+# Standard library imports
 import os
 import time
 import threading
 from enum import Enum, auto
 from dataclasses import dataclass, field
 from typing import Dict, Any, Optional, List, Tuple
+
+# Third-party imports
 import docx
 from loguru import logger
 
+# Local imports
 from utils.utility_base import UtilityBase
+
+__all__ = ['RecipeState', 'RecipeData', 'RecipeCreator']
 
 class RecipeState(Enum):
     """
@@ -25,6 +43,23 @@ class RecipeState(Enum):
     
     Defines the possible states in the recipe creation workflow,
     supporting a structured step-by-step process.
+    
+    Attributes
+    ----------
+    INITIAL : enum
+        Initial state before starting
+    NAME_INPUT : enum
+        Getting recipe name from user
+    DESCRIPTION : enum
+        Getting recipe description from user
+    PROCESSING : enum
+        Processing with LLM
+    CREATING : enum
+        Creating document
+    COMPLETED : enum
+        Process completed
+    CANCELLED : enum
+        Process cancelled
     """
     INITIAL = auto()      # Initial state
     NAME_INPUT = auto()   # Getting recipe name
@@ -82,6 +117,12 @@ class RecipeCreator(UtilityBase):
         Directory to save recipe documents
     template_path : str
         Path to the recipe document template
+    speech_processor : Any
+        Reference to the speech processor component
+    llm_processor : Any
+        Reference to the LLM processor component
+    _workflow_thread : Optional[threading.Thread]
+        Thread for running the recipe creation workflow
     """
     
     def __init__(self, event_bus, config: Dict[str, Any]):
@@ -111,12 +152,26 @@ class RecipeCreator(UtilityBase):
         self.llm_processor = None
         
         # Ensure directories exist
-        os.makedirs(self.output_dir, exist_ok=True)
-        os.makedirs(os.path.dirname(self.template_path), exist_ok=True)
+        self._ensure_directories()
         
-        # Create template if it doesn't exist
-        if not os.path.exists(self.template_path):
-            self._create_template()
+    def _ensure_directories(self) -> None:
+        """
+        Ensure required directories exist.
+        
+        Creates output directory and template directory if they don't exist.
+        Also creates template if it doesn't exist.
+        """
+        try:
+            os.makedirs(self.output_dir, exist_ok=True)
+            os.makedirs(os.path.dirname(self.template_path), exist_ok=True)
+            
+            # Create template if it doesn't exist
+            if not os.path.exists(self.template_path):
+                self._create_template()
+        except IOError as io_error:
+            logger.error(f"IO error creating directories: {io_error}")
+        except Exception as general_error:
+            logger.error(f"Error creating directories: {general_error}")
     
     def get_trigger(self) -> str:
         """
@@ -140,24 +195,42 @@ class RecipeCreator(UtilityBase):
         bool
             True if initialization successful, False otherwise
         """
+        if self._initialized:
+            return True
+            
         try:
             # Find the main app with speech and LLM processors
-            for component in self.event_bus.subscribers.get("state_changed", []):
-                if hasattr(component, "speech_processor") and hasattr(component, "llm_processor"):
-                    self.speech_processor = component.speech_processor
-                    self.llm_processor = component.llm_processor
-                    break
+            success = self._acquire_component_references()
             
             # Check if components were found
-            if not self.speech_processor or not self.llm_processor:
+            if not success:
                 logger.error("Failed to acquire speech or LLM processor references")
                 return False
             
+            self._initialized = True
+            logger.info("Recipe Creator initialized successfully")
             return True
             
         except Exception as e:
             logger.error(f"Error initializing Recipe Creator: {e}")
             return False
+    
+    def _acquire_component_references(self) -> bool:
+        """
+        Acquire references to required components.
+        
+        Returns
+        -------
+        bool
+            True if all required component references were acquired
+        """
+        for component in self.event_bus.subscribers.get("state_changed", []):
+            if hasattr(component, "speech_processor") and hasattr(component, "llm_processor"):
+                self.speech_processor = component.speech_processor
+                self.llm_processor = component.llm_processor
+                return True
+                
+        return False
     
     def start(self) -> bool:
         """
@@ -284,69 +357,15 @@ class RecipeCreator(UtilityBase):
             self.speech_processor.speak("Starting recipe creator. Let's create a new recipe.")
             
             # State machine
-            while self.running and self.state != RecipeState.COMPLETED and self.state != RecipeState.CANCELLED:
+            while self.running and self.state not in [RecipeState.COMPLETED, RecipeState.CANCELLED]:
                 # Process current state
-                if self.state == RecipeState.INITIAL:
-                    # Start getting the recipe name
-                    self.state = RecipeState.NAME_INPUT
-                    
-                elif self.state == RecipeState.NAME_INPUT:
-                    # Get recipe name
-                    if not self.recipe_data.name:
-                        self.speech_processor.speak("What would you like to name this recipe?")
-                        success, name = self.speech_processor.recognize_speech(timeout=10.0)
-                        
-                        if success and name:
-                            self.recipe_data.name = name
-                            self.speech_processor.speak(f"I heard {name}. Is that correct?")
-                        else:
-                            self.speech_processor.speak("I didn't catch that. Let's try again.")
-                    
-                    # Name confirmation is handled in process_command()
-                    time.sleep(0.5)
-                    
-                elif self.state == RecipeState.DESCRIPTION:
-                    # Get recipe description
-                    self.speech_processor.speak("Please describe the recipe, including ingredients and steps.")
-                    success, description = self.speech_processor.recognize_speech(timeout=30.0)
-                    
-                    if success and description:
-                        self.recipe_data.description = description
-                        self.speech_processor.speak("Got it. Processing your recipe.")
-                        self.state = RecipeState.PROCESSING
-                    else:
-                        self.speech_processor.speak("I didn't catch that. Let's try again.")
-                    
-                elif self.state == RecipeState.PROCESSING:
-                    # Process with LLM
-                    success = self._process_with_llm()
-                    
-                    if success:
-                        self.state = RecipeState.CREATING
-                    else:
-                        self.speech_processor.speak("There was an error processing your recipe. Let's try describing it again.")
-                        self.state = RecipeState.DESCRIPTION
-                    
-                elif self.state == RecipeState.CREATING:
-                    # Create document
-                    success = self._create_document()
-                    
-                    if success:
-                        self.speech_processor.speak(f"Recipe '{self.recipe_data.name}' has been created and saved.")
-                        self.state = RecipeState.COMPLETED
-                    else:
-                        self.speech_processor.speak("There was an error creating the document.")
-                        self.state = RecipeState.CANCELLED
+                self._process_current_state()
                 
                 # Brief pause to prevent tight loop
                 time.sleep(0.1)
             
             # Finalize
-            if self.state == RecipeState.CANCELLED:
-                self.speech_processor.speak("Recipe creation cancelled.")
-                
-            # Publish completion event
-            self.event_bus.publish("utility_completed", "recipe_creator")
+            self._finalize_workflow()
             
         except Exception as e:
             logger.error(f"Error in recipe workflow: {e}")
@@ -355,6 +374,90 @@ class RecipeCreator(UtilityBase):
             
         finally:
             self.running = False
+    
+    def _process_current_state(self) -> None:
+        """
+        Process the current workflow state.
+        
+        Handles the appropriate action based on the current state
+        in the recipe creation workflow.
+        """
+        if self.state == RecipeState.INITIAL:
+            # Start getting the recipe name
+            self.state = RecipeState.NAME_INPUT
+            
+        elif self.state == RecipeState.NAME_INPUT:
+            # Get recipe name
+            self._process_name_input()
+            
+        elif self.state == RecipeState.DESCRIPTION:
+            # Get recipe description
+            self._process_description_input()
+            
+        elif self.state == RecipeState.PROCESSING:
+            # Process with LLM
+            success = self._process_with_llm()
+            
+            if success:
+                self.state = RecipeState.CREATING
+            else:
+                self.speech_processor.speak("There was an error processing your recipe. Let's try describing it again.")
+                self.state = RecipeState.DESCRIPTION
+            
+        elif self.state == RecipeState.CREATING:
+            # Create document
+            success = self._create_document()
+            
+            if success:
+                self.speech_processor.speak(f"Recipe '{self.recipe_data.name}' has been created and saved.")
+                self.state = RecipeState.COMPLETED
+            else:
+                self.speech_processor.speak("There was an error creating the document.")
+                self.state = RecipeState.CANCELLED
+    
+    def _process_name_input(self) -> None:
+        """
+        Process the name input state.
+        
+        Gets the recipe name from the user and asks for confirmation.
+        """
+        if not self.recipe_data.name:
+            self.speech_processor.speak("What would you like to name this recipe?")
+            success, name = self.speech_processor.recognize_speech(timeout=10.0)
+            
+            if success and name:
+                self.recipe_data.name = name
+                self.speech_processor.speak(f"I heard {name}. Is that correct?")
+            else:
+                self.speech_processor.speak("I didn't catch that. Let's try again.")
+    
+    def _process_description_input(self) -> None:
+        """
+        Process the description input state.
+        
+        Gets the recipe description from the user.
+        """
+        self.speech_processor.speak("Please describe the recipe, including ingredients and steps.")
+        success, description = self.speech_processor.recognize_speech(timeout=30.0)
+        
+        if success and description:
+            self.recipe_data.description = description
+            self.speech_processor.speak("Got it. Processing your recipe.")
+            self.state = RecipeState.PROCESSING
+        else:
+            self.speech_processor.speak("I didn't catch that. Let's try again.")
+    
+    def _finalize_workflow(self) -> None:
+        """
+        Finalize the recipe creation workflow.
+        
+        Handles final messages and events when the workflow completes.
+        """
+        if self.state == RecipeState.CANCELLED:
+            self.speech_processor.speak("Recipe creation cancelled.")
+            
+        # Publish completion event
+        self.event_bus.publish("utility_completed", "recipe_creator")
     
     def _process_with_llm(self) -> bool:
         """
@@ -370,26 +473,7 @@ class RecipeCreator(UtilityBase):
         """
         try:
             # Create prompt for LLM
-            prompt = f"""
-            Parse the following recipe description into structured format:
-            
-            Recipe: {self.recipe_data.description}
-            
-            Extract and format as follows:
-            
-            INGREDIENTS:
-            - [ingredient with quantity]
-            - [ingredient with quantity]
-            ...
-            
-            STEPS:
-            1. [step 1]
-            2. [step 2]
-            ...
-            
-            NOTES:
-            [any additional notes or tips]
-            """
+            prompt = self._create_llm_prompt()
             
             # Process with LLM
             response = self.llm_processor.generate_text(prompt, max_tokens=1024)
@@ -399,41 +483,82 @@ class RecipeCreator(UtilityBase):
                 return False
                 
             # Parse response
-            current_section = None
-            ingredients = []
-            steps = []
-            notes = []
+            self._parse_llm_response(response)
             
-            for line in response.strip().split('\n'):
-                line = line.strip()
-                
-                if not line:
-                    continue
-                    
-                if line == "INGREDIENTS:":
-                    current_section = "ingredients"
-                elif line == "STEPS:":
-                    current_section = "steps"
-                elif line == "NOTES:":
-                    current_section = "notes"
-                elif current_section == "ingredients" and line.startswith("-"):
-                    ingredients.append(line[1:].strip())
-                elif current_section == "steps" and (line[0].isdigit() and "." in line[:3]):
-                    steps.append(line[line.find(".")+1:].strip())
-                elif current_section == "notes":
-                    notes.append(line)
-            
-            # Update recipe data
-            self.recipe_data.ingredients = ingredients
-            self.recipe_data.steps = steps
-            self.recipe_data.notes = "\n".join(notes)
-            
-            logger.info(f"Recipe processed: {len(ingredients)} ingredients, {len(steps)} steps")
+            logger.info(f"Recipe processed: {len(self.recipe_data.ingredients)} ingredients, {len(self.recipe_data.steps)} steps")
             return True
             
         except Exception as e:
             logger.error(f"Error processing recipe with LLM: {e}")
             return False
+    
+    def _create_llm_prompt(self) -> str:
+        """
+        Create prompt for the language model.
+        
+        Returns
+        -------
+        str
+            Formatted prompt for LLM to process recipe description
+        """
+        return f"""
+        Parse the following recipe description into structured format:
+        
+        Recipe: {self.recipe_data.description}
+        
+        Extract and format as follows:
+        
+        INGREDIENTS:
+        - [ingredient with quantity]
+        - [ingredient with quantity]
+        ...
+        
+        STEPS:
+        1. [step 1]
+        2. [step 2]
+        ...
+        
+        NOTES:
+        [any additional notes or tips]
+        """
+    
+    def _parse_llm_response(self, response: str) -> None:
+        """
+        Parse the LLM response into structured recipe data.
+        
+        Parameters
+        ----------
+        response : str
+            Text response from LLM
+        """
+        current_section = None
+        ingredients = []
+        steps = []
+        notes = []
+        
+        for line in response.strip().split('\n'):
+            line = line.strip()
+            
+            if not line:
+                continue
+                
+            if line == "INGREDIENTS:":
+                current_section = "ingredients"
+            elif line == "STEPS:":
+                current_section = "steps"
+            elif line == "NOTES:":
+                current_section = "notes"
+            elif current_section == "ingredients" and line.startswith("-"):
+                ingredients.append(line[1:].strip())
+            elif current_section == "steps" and (line[0].isdigit() and "." in line[:3]):
+                steps.append(line[line.find(".")+1:].strip())
+            elif current_section == "notes":
+                notes.append(line)
+        
+        # Update recipe data
+        self.recipe_data.ingredients = ingredients
+        self.recipe_data.steps = steps
+        self.recipe_data.notes = "\n".join(notes)
     
     def _create_document(self) -> bool:
         """
@@ -452,40 +577,14 @@ class RecipeCreator(UtilityBase):
             if os.path.exists(self.template_path):
                 doc = docx.Document(self.template_path)
             else:
-                doc = docx.Document()
                 self._create_template()
                 doc = docx.Document(self.template_path)
             
-            # Clear template content
-            for paragraph in doc.paragraphs:
-                if paragraph.text and paragraph.text.strip():
-                    paragraph.text = ""
+            # Clear template content and add recipe content
+            self._populate_document(doc)
             
-            # Add recipe title
-            doc.add_heading(self.recipe_data.name, level=1)
-            
-            # Add ingredients section
-            doc.add_heading("Ingredients", level=2)
-            for ingredient in self.recipe_data.ingredients:
-                doc.add_paragraph(f"• {ingredient}", style='ListBullet')
-            
-            # Add steps section
-            doc.add_heading("Instructions", level=2)
-            for i, step in enumerate(self.recipe_data.steps, 1):
-                doc.add_paragraph(f"{i}. {step}", style='ListNumber')
-            
-            # Add notes section if available
-            if self.recipe_data.notes:
-                doc.add_heading("Notes", level=2)
-                doc.add_paragraph(self.recipe_data.notes)
-            
-            # Create safe filename
-            safe_name = "".join(c if c.isalnum() or c in " -_" else "_" for c in self.recipe_data.name)
-            filename = f"{safe_name}_{int(time.time())}.docx"
-            filepath = os.path.join(self.output_dir, filename)
-            
-            # Save document
-            doc.save(filepath)
+            # Create safe filename and save document
+            filepath = self._save_document(doc)
             
             logger.info(f"Recipe document saved to {filepath}")
             return True
@@ -493,6 +592,61 @@ class RecipeCreator(UtilityBase):
         except Exception as e:
             logger.error(f"Error creating recipe document: {e}")
             return False
+    
+    def _populate_document(self, doc: docx.Document) -> None:
+        """
+        Populate the document with recipe content.
+        
+        Parameters
+        ----------
+        doc : docx.Document
+            Document to populate
+        """
+        # Clear template content
+        for paragraph in doc.paragraphs:
+            if paragraph.text and paragraph.text.strip():
+                paragraph.text = ""
+        
+        # Add recipe title
+        doc.add_heading(self.recipe_data.name, level=1)
+        
+        # Add ingredients section
+        doc.add_heading("Ingredients", level=2)
+        for ingredient in self.recipe_data.ingredients:
+            doc.add_paragraph(f"• {ingredient}", style='ListBullet')
+        
+        # Add steps section
+        doc.add_heading("Instructions", level=2)
+        for i, step in enumerate(self.recipe_data.steps, 1):
+            doc.add_paragraph(f"{i}. {step}", style='ListNumber')
+        
+        # Add notes section if available
+        if self.recipe_data.notes:
+            doc.add_heading("Notes", level=2)
+            doc.add_paragraph(self.recipe_data.notes)
+    
+    def _save_document(self, doc: docx.Document) -> str:
+        """
+        Save the document to a file.
+        
+        Parameters
+        ----------
+        doc : docx.Document
+            Document to save
+            
+        Returns
+        -------
+        str
+            Path to the saved file
+        """
+        # Create safe filename
+        safe_name = "".join(c if c.isalnum() or c in " -_" else "_" for c in self.recipe_data.name)
+        filename = f"{safe_name}_{int(time.time())}.docx"
+        filepath = os.path.join(self.output_dir, filename)
+        
+        # Save document
+        doc.save(filepath)
+        return filepath
     
     def _create_template(self) -> bool:
         """
