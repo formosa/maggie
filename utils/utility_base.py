@@ -2,7 +2,11 @@
 Maggie AI Assistant - Utility Base Class
 ======================================
 Abstract base class for all Maggie AI Assistant utility modules.
-Provides a standard interface for utility modules.
+Provides a standard interface for utility modules to integrate with the core system.
+
+This module defines the common interface and baseline functionality 
+that all utility modules must implement to work properly with the
+Maggie AI Assistant architecture.
 """
 
 from abc import ABC, abstractmethod
@@ -14,12 +18,27 @@ class UtilityBase(ABC):
     """
     Abstract base class for all utility modules.
     
+    Defines the standard interface that all utility modules must implement
+    to properly integrate with the Maggie AI core system. Handles lifecycle
+    management, state tracking, and provides common utility functionality.
+    
     Parameters
+    ----------
+    event_bus : EventBus
+        Reference to the central event bus for event-driven communication
+    config : Dict[str, Any]
+        Configuration parameters for the utility
+        
+    Attributes
     ----------
     event_bus : EventBus
         Reference to the central event bus
     config : Dict[str, Any]
-        Configuration parameters for the utility
+        Configuration parameters
+    running : bool
+        Whether the utility is currently running
+    _initialized : bool
+        Whether the utility has been initialized
     """
     
     def __init__(self, event_bus, config: Dict[str, Any]):
@@ -38,9 +57,24 @@ class UtilityBase(ABC):
         self.running = False
         self._initialized = False
         
+    @property
+    def initialized(self) -> bool:
+        """
+        Check if the utility is initialized.
+        
+        Returns
+        -------
+        bool
+            True if the utility is initialized, False otherwise
+        """
+        return self._initialized
+        
     def initialize(self) -> bool:
         """
         Initialize the utility module.
+        
+        Perform one-time initialization tasks that should happen before
+        the utility is started for the first time.
         
         Returns
         -------
@@ -56,9 +90,9 @@ class UtilityBase(ABC):
             return True
             
         try:
-            self._initialize_resources()
-            self._initialized = True
-            return True
+            success = self._initialize_resources()
+            self._initialized = success
+            return success
         except Exception as e:
             logger.error(f"Error initializing {self.__class__.__name__}: {e}")
             return False
@@ -75,13 +109,34 @@ class UtilityBase(ABC):
         Notes
         -----
         Override this method in subclasses to implement custom initialization.
+        Default implementation returns True without doing anything.
         """
         return True
+        
+    @abstractmethod
+    def get_trigger(self) -> str:
+        """
+        Get the trigger phrase for this utility.
+        
+        Returns
+        -------
+        str
+            Trigger phrase that activates this utility
+            
+        Notes
+        -----
+        This is the phrase that the user can say to activate this utility.
+        For example, "new recipe" for a recipe creator utility.
+        """
+        pass
         
     @abstractmethod
     def start(self) -> bool:
         """
         Start the utility module and return success status.
+        
+        Begins the primary functionality of the utility. This is called
+        when the utility is activated by a trigger phrase or direct request.
         
         Returns
         -------
@@ -95,6 +150,9 @@ class UtilityBase(ABC):
         """
         Stop the utility module and return success status.
         
+        Stops the utility's operations and performs any necessary cleanup.
+        This is called when the utility needs to be deactivated.
+        
         Returns
         -------
         bool
@@ -107,6 +165,8 @@ class UtilityBase(ABC):
         """
         Process a command directed to this utility.
         
+        Handles user input that is directed to this utility while it's active.
+        
         Parameters
         ----------
         command : str
@@ -114,7 +174,7 @@ class UtilityBase(ABC):
             
         Returns
         -------
-bool
+        bool
             True if command was processed, False if not applicable
         """
         pass
@@ -122,6 +182,8 @@ bool
     def pause(self) -> bool:
         """
         Pause the utility if it supports pausing.
+        
+        Temporarily suspends the utility's operations without fully stopping.
         
         Returns
         -------
@@ -138,6 +200,8 @@ bool
         """
         Resume the utility if it was paused.
         
+        Resumes operations after a pause.
+        
         Returns
         -------
         bool
@@ -153,6 +217,8 @@ bool
         """
         Get the current status of the utility.
         
+        Provides detailed status information about the utility's current state.
+        
         Returns
         -------
         Dict[str, Any]
@@ -164,5 +230,6 @@ bool
         """
         return {
             "running": self.running,
-            "initialized": self._initialized
+            "initialized": self._initialized,
+            "name": self.__class__.__name__
         }
