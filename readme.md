@@ -13,7 +13,7 @@
     - [Recipe Creator Utility](#6-recipe-creation-utility-with-speech-to-document-processing)
 - [Installation Guide](#installation-guide)
   - [System Requirements](#system-requirements)
-  - [Installation Process](#detailed-installation-process)
+  - [Installation Process](#installation-process)
   - [Post-Installation Configuration](#post-installation-configuration)
 - [Application Functionality](#application-functionality)
   - [Core System Architecture](#core-system-architecture)
@@ -28,7 +28,7 @@
 - [Command Reference](#command-reference)
   - [Voice Commands](#voice-command-reference)
   - [GUI Controls](#gui-control-reference)
-  - [Control Combinations](#gesture-and-control-combinations)
+  - [Control Combinations](#control-combinations)
 - [User Reference Materials](#user-reference-materials)
   - [Optimal Environment Setup](#optimal-environment-setup)
   - [Troubleshooting](#troubleshooting-common-issues)
@@ -48,7 +48,7 @@
 
 Maggie AI Assistant is an advanced, voice-activated artificial intelligence framework implementing a Finite State Machine (FSM) architecture with event-driven state transitions and modular utility capabilities. The system is specifically optimized for high-performance computing environments, particularly those utilizing AMD Ryzen 9 5900X CPUs and NVIDIA RTX 3080 GPUs, enabling efficient local language model inference, speech processing, and interactive voice response.
 
-The project emphasizes local processing with zero cloud dependencies, ensuring complete privacy and offline functionality while leveraging consumer hardware to deliver sophisticated AI capabilities. By utilizing advanced software optimization techniques including mixed-precision computation, efficient threading, and dynamic resource management, Maggie achieves performance levels that were previously only possible with cloud-based systems.
+The project emphasizes local processing with minimal cloud dependencies, ensuring privacy and offline functionality while leveraging consumer hardware to deliver sophisticated AI capabilities. By utilizing advanced software optimization techniques including mixed-precision computation, efficient threading, and dynamic resource management, Maggie achieves performance levels that were previously only possible with cloud-based systems.
 
 ### Core Technical Architecture
 
@@ -205,97 +205,104 @@ This utility demonstrates how the system combines speech recognition, natural la
 * **Python:** Version 3.10.x specifically (3.11+ is not compatible)
 * **CUDA:** CUDA 11.8 and cuDNN (for optimal performance)
 
-### Detailed Installation Process
+### Installation Process
 
-1. **Download the Repository**
-   ```bash
-   git clone https://github.com/your-org/maggie.git
-   cd maggie
-   ```
+#### Step 1: Install Required Software
 
-2. **Run the Installation Script**
-   ```bash
-   python install.py
-   ```
+1. **Python 3.10.x**
+   * Download from [Python.org](https://www.python.org/downloads/release/python-31011/)
+   * Windows: Use the installer and select "Add Python to PATH"
+   * Ubuntu: `sudo apt update && sudo apt install python3.10 python3.10-venv python3.10-dev`
 
-3. **Detailed Setup Process Steps**
-   
-   The installation script performs the following operations:
-   
-   * **Environment Verification**:
-     * Checks Python version (must be exactly 3.10.x)
-     * Verifies operating system compatibility
-     * Detects hardware configuration (optimizes for Ryzen 9 5900X and RTX 3080)
-     * Checks for administrator/root privileges
-   
-   * **Directory Structure Creation**:
-     * Creates the following directories if they don't exist:
-       * `logs/` - For application logs
-       * `models/` - For ML models
-       * `models/tts/` - For text-to-speech models
-       * `recipes/` - For recipe output
-       * `templates/` - For document templates
-       * `cache/` - For performance optimization caches
-   
-   * **Virtual Environment Setup**:
-     * Creates a Python virtual environment (`venv/`)
-     * Upgrades pip, setuptools, and wheel to latest versions
-   
-   * **Dependency Installation**:
-     * Installs PyTorch 2.0.1 with CUDA 11.8 support (optimized for RTX 3080)
-     * Installs core dependencies:
-       * pvporcupine 2.2.0 (wake word detection)
-       * SpeechRecognition 3.10.0
-       * faster-whisper 0.9.0 (speech recognition)
-       * piper-tts 1.2.0 (text-to-speech)
-       * ctransformers 0.2.27 (LLM inference)
-       * PyQt6 6.5.0 (GUI framework)
-     * Installs GPU-specific dependencies for hardware acceleration
-   
-   * **Model Download** (optional but recommended):
-     * Downloads Mistral-7B-Instruct-v0.3-GPTQ-4bit model (optimized for 10GB VRAM)
-     * Downloads Piper TTS voice model (en_US-kathleen-medium)
-     * Uses Git LFS for efficient model handling
-   
-   * **Configuration Setup**:
-     * Creates `config.yaml` from template
-     * Optimizes configuration for detected hardware:
-       * Sets optimal thread count for Ryzen 9 5900X (8 worker threads)
-       * Configures GPU layers for RTX 3080 (32 layers)
-       * Sets memory utilization parameters for 32GB systems
-     * Prompts for Picovoice access key (required for wake word detection)
-   
-   * **System Verification**:
-     * Verifies models are correctly downloaded
-     * Checks GPU acceleration is properly configured
-     * Tests audio system functionality
-     * Validates all required components are working
-   
-   * **Template Creation**:
-     * Creates recipe document template
-     * Sets up required application resources
+2. **Visual C++ Build Tools** (Windows only)
+   * Download from [Microsoft Visual C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/)
+   * Select "Desktop development with C++" workload
 
-4. **Post-Installation Configuration**
+3. **Git**
+   * Download from [Git-SCM](https://git-scm.com/download/win) for Windows
+   * Ubuntu: `sudo apt install git git-lfs`
 
-   After installation, you must complete these steps:
-   
-   * **Obtain Picovoice Access Key**:
-     1. Register at [https://console.picovoice.ai/](https://console.picovoice.ai/)
-     2. Create a free access key
-     3. Edit `config.yaml` and add your key in the `wake_word.porcupine_access_key` field
-   
-   * **Verify Installation**:
-     ```bash
-     # Activate virtual environment
-     # On Windows:
-     .\venv\Scripts\activate
-     
-     # On Linux:
-     source venv/bin/activate
-     
-     # Verify installation
-     python main.py --verify
-     ```
+4. **CUDA Toolkit 11.8**
+   * Download from [NVIDIA CUDA Toolkit Archive](https://developer.nvidia.com/cuda-11-8-0-download-archive)
+   * Follow the installation instructions for your operating system
+
+#### Step 2: Clone the Repository
+
+```bash
+git clone https://github.com/your-org/maggie.git
+cd maggie
+```
+
+#### Step 3: Run the Installation Script
+
+```bash
+python install.py
+```
+
+The installation script performs the following operations:
+
+1. **Environment Verification**
+   * Checks Python version (must be exactly 3.10.x)
+   * Verifies operating system compatibility
+   * Detects hardware configuration (optimizes for Ryzen 9 5900X and RTX 3080)
+   * Checks for administrator/root privileges
+
+2. **Directory Structure Creation**
+   * Creates required directories for logs, models, data, etc.
+
+3. **Virtual Environment Setup**
+   * Creates a Python virtual environment
+   * Upgrades pip, setuptools, and wheel
+
+4. **Dependency Installation**
+   * Installs PyTorch 2.0.1 with CUDA 11.8 support
+   * Installs speech processing libraries:
+     * pvporcupine 2.2.0 (wake word detection)
+     * faster-whisper 0.9.0 (speech recognition)
+     * piper-tts 1.2.0 (text-to-speech)
+   * Installs language model components:
+     * ctransformers 0.2.27
+     * llama-cpp-python 0.2.11
+   * Installs GUI and utility libraries:
+     * PyQt6 6.5.0
+     * python-docx 0.8.11
+
+5. **Model Download**
+   * Downloads Mistral-7B-Instruct-v0.3-GPTQ-4bit model
+   * Downloads Piper TTS voice model (en_US-kathleen-medium)
+
+6. **Configuration Setup**
+   * Creates config.yaml based on detected hardware
+   * Optimizes settings for your specific system
+
+### Post-Installation Configuration
+
+#### Step 1: Obtain Picovoice Access Key
+
+1. Register at [Picovoice Console](https://console.picovoice.ai/)
+2. Create a free access key
+3. Edit `config.yaml` and add your key in the `wake_word.porcupine_access_key` field
+
+#### Step 2: Verify Installation
+
+```bash
+# Activate virtual environment
+# On Windows:
+.\venv\Scripts\activate
+
+# On Linux:
+source venv/bin/activate
+
+# Verify installation
+python main.py --verify
+```
+
+#### Step 3: Start Maggie
+
+```bash
+# With virtual environment activated:
+python main.py
+```
 
 ## Application Functionality
 
@@ -524,22 +531,6 @@ Maggie implements a sophisticated Finite State Machine (FSM) architecture with t
 | "No" or "Wrong" | During name confirmation | Reject the recognized name | Audio: "Let's try again. What would you like to name this recipe?" | - Resets name field<br>- Restarts name collection step<br>- Improves recognition parameters |
 | "[Recipe description]" | When prompted for recipe details | Provide complete recipe ingredients and steps | Audio: "Got it. Processing your recipe." | - Extended listening mode (30 seconds)<br>- Processes with LLM for structured extraction<br>- Creates formatted document |
 
-#### Advanced Command Parameters
-
-Voice commands support additional modifiers and parameters for finer control:
-
-* **Wake Word Variants**:
-  * "Hey Maggie", "OK Maggie", "Maggie" (all recognized with equal sensitivity)
-  * Configurable alternatives via custom keyword model
-
-* **Sleep Command Options**:
-  * "Sleep now" - Immediate sleep without confirmation
-  * "Go to sleep for [time]" - Temporary sleep with auto-wake (e.g., "Go to sleep for 30 minutes")
-
-* **Recipe Command Modifiers**:
-  * "New [cuisine] recipe" - Pre-filters for specific cuisine (e.g., "New Italian recipe")
-  * "New quick recipe" - Optimizes for shorter cooking time extraction
-
 ### GUI Control Reference
 
 | Control | Location | Function | Keyboard Shortcut | Technical Implementation |
@@ -552,7 +543,7 @@ Voice commands support additional modifiers and parameters for finer control:
 | Event Log Tab | Left panel tabbed view | Shows system events and transitions | Alt+2 | - Detailed system event tracking<br>- Includes state transitions<br>- Timestamps for performance analysis |
 | Error Log Tab | Left panel tabbed view | Shows error messages and warnings | Alt+3 | - Comprehensive error reporting<br>- Integration with Loguru<br>- Auto-switches on error detection |
 
-### Gesture and Control Combinations
+### Control Combinations
 
 The system also supports combined control methods:
 
@@ -564,7 +555,7 @@ The system also supports combined control methods:
   * Triple Escape key press - Force shutdown if unresponsive
   * Ctrl+Alt+R - Reset to IDLE state in case of errors
 
-### Command Line Arguments
+#### Command Line Arguments
 
 | Argument | Description | Example |
 |----------|-------------|---------|
@@ -610,7 +601,7 @@ For best performance with your Ryzen 9 5900X and RTX 3080:
     * Check signal levels during speech (should peak at -12dB to -6dB)
   * **Solution 3**: Verify Picovoice key validity
     * Keys expire after 30 days in free tier
-    * Check console.picovoice.ai for key status
+    * Check [console.picovoice.ai](https://console.picovoice.ai) for key status
     * Update key in config.yaml if expired
 
 * **Issue**: False wake word detections
@@ -1074,5 +1065,17 @@ Maggie uses the Loguru library for comprehensive logging:
    * Files rotate at 10MB with 1-week retention
    * Console logs show INFO level by default
    * File logs capture DEBUG level for detailed diagnostics
+
+4. **Debugging Tools**:
+   * Use `python main.py --debug` to enable detailed logging
+   * Use `python main.py --verify` to check system configuration
+   * Check the Error Log tab in the GUI for issues
+   * Review log files in logs/ directory for persistent issues
+
+5. **Performance Profiling**:
+   * Monitor CPU usage with Task Manager or htop
+   * Check GPU memory usage with nvidia-smi
+   * Use timestamps in logs to identify bottlenecks
+   * Look for memory leaks with tools like memory_profiler
 
 By following these guidelines, you can create powerful extensions to Maggie that maintain the system's performance characteristics and integrate seamlessly with its architecture.
