@@ -2,17 +2,36 @@
 Maggie AI Assistant - Utility Base Class
 ======================================
 Abstract base class for all Maggie AI Assistant utility modules.
-Provides a standard interface for utility modules to integrate with the core system.
 
 This module defines the common interface and baseline functionality 
 that all utility modules must implement to work properly with the
 Maggie AI Assistant architecture.
+
+Examples
+--------
+>>> from utils.utility_base import UtilityBase
+>>> class MyUtility(UtilityBase):
+...     def get_trigger(self):
+...         return "my command"
+...     def start(self):
+...         print("Starting utility")
+...         return True
+...     def stop(self):
+...         print("Stopping utility")
+...         return True
+...     def process_command(self, command):
+...         print(f"Processing command: {command}")
+...         return True
 """
 
+# Standard library imports
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Optional, Union
+from typing import Dict, Any, Optional, Union, Callable
+
+# Third-party imports
 from loguru import logger
 
+__all__ = ['UtilityBase']
 
 class UtilityBase(ABC):
     """
@@ -24,14 +43,14 @@ class UtilityBase(ABC):
     
     Parameters
     ----------
-    event_bus : EventBus
+    event_bus : object
         Reference to the central event bus for event-driven communication
     config : Dict[str, Any]
         Configuration parameters for the utility
         
     Attributes
     ----------
-    event_bus : EventBus
+    event_bus : object
         Reference to the central event bus
     config : Dict[str, Any]
         Configuration parameters
@@ -47,7 +66,7 @@ class UtilityBase(ABC):
         
         Parameters
         ----------
-        event_bus : EventBus
+        event_bus : object
             Reference to the central event bus
         config : Dict[str, Any]
             Configuration parameters for the utility
