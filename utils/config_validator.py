@@ -5,12 +5,26 @@ Configuration validation utilities for Maggie AI Assistant.
 
 This module provides validation functionality for configuration files,
 ensuring that all required settings are present and have valid values.
+
+Examples
+--------
+>>> from utils.config_validator import ConfigValidator
+>>> validator = ConfigValidator("config.yaml")
+>>> valid = validator.validate()
+>>> if not valid:
+...     print("Configuration errors:", validator.errors)
+>>> is_valid, errors, warnings = validator.get_validation_result()
 """
 
+# Standard library imports
 import os
 import yaml
 from typing import Dict, Any, List, Tuple, Optional
+
+# Third-party imports
 from loguru import logger
+
+__all__ = ['ConfigValidator']
 
 class ConfigValidator:
     """
@@ -132,6 +146,8 @@ class ConfigValidator:
     def _validate_required_sections(self) -> None:
         """
         Validate that all required configuration sections are present.
+        
+        Adds errors to self.errors if required sections are missing.
         """
         required_sections = [
             "wake_word", "speech", "llm", "logging"
@@ -144,6 +160,9 @@ class ConfigValidator:
     def _validate_wake_word(self) -> None:
         """
         Validate wake word configuration.
+        
+        Checks that required wake word settings are present and valid.
+        Adds errors to self.errors for invalid settings.
         """
         if "wake_word" not in self.config:
             return
@@ -167,6 +186,9 @@ class ConfigValidator:
     def _validate_speech(self) -> None:
         """
         Validate speech configuration.
+        
+        Checks that speech settings like whisper model and TTS settings are valid.
+        Adds errors to self.errors for invalid settings.
         """
         if "speech" not in self.config:
             return
@@ -208,6 +230,9 @@ class ConfigValidator:
     def _validate_llm(self) -> None:
         """
         Validate LLM configuration.
+        
+        Checks that LLM settings like model path and type are valid.
+        Adds errors to self.errors for invalid settings.
         """
         if "llm" not in self.config:
             return
@@ -239,8 +264,22 @@ class ConfigValidator:
     def _validate_paths(self) -> None:
         """
         Validate that paths in the configuration exist or can be created.
+        
+        Checks paths for log directory and utility-specific directories.
+        Attempts to create missing directories.
         """
         # Check logging path
+        self._validate_logging_path()
+                    
+        # Check utility paths
+        self._validate_utility_paths()
+    
+    def _validate_logging_path(self) -> None:
+        """
+        Validate logging path configuration.
+        
+        Checks if logging path exists and tries to create it if missing.
+        """
         if "logging" in self.config and "path" in self.config["logging"]:
             log_path = self.config["logging"]["path"]
             if not os.path.exists(log_path):
@@ -249,69 +288,110 @@ class ConfigValidator:
                     logger.info(f"Created log directory: {log_path}")
                 except Exception as e:
                     self.warnings.append(f"Could not create log directory {log_path}: {e}")
-                    
-        # Check utility paths
-        if "utilities" in self.config:
-            utilities = self.config["utilities"]
+    
+    def _validate_utility_paths(self) -> None:
+        """
+        Validate utility-specific path configuration.
+        
+        Checks if utility directories exist and tries to create them if missing.
+        """
+        if "utilities" not in self.config:
+            return
             
-            for utility_name, utility_config in utilities.items():
-                # Check output directory
-                if "output_dir" in utility_config:
-                    output_dir = utility_config["output_dir"]
-                    if not os.path.exists(output_dir):
-                        try:
-                            os.makedirs(output_dir, exist_ok=True)
-                            logger.info(f"Created output directory for {utility_name}: {output_dir}")
-                        except Exception as e:
-                            self.warnings.append(f"Could not create output directory for {utility_name}: {e}")
-                            
-                # Check template path
-                if "template_path" in utility_config:
-                    template_path = utility_config["template_path"]
-                    template_dir = os.path.dirname(template_path)
-                    if not os.path.exists(template_dir):
-                        try:
-                            os.makedirs(template_dir, exist_ok=True)
-                            logger.info(f"Created template directory for {utility_name}: {template_dir}")
-                        except Exception as e:
-                            self.warnings.append(f"Could not create template directory for {utility_name}: {e}")
-                            
+        utilities = self.config["utilities"]
+        
+        for utility_name, utility_config in utilities.items():
+            # Check output directory
+            if "output_dir" in utility_config:
+                output_dir = utility_config["output_dir"]
+                if not os.path.exists(output_dir):
+                    try:
+                        os.makedirs(output_dir, exist_ok=True)
+                        logger.info(f"Created {utility_name} output directory: {output_dir}")
+                    except Exception as e:
+                        self.warnings.append(f"Could not create {utility_name} output directory: {e}")
+                        
+            # Check template path
+            if "template_path" in utility_config:
+                template_path = utility_config["template_path"]
+                template_dir = os.path.dirname(template_path)
+                if not os.path.exists(template_dir):
+                    try:
+                        os.makedirs(template_dir, exist_ok=True)
+                        logger.info(f"Created {utility_name} template directory: {template_dir}")
+                    except Exception as e:
+                        self.warnings.append(f"Could not create {utility_name} template directory: {e}")
+                        
     def _validate_system_settings(self) -> None:
         """
         Validate system settings.
+        
+        Checks threading, memory, and timeout settings.
+        Adds errors to self.errors for invalid settings.
         """
         # Check threading settings
-        if "threading" in self.config:
-            threading = self.config["threading"]
-            
-            if "max_workers" in threading:
-                max_workers = threading["max_workers"]
-                if not isinstance(max_workers, int):
-                    self.errors.append(f"threading.max_workers must be an integer, got {type(max_workers).__name__}")
-                elif max_workers < 1:
-                    self.errors.append(f"threading.max_workers must be at least 1, got {max_workers}")
+        self._validate_threading_settings()
                     
         # Check memory settings
-        if "memory" in self.config:
-            memory = self.config["memory"]
-            
-            if "max_percent" in memory:
-                max_percent = memory["max_percent"]
-                if not isinstance(max_percent, (int, float)):
-                    self.errors.append(f"memory.max_percent must be a number, got {type(max_percent).__name__}")
-                elif max_percent < 10 or max_percent > 95:
-                    self.errors.append(f"memory.max_percent should be between 10 and 95, got {max_percent}")
-                    
-            if "model_unload_threshold" in memory and "max_percent" in memory:
-                unload_threshold = memory["model_unload_threshold"]
-                max_percent = memory["max_percent"]
-                
-                if not isinstance(unload_threshold, (int, float)):
-                    self.errors.append(f"memory.model_unload_threshold must be a number, got {type(unload_threshold).__name__}")
-                elif unload_threshold <= max_percent:
-                    self.errors.append(f"memory.model_unload_threshold ({unload_threshold}) must be greater than memory.max_percent ({max_percent})")
+        self._validate_memory_settings()
                     
         # Check inactivity timeout
+        self._validate_timeout_settings()
+    
+    def _validate_threading_settings(self) -> None:
+        """
+        Validate threading configuration.
+        
+        Checks max_workers setting is valid.
+        """
+        if "threading" in self.config and "max_workers" in self.config["threading"]:
+            max_workers = self.config["threading"]["max_workers"]
+            if not isinstance(max_workers, int):
+                self.errors.append(f"threading.max_workers must be an integer, got {type(max_workers).__name__}")
+            elif max_workers < 1:
+                self.errors.append(f"threading.max_workers must be at least 1, got {max_workers}")
+                
+            try:
+                import os
+                cpu_count = os.cpu_count() or 4
+                if max_workers > cpu_count * 2:
+                    self.warnings.append(f"max_workers ({max_workers}) exceeds twice the number of CPU cores ({cpu_count})")
+            except ImportError:
+                pass
+    
+    def _validate_memory_settings(self) -> None:
+        """
+        Validate memory configuration.
+        
+        Checks max_percent and model_unload_threshold settings are valid.
+        """
+        if "memory" not in self.config:
+            return
+            
+        memory = self.config["memory"]
+        
+        if "max_percent" in memory:
+            max_percent = memory["max_percent"]
+            if not isinstance(max_percent, (int, float)):
+                self.errors.append(f"memory.max_percent must be a number, got {type(max_percent).__name__}")
+            elif max_percent < 10 or max_percent > 95:
+                self.errors.append(f"memory.max_percent should be between 10 and 95, got {max_percent}")
+                
+        if "model_unload_threshold" in memory and "max_percent" in memory:
+            unload_threshold = memory["model_unload_threshold"]
+            max_percent = memory["max_percent"]
+            
+            if not isinstance(unload_threshold, (int, float)):
+                self.errors.append(f"memory.model_unload_threshold must be a number, got {type(unload_threshold).__name__}")
+            elif unload_threshold <= max_percent:
+                self.errors.append(f"memory.model_unload_threshold ({unload_threshold}) must be greater than memory.max_percent ({max_percent})")
+    
+    def _validate_timeout_settings(self) -> None:
+        """
+        Validate timeout configuration.
+        
+        Checks inactivity_timeout setting is valid.
+        """
         if "inactivity_timeout" in self.config:
             timeout = self.config["inactivity_timeout"]
             if not isinstance(timeout, (int, float)):
