@@ -29,10 +29,13 @@ class PiperTTS:
     speech synthesis. It supports hardware acceleration through ONNX runtime
     when available, particularly optimized for RTX 3080 GPUs.
     
-    Attributes
+    Parameters
     ----------
     config : Dict[str, Any]
         Configuration dictionary for TTS settings
+        
+    Attributes
+    ----------
     voice_model : str
         Name of the voice model to use
     model_path : str
@@ -229,6 +232,7 @@ class PiperTTS:
             # Save to file cache
             cache_path = os.path.join(self.cache_dir, f"{cache_key}.npy")
             np.save(cache_path, audio_data)
+            
         except Exception as e:
             logger.warning(f"Failed to save audio to cache: {e}")
             
