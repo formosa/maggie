@@ -23,7 +23,8 @@ class RecipeState(Enum):
     """
     States for the recipe creation process.
     
-    Simplified state machine for the recipe creation workflow.
+    Defines the possible states in the recipe creation workflow,
+    supporting a structured step-by-step process.
     """
     INITIAL = auto()      # Initial state
     NAME_INPUT = auto()   # Getting recipe name
@@ -69,7 +70,18 @@ class RecipeCreator(UtilityBase):
     event_bus : EventBus
         Reference to the central event bus
     config : Dict[str, Any]
-        Configuration dictionary
+        Configuration dictionary with recipe creator settings
+        
+    Attributes
+    ----------
+    state : RecipeState
+        Current state in the recipe creation workflow
+    recipe_data : RecipeData
+        Current recipe data being processed
+    output_dir : str
+        Directory to save recipe documents
+    template_path : str
+        Path to the recipe document template
     """
     
     def __init__(self, event_bus, config: Dict[str, Any]):
@@ -81,7 +93,7 @@ class RecipeCreator(UtilityBase):
         event_bus : EventBus
             Reference to the central event bus
         config : Dict[str, Any]
-            Configuration dictionary
+            Configuration dictionary with recipe creator settings
         """
         super().__init__(event_bus, config)
         
@@ -121,7 +133,7 @@ class RecipeCreator(UtilityBase):
         """
         Initialize the Recipe Creator.
         
-        Acquires references to required components.
+        Acquires references to required components like speech processor and LLM.
         
         Returns
         -------
@@ -150,6 +162,8 @@ class RecipeCreator(UtilityBase):
     def start(self) -> bool:
         """
         Start the Recipe Creator workflow.
+        
+        Initiates the recipe creation workflow in a separate thread.
         
         Returns
         -------
@@ -191,6 +205,8 @@ class RecipeCreator(UtilityBase):
         """
         Stop the Recipe Creator.
         
+        Cancels the recipe creation process and cleans up resources.
+        
         Returns
         -------
         bool
@@ -218,6 +234,9 @@ class RecipeCreator(UtilityBase):
     def process_command(self, command: str) -> bool:
         """
         Process a command directed to this utility.
+        
+        Handles user commands during the recipe creation workflow,
+        particularly for confirmation and cancellation.
         
         Parameters
         ----------
@@ -257,7 +276,8 @@ class RecipeCreator(UtilityBase):
         """
         Main recipe creation workflow.
         
-        Manages the state machine for the recipe creation process.
+        Manages the state machine for the recipe creation process,
+        guiding the user through each step of creating a recipe.
         """
         try:
             # Welcome message
@@ -340,7 +360,8 @@ class RecipeCreator(UtilityBase):
         """
         Process recipe description with LLM.
         
-        Uses the language model to extract structured recipe information.
+        Uses the language model to extract structured recipe information
+        from the user's natural language description.
         
         Returns
         -------
@@ -418,7 +439,8 @@ class RecipeCreator(UtilityBase):
         """
         Create recipe document.
         
-        Generates a formatted document using python-docx.
+        Generates a formatted Microsoft Word document using python-docx
+        based on the processed recipe data.
         
         Returns
         -------
