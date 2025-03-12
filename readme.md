@@ -271,18 +271,198 @@ This utility demonstrates how the system combines speech recognition, natural la
      4. Click "Install" in the bottom right corner
      5. Wait for the installation to complete (this may take 10-30 minutes depending on your internet speed)
    * Verify installation:
-     1. Open Command Prompt or PowerShell
-     2. Run `where cl.exe` - it should return a path like "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\..."
-     3. If the command returns no results, you may need to restart your computer
+     1. Look in the Start menu for "Developer Command Prompt for VS 2022" or "x64 Native Tools Command Prompt for VS 2022"
+     2. Open this special command prompt (it sets up the necessary environment variables)
+     3. Run `cl` and press Enter
+     4. You should see output similar to:
+        ```
+        Microsoft (R) C/C++ Optimizing Compiler Version 19.xx.xxxxx for x64
+        Copyright (C) Microsoft Corporation. All rights reserved.
+
+        usage: cl [ option... ] filename... [ /link linkoption... ]
+        ```
+     5. Alternative verification method:
+        - Check if the directory exists: `C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC`
+        - Or newer path: `C:\Program Files\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC`
+        - If this directory exists with subfolders containing bin, lib, and include directories, the installation was successful
 
 3. **Git**
-   * Download from [Git-SCM](https://git-scm.com/download/win) for Windows
-   * Ubuntu: `sudo apt install git git-lfs`
+   * **Windows Installation:**
+     1. Download Git for Windows from [Git-SCM](https://git-scm.com/download/win)
+        - The download should start automatically for 64-bit Windows
+     2. Run the downloaded installer (Git-X.XX.X-64-bit.exe)
+     3. Installation options (recommended settings):
+        - Accept the license agreement
+        - Choose installation location (default is fine)
+        - Select components:
+          - Make sure "Git LFS (Large File Support)" is checked
+          - Ensure "Add a Git Bash Profile to Windows Terminal" is selected
+          - Keep "Associate .git* files with default editor" checked
+        - Choose default editor (Notepad is safest, or select your preferred editor)
+        - For "Adjusting the name of the initial branch in new repositories":
+          - Choose "Let Git decide" or "Override to main" (recommended)
+        - For PATH environment:
+          - Select "Git from the command line and also from 3rd-party software" (recommended)
+        - For SSH executable:
+          - Choose "Use bundled OpenSSH"
+        - For HTTPS transport:
+          - Choose "Use the OpenSSL library"
+        - For line ending conversions:
+          - Choose "Checkout Windows-style, commit Unix-style line endings"
+        - For terminal emulator:
+          - Choose "Use MinTTY"
+        - For default behavior of `git pull`:
+          - Choose "Default (fast-forward or merge)"
+        - For credential helper:
+          - Choose "Git Credential Manager"
+        - For extra options:
+          - Keep "Enable file system caching" checked
+          - Optionally enable experimental features if desired
+     4. Click "Install" and wait for installation to complete
+     5. Finish the installation
+     6. Verify installation by opening Command Prompt and running:
+        ```
+        git --version
+        git lfs --version
+        ```
+        Both commands should return version information
+   * **Ubuntu Installation:**
+     1. Update package index:
+        ```
+        sudo apt update
+        ```
+     2. Install Git:
+        ```
+        sudo apt install git -y
+        ```
+     3. Install Git LFS (Large File Support) which is needed for model downloads:
+        ```
+        sudo apt install git-lfs -y
+        ```
+     4. Initialize Git LFS:
+        ```
+        git lfs install
+        ```
+     5. Verify installation:
+        ```
+        git --version
+        git lfs --version
+        ```
+     6. Configure your Git identity (required for first use):
+        ```
+        git config --global user.name "Your Name"
+        git config --global user.email "your.email@example.com"
+        ```
 
-4. **CUDA Toolkit 11.8**
-   * Download from [NVIDIA CUDA Toolkit Archive](https://developer.nvidia.com/cuda-11-8-0-download-archive)
-   * Follow the installation instructions for your operating system
-   * Make sure to install the matching cuDNN version from [NVIDIA Developer](https://developer.nvidia.com/cudnn)
+4. **CUDA Toolkit 11.8 and cuDNN**
+   * **Windows Installation:**
+     1. **Install CUDA Toolkit 11.8:**
+        - Visit the [NVIDIA CUDA Toolkit 11.8 Archive](https://developer.nvidia.com/cuda-11-8-0-download-archive)
+        - Select your configuration:
+          - Operating System: Windows
+          - Architecture: x86_64
+          - Version: 11 or your specific Windows version
+          - Installer Type: exe (local)
+        - Download the installer (approximately 3GB)
+        - Before installation:
+          - Close all NVIDIA applications
+          - Ensure you have the latest NVIDIA drivers installed
+        - Run the downloaded installer
+        - Choose "Express (Recommended)" installation type
+        - Wait for installation to complete (may take 10-20 minutes)
+        - Restart your computer when prompted
+     
+     2. **Install cuDNN for CUDA 11.8:**
+        - Visit the [NVIDIA cuDNN Downloads](https://developer.nvidia.com/cudnn)
+        - You'll need to create a free NVIDIA Developer account if you don't have one
+        - After logging in, accept the terms and conditions
+        - Look for "Download cuDNN v8.x.x (CUDA 11.x)" that's compatible with CUDA 11.8
+        - Download "Local Installer for Windows (zip)"
+        - Extract the downloaded zip file
+        - Copy the extracted files to your CUDA installation:
+          - Copy `cuda\bin\cudnn*.dll` to `C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v11.8\bin\`
+          - Copy `cuda\include\cudnn*.h` to `C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v11.8\include\`
+          - Copy `cuda\lib\x64\cudnn*.lib` to `C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v11.8\lib\x64\`
+     
+     3. **Verify installation:**
+        - Open Command Prompt
+        - Check CUDA version:
+          ```
+          nvcc --version
+          ```
+          Look for "Cuda compilation tools, release 11.8"
+        - Verify CUDA samples:
+          ```
+          cd "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v11.8\extras\demo_suite"
+          deviceQuery.exe
+          ```
+          You should see your GPU information and "Result = PASS"
+
+   * **Ubuntu Installation:**
+     1. **Verify your GPU supports CUDA:**
+        ```
+        lspci | grep -i nvidia
+        ```
+        
+     2. **Remove any previous CUDA installation:**
+        ```
+        sudo apt-get --purge remove "*cuda*" "*cublas*" "*cufft*" "*cufile*" "*curand*" "*cusolver*" "*cusparse*" "*npp*" "*nvjpeg*" "nsight*" "*nvvm*"
+        ```
+        
+     3. **Install CUDA dependencies:**
+        ```
+        sudo apt-get update
+        sudo apt-get install -y build-essential gcc-11 g++-11 dkms
+        ```
+        
+     4. **Download CUDA 11.8 runtime and installer:**
+        ```
+        wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-ubuntu2204.pin
+        sudo mv cuda-ubuntu2204.pin /etc/apt/preferences.d/cuda-repository-pin-600
+        wget https://developer.download.nvidia.com/compute/cuda/11.8.0/local_installers/cuda-repo-ubuntu2204-11-8-local_11.8.0-520.61.05-1_amd64.deb
+        sudo dpkg -i cuda-repo-ubuntu2204-11-8-local_11.8.0-520.61.05-1_amd64.deb
+        sudo cp /var/cuda-repo-ubuntu2204-11-8-local/cuda-*-keyring.gpg /usr/share/keyrings/
+        sudo apt-get update
+        sudo apt-get -y install cuda-11-8
+        ```
+        
+     5. **Set up environment variables:**
+        ```
+        echo 'export PATH=/usr/local/cuda-11.8/bin${PATH:+:${PATH}}' >> ~/.bashrc
+        echo 'export LD_LIBRARY_PATH=/usr/local/cuda-11.8/lib64${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}' >> ~/.bashrc
+        source ~/.bashrc
+        ```
+        
+     6. **Install cuDNN for CUDA 11.8:**
+        - Visit [NVIDIA cuDNN Downloads](https://developer.nvidia.com/cudnn)
+        - Log in with your NVIDIA Developer account
+        - Find "Download cuDNN v8.x.x (CUDA 11.x)" compatible with CUDA 11.8
+        - Download "Local Installer for Linux x86_64 (Tar)"
+        - Extract and install:
+          ```
+          tar -xvf cudnn-linux-x86_64-8.x.x.x_cudaX.Y-archive.tar.xz
+          sudo cp cudnn-linux-x86_64-8.x.x.x_cudaX.Y-archive/include/cudnn*.h /usr/local/cuda-11.8/include/
+          sudo cp -P cudnn-linux-x86_64-8.x.x.x_cudaX.Y-archive/lib/libcudnn* /usr/local/cuda-11.8/lib64/
+          sudo chmod a+r /usr/local/cuda-11.8/include/cudnn*.h /usr/local/cuda-11.8/lib64/libcudnn*
+          ```
+          
+     7. **Verify installation:**
+        ```
+        nvcc --version
+        ```
+        Look for "Cuda compilation tools, release 11.8"
+        
+        To verify cuDNN:
+        ```
+        cat /usr/local/cuda-11.8/include/cudnn_version.h | grep CUDNN_MAJOR -A 2
+        ```
+        Should display cuDNN version information
+
+   * **Important Notes:**
+     - CUDA 11.8 requires compatible NVIDIA drivers (minimum driver version: 520.61.05)
+     - For PyTorch compatibility, ensure you use CUDA 11.8 specifically since this is what the pip packages are built against
+     - If you have multiple CUDA versions installed, make sure the correct version is in your PATH
+     - Uninstall any previous CUDA installations completely before installing a new version to avoid conflicts
 
 #### Step 2: Clone the Repository
 
