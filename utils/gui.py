@@ -2,22 +2,38 @@
 Maggie AI Assistant - GUI Module
 ===============================
 GUI implementation for the Maggie AI Assistant using PyQt6.
-Provides a user interface with chat log, event log, and status indicators.
 
-This module implements a graphical user interface for the Maggie AI Assistant,
+This module provides a graphical user interface for the Maggie AI Assistant,
 offering visual state indication, command controls, and log displays.
+
+Examples
+--------
+>>> from utils.gui import MainWindow
+>>> from maggie import MaggieAI
+>>> config = {"threading": {"max_workers": 8}}
+>>> maggie = MaggieAI(config)
+>>> app = QApplication(sys.argv)
+>>> window = MainWindow(maggie)
+>>> window.show()
+>>> sys.exit(app.exec())
 """
 
+# Standard library imports
 import sys
 import time
+from typing import Dict, Any, Optional, List, Callable
+
+# Third-party imports
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QTextEdit,
     QPushButton, QLabel, QSplitter, QTabWidget, QSizePolicy,
     QListWidget, QListWidgetItem, QGroupBox, QFrame, QStatusBar
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer
-from PyQt6.QtGui import QFont, QColor, QIcon
+from PyQt6.QtGui import QFont, QColor, QIcon, QKeySequence, QShortcut
 from loguru import logger
+
+__all__ = ['MainWindow']
 
 class MainWindow(QMainWindow):
     """
@@ -45,6 +61,8 @@ class MainWindow(QMainWindow):
         Text display for error messages
     state_display : QLabel
         Visual indicator of current system state
+    utility_buttons : Dict[str, QPushButton]
+        Dictionary of utility activation buttons
     """
     
     def __init__(self, maggie_ai):
@@ -77,6 +95,23 @@ class MainWindow(QMainWindow):
         self.status_label.setStyleSheet("font-weight: bold;")
         self.status_bar.addPermanentWidget(self.status_label)
         
+        # Create main content area with proper layout
+        self._create_main_layout()
+        
+        # Initialize UI
+        self.update_state("IDLE")
+        self.log_event("Maggie AI Assistant started")
+        
+        # Set keyboard shortcuts
+        self.setup_shortcuts()
+        
+    def _create_main_layout(self) -> None:
+        """
+        Create the main window layout.
+        
+        Sets up the split pane layout with logs on the left and
+        controls on the right.
+        """
         # Create main content area
         self.content_splitter = QSplitter(Qt.Orientation.Horizontal)
         self.main_layout.addWidget(self.content_splitter)
@@ -95,6 +130,20 @@ class MainWindow(QMainWindow):
         self.content_splitter.setSizes([600, 200])
         
         # Create tab widget for logs
+        self._create_log_tabs()
+        
+        # Create right panel contents
+        self._create_right_panel()
+        
+        # Create bottom control panel
+        self._create_control_panel()
+        
+    def _create_log_tabs(self) -> None:
+        """
+        Create the tabbed log display.
+        
+        Sets up tabs for chat, events, and errors.
+        """
         self.log_tabs = QTabWidget()
         self.left_layout.addWidget(self.log_tabs)
         
@@ -113,10 +162,12 @@ class MainWindow(QMainWindow):
         self.error_log.setReadOnly(True)
         self.log_tabs.addTab(self.error_log, "Errors")
         
-        # Create right panel contents
-        self.create_right_panel()
+    def _create_control_panel(self) -> None:
+        """
+        Create the bottom control panel.
         
-        # Create bottom control panel
+        Sets up buttons for shutdown and sleep commands.
+        """
         self.control_panel = QWidget()
         self.control_layout = QHBoxLayout(self.control_panel)
         self.main_layout.addWidget(self.control_panel)
@@ -130,22 +181,13 @@ class MainWindow(QMainWindow):
         self.sleep_button.clicked.connect(self.on_sleep_clicked)
         self.control_layout.addWidget(self.sleep_button)
         
-        # Initialize UI
-        self.update_state("IDLE")
-        self.log_event("Maggie AI Assistant started")
-        
-        # Set keyboard shortcuts
-        self.setup_shortcuts()
-        
-    def setup_shortcuts(self):
+    def setup_shortcuts(self) -> None:
         """
         Set up keyboard shortcuts for the GUI.
         
         Configures keyboard shortcuts for common actions to improve usability.
         """
         try:
-            from PyQt6.QtGui import QKeySequence, QShortcut
-            
             # Alt+S: Sleep
             sleep_shortcut = QShortcut(QKeySequence("Alt+S"), self)
             sleep_shortcut.activated.connect(self.on_sleep_clicked)
@@ -164,10 +206,12 @@ class MainWindow(QMainWindow):
             error_tab_shortcut = QShortcut(QKeySequence("Alt+3"), self)
             error_tab_shortcut.activated.connect(lambda: self.log_tabs.setCurrentIndex(2))
             
+            logger.debug("Keyboard shortcuts configured")
+            
         except Exception as e:
             logger.error(f"Error setting up shortcuts: {e}")
         
-    def create_right_panel(self):
+    def create_right_panel(self) -> None:
         """
         Create the contents of the right panel.
         
@@ -187,6 +231,47 @@ class MainWindow(QMainWindow):
         self.utilities_layout = QVBoxLayout(self.utilities_group)
         
         # Add utility buttons based on loaded utilities
+        self._create_utility_buttons()
+        
+        self.right_layout.addWidget(self.utilities_group)
+        
+        # Add spacer
+        self.right_layout.addStretch()
+    
+    def _create_right_panel(self) -> None:
+        """
+        Create the contents of the right panel.
+        
+        Sets up the state display and utility buttons in the right panel.
+        """
+        # Current state display
+        self.state_group = QGroupBox("Current State")
+        self.state_layout = QVBoxLayout(self.state_group)
+        self.state_display = QLabel("IDLE")
+        self.state_display.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.state_display.setStyleSheet("font-size: 18px; font-weight: bold;")
+        self.state_layout.addWidget(self.state_display)
+        self.right_layout.addWidget(self.state_group)
+        
+        # Utilities group
+        self.utilities_group = QGroupBox("Utilities")
+        self.utilities_layout = QVBoxLayout(self.utilities_group)
+        
+        # Add utility buttons based on loaded utilities
+        self._create_utility_buttons()
+        
+        self.right_layout.addWidget(self.utilities_group)
+        
+        # Add spacer
+        self.right_layout.addStretch()
+        
+    def _create_utility_buttons(self) -> None:
+        """
+        Create buttons for each available utility.
+        
+        Creates a button for each utility in the Maggie AI system,
+        with appropriate handlers and shortcuts.
+        """
         self.utility_buttons = {}
         for utility_name in self.maggie_ai.utilities:
             display_name = utility_name.replace("_", " ").title()
@@ -200,20 +285,14 @@ class MainWindow(QMainWindow):
             # Set shortcut if it's the recipe creator
             if utility_name == "recipe_creator":
                 try:
-                    from PyQt6.QtGui import QKeySequence, QShortcut
                     recipe_shortcut = QShortcut(QKeySequence("Alt+R"), self)
                     recipe_shortcut.activated.connect(
                         lambda: self.on_utility_clicked("recipe_creator")
                     )
-                except Exception:
-                    pass
-            
-        self.right_layout.addWidget(self.utilities_group)
+                except Exception as e:
+                    logger.error(f"Error setting up recipe shortcut: {e}")
         
-        # Add spacer
-        self.right_layout.addStretch()
-        
-    def update_state(self, state):
+    def update_state(self, state: str) -> None:
         """
         Update the displayed state.
         
@@ -242,7 +321,9 @@ class MainWindow(QMainWindow):
         color = color_map.get(state, "white")
         self.state_display.setStyleSheet(f"font-size: 18px; font-weight: bold; background-color: {color}; padding: 5px;")
         
-    def log_chat(self, message, is_user=False):
+        logger.debug(f"GUI state updated to: {state}")
+        
+    def log_chat(self, message: str, is_user: bool = False) -> None:
         """
         Log a chat message.
         
@@ -261,7 +342,7 @@ class MainWindow(QMainWindow):
         
         self.chat_log.append(f'<span style="color:gray">[{timestamp}]</span> <span style="color:{color}"><b>{prefix}:</b></span> {message}')
         
-    def log_event(self, event):
+    def log_event(self, event: str) -> None:
         """
         Log an event message.
         
@@ -275,7 +356,9 @@ class MainWindow(QMainWindow):
         timestamp = time.strftime("%H:%M:%S")
         self.event_log.append(f'<span style="color:gray">[{timestamp}]</span> {event}')
         
-    def log_error(self, error):
+        logger.debug(f"Event logged: {event}")
+        
+    def log_error(self, error: str) -> None:
         """
         Log an error message.
         
@@ -291,7 +374,9 @@ class MainWindow(QMainWindow):
         self.error_log.append(f'<span style="color:gray">[{timestamp}]</span> <span style="color:red"><b>ERROR:</b></span> {error}')
         self.log_tabs.setCurrentIndex(2)  # Switch to error tab
         
-    def on_shutdown_clicked(self):
+        logger.error(f"Error logged in GUI: {error}")
+        
+    def on_shutdown_clicked(self) -> None:
         """
         Handle shutdown button click.
         
@@ -300,7 +385,9 @@ class MainWindow(QMainWindow):
         self.log_event("Shutdown requested")
         self.maggie_ai.shutdown()
         
-    def on_sleep_clicked(self):
+        logger.info("Shutdown initiated from GUI")
+        
+    def on_sleep_clicked(self) -> None:
         """
         Handle sleep button click.
         
@@ -309,7 +396,9 @@ class MainWindow(QMainWindow):
         self.log_event("Sleep requested")
         self.maggie_ai.timeout()
         
-    def on_utility_clicked(self, utility_name):
+        logger.info("Sleep initiated from GUI")
+        
+    def on_utility_clicked(self, utility_name: str) -> None:
         """
         Handle utility button click.
         
@@ -325,7 +414,9 @@ class MainWindow(QMainWindow):
             utility = self.maggie_ai.utilities[utility_name]
             self.maggie_ai.process_command(utility=utility)
             
-    def closeEvent(self, event):
+            logger.info(f"Utility '{utility_name}' activated from GUI")
+            
+    def closeEvent(self, event) -> None:
         """
         Handle window close event.
         
@@ -339,3 +430,5 @@ class MainWindow(QMainWindow):
         self.log_event("Window close requested, shutting down")
         self.maggie_ai.shutdown()
         event.accept()
+        
+        logger.info("GUI window closed, shutdown initiated")
