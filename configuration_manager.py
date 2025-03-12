@@ -190,6 +190,16 @@ class ConfigManager:
         Recursively merge defaults into configuration to ensure completeness.
         """
         def deep_merge(target, source):
+            """
+            Recursively merge source dictionary into target dictionary.
+            
+            Parameters
+            ----------
+            target : Dict
+                Target dictionary to merge into
+            source : Dict
+                Source dictionary with values to merge
+            """
             for key, value in source.items():
                 if key not in target:
                     target[key] = value
