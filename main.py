@@ -307,7 +307,7 @@ def create_recipe_template() -> bool:
         doc.add_paragraph("• Ingredient 2", style='ListBullet')
         doc.add_paragraph("• Ingredient 3", style='ListBullet')
         
-        # Add instructions with numbered steps
+        # Add steps section with numbered steps
         doc.add_heading("Instructions", level=2)
         doc.add_paragraph("1. Step 1", style='ListNumber')
         doc.add_paragraph("2. Step 2", style='ListNumber')
