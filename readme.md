@@ -368,8 +368,15 @@ This utility demonstrates how the system combines speech recognition, natural la
           - Close all NVIDIA applications
           - Ensure you have the latest NVIDIA drivers installed
         - Run the downloaded installer
+        - Choose "Agree and Continue" to accept the license agreement
         - Choose "Express (Recommended)" installation type
+        - CUDA Visual Studio Integration
+          - If the message "No supported version of Visual Studio was found." appears
+            - Check "I understand, and wish to continue with the installation regardless."
+            - Select "Next"
+            - Select "Next" after the Nsight Visual Studio Edition Summary
         - Wait for installation to complete (may take 10-20 minutes)
+        - Check desired options and close the installer
         - Restart your computer when prompted
      
      2. **Install cuDNN for CUDA 11.8:**
