@@ -24,6 +24,9 @@ To install Maggie AI Assistant:
 For verbose output:
     $ python install.py --verbose
 
+To skip problematic packages:
+    $ python install.py --skip-problematic-packages
+
 Notes
 -----
 - Requires Python 3.10.x specifically
@@ -32,6 +35,7 @@ Notes
 - Optimized for AMD Ryzen 9 5900X and NVIDIA RTX 3080
 """
 
+# Standard library imports
 import os
 import sys
 import platform
@@ -58,9 +62,12 @@ class MaggieInstaller:
     ----------
     verbose : bool, optional
         Whether to display verbose output, by default False
+    skip_problematic : bool, optional
+        Whether to skip problematic packages that may have compilation issues,
+        by default False
     """
     
-    def __init__(self, verbose: bool = False):
+    def __init__(self, verbose: bool = False, skip_problematic: bool = False):
         """
         Initialize the installer.
         
@@ -68,8 +75,12 @@ class MaggieInstaller:
         ----------
         verbose : bool, optional
             Whether to display verbose output, by default False
+        skip_problematic : bool, optional
+            Whether to skip problematic packages that may have compilation issues,
+            by default False
         """
         self.verbose = verbose
+        self.skip_problematic = skip_problematic
         self.platform = platform.system()
         self.base_dir = Path(os.path.dirname(os.path.abspath(__file__)))
         
@@ -99,6 +110,7 @@ class MaggieInstaller:
             "cache",
             "cache/tts",
             "downloads",  # Directory for downloaded files
+            "downloads/wheels",  # Directory for wheel files
             "site-packages"  # Directory for manually installed packages
         ]
         
@@ -237,6 +249,94 @@ class MaggieInstaller:
         except Exception as e:
             self._print(f"Error downloading file: {e}", "red")
             return False
+    
+    def _fix_windows_sdk_paths(self, sdk_path: str) -> bool:
+        """
+        Configure Windows SDK paths correctly for C++ compilation.
+        
+        Parameters
+        ----------
+        sdk_path : str
+            Path to the Windows SDK Include directory
+            
+        Returns
+        -------
+        bool
+            True if successful, False otherwise
+            
+        Notes
+        -----
+        Modifies environment variables to ensure Windows SDK headers 
+        are properly detected during compilation. Critical for resolving
+        the 'stddef.h' missing header issue on Windows 11.
+        """
+        try:
+            self._print("Attempting to fix Windows SDK paths...", "cyan")
+            
+            # Find latest SDK version
+            versions = []
+            for item in os.listdir(sdk_path):
+                if os.path.isdir(os.path.join(sdk_path, item)) and item.startswith("10."):
+                    versions.append(item)
+                    
+            if not versions:
+                self._print("No SDK versions found in Windows SDK directory", "red")
+                return False
+                
+            # Sort versions to get the latest one
+            versions.sort(key=lambda v: [int(x) for x in v.split('.')])
+            latest_version = versions[-1]
+            self._print(f"Using Windows SDK version {latest_version}", "green")
+            
+            # Set environment variables
+            sdk_root = os.path.dirname(sdk_path)  # Parent of Include directory
+            os.environ["WindowsSdkDir"] = sdk_root
+            os.environ["WindowsSdkVersion"] = latest_version
+            os.environ["UniversalCRTSdkDir"] = sdk_root
+            
+            # Add include paths to INCLUDE environment variable
+            include_paths = []
+            
+            # Critical paths that need to be in INCLUDE
+            for subdir in ["ucrt", "um", "shared", "cppwinrt"]:
+                path = os.path.join(sdk_path, latest_version, subdir)
+                if os.path.exists(path):
+                    include_paths.append(path)
+                    
+            if not include_paths:
+                self._print("No valid include paths found in Windows SDK", "red")
+                return False
+                
+            # Get existing INCLUDE value and merge
+            current_include = os.environ.get("INCLUDE", "")
+            new_include = ";".join(include_paths)
+            if current_include:
+                new_include = new_include + ";" + current_include
+                
+            os.environ["INCLUDE"] = new_include
+            
+            # Check if stddef.h is now accessible
+            stddef_found = False
+            for path in include_paths:
+                possible_stddef = os.path.join(path, "stddef.h")
+                if os.path.exists(possible_stddef):
+                    self._print(f"Successfully located stddef.h at {possible_stddef}", "green")
+                    stddef_found = True
+                    break
+                    
+            # Set additional environment variables that might help
+            os.environ["UCRTVersion"] = latest_version
+            os.environ["LIB"] = os.path.join(sdk_root, "Lib", latest_version, "ucrt", "x64") + ";" + os.environ.get("LIB", "")
+            
+            if stddef_found:
+                return True
+            else:
+                self._print("stddef.h still not found after path configuration", "yellow")
+                return False
+                
+        except Exception as e:
+            self._print(f"Error fixing Windows SDK paths: {e}", "red")
+            return False
             
     def _check_git(self) -> bool:
         """
@@ -293,10 +393,12 @@ class MaggieInstaller:
             ]
             
             sdk_installed = False
-            for sdk_path in sdk_paths:
-                if os.path.exists(sdk_path):
+            sdk_path = None
+            for path in sdk_paths:
+                if os.path.exists(path):
                     sdk_installed = True
-                    self._print(f"Found Windows SDK at {sdk_path}", "green")
+                    sdk_path = path
+                    self._print(f"Found Windows SDK at {path}", "green")
                     break
             
             if not sdk_installed:
@@ -310,10 +412,9 @@ class MaggieInstaller:
             
             # Check for Universal CRT include directories
             ucrt_paths = [
-                "C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.22000.0\\ucrt",
-                "C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.20348.0\\ucrt",
-                "C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.19041.0\\ucrt",
-                "C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.18362.0\\ucrt"
+                os.path.join(sdk_path, version, "ucrt") 
+                for version in os.listdir(sdk_path)
+                if os.path.isdir(os.path.join(sdk_path, version))
             ]
             
             stddef_found = False
@@ -327,12 +428,22 @@ class MaggieInstaller:
                         break
             
             if not stddef_found:
-                self._print("Required header file 'stddef.h' not found in Windows SDK", "yellow")
-                self._print("This will cause problems when building C++ extensions", "yellow")
-                self._print("To fix this issue:", "yellow")
-                self._print("1. Reinstall Visual C++ Build Tools with the 'Desktop development with C++' workload", "yellow")
-                self._print("2. Ensure 'Windows 10 SDK' component is selected during installation", "yellow")
-                return False
+                # Attempt to fix Windows SDK paths automatically
+                self._print("Required header file 'stddef.h' not found in expected location", "yellow")
+                self._print("Attempting to fix Windows SDK configuration...", "cyan")
+                
+                if self._fix_windows_sdk_paths(sdk_path):
+                    self._print("Successfully fixed Windows SDK paths", "green")
+                    self.has_windows_sdk = True
+                    return True
+                else:
+                    self._print("Failed to fix Windows SDK paths", "red")
+                    self._print("This will cause problems when building C++ extensions", "yellow")
+                    self._print("Possible solutions:", "yellow")
+                    self._print("1. Reinstall Visual C++ Build Tools with the 'Desktop development with C++' workload", "yellow")
+                    self._print("2. Ensure 'Windows 10 SDK' component is selected during installation", "yellow")
+                    self._print("3. Use the --skip-problematic-packages flag to skip packages requiring compilation", "yellow")
+                    return False
             
             return True
         
@@ -800,6 +911,86 @@ class MaggieInstaller:
             self._print(f"Error installing {package_name} from wheel: {e}", "red")
             return False
 
+    def _install_piper_phonemize_win11(self, python_cmd: str) -> bool:
+        """
+        Install piper_phonemize package specifically for Windows 11.
+        
+        Parameters
+        ----------
+        python_cmd : str
+            Path to Python executable
+        
+        Returns
+        -------
+        bool
+            True if installation successful, False otherwise
+        
+        Notes
+        -----
+        Uses pre-built wheels with additional compatibility fixes for Windows 11,
+        avoiding compilation issues with stddef.h and other SDK dependencies.
+        """
+        try:
+            self._print("Installing piper-phonemize using Windows 11 enhanced method...", "cyan")
+            
+            # Create wheel directory if it doesn't exist
+            wheel_dir = os.path.join(self.base_dir, "downloads", "wheels")
+            os.makedirs(wheel_dir, exist_ok=True)
+            
+            # Get Python version for wheel compatibility
+            py_version = f"cp{sys.version_info.major}{sys.version_info.minor}"
+            
+            # Extended list of wheel URLs with additional fallbacks for Windows 11
+            wheel_urls = [
+                # Primary wheels
+                f"https://github.com/rhasspy/piper-phonemize/releases/download/v1.2.0/piper_phonemize-1.2.0-{py_version}-{py_version}-win_amd64.whl",
+                f"https://github.com/rhasspy/piper-phonemize/releases/download/v1.2.0/piper_phonemize-1.2.0-{py_version}-{py_version}m-win_amd64.whl",
+                # Fixed fallbacks for Python 3.10 on Windows 11
+                "https://github.com/rhasspy/piper-phonemize/releases/download/v1.2.0/piper_phonemize-1.2.0-cp310-cp310-win_amd64.whl",
+                # Alternative mirror URLs
+                "https://github.com/MycroftAI/piper-phonemize-wheels/raw/main/piper_phonemize-1.2.0-cp310-cp310-win_amd64.whl",
+                # Try Python 3.9 wheel as last resort (might work with cp310 in some cases)
+                "https://github.com/rhasspy/piper-phonemize/releases/download/v1.2.0/piper_phonemize-1.2.0-cp39-cp39-win_amd64.whl"
+            ]
+            
+            for wheel_url in wheel_urls:
+                wheel_filename = os.path.basename(wheel_url)
+                wheel_path = os.path.join(wheel_dir, wheel_filename)
+                
+                self._print(f"Trying wheel from: {wheel_url}", "cyan")
+                
+                try:
+                    # Download wheel
+                    if not self._download_file_with_requests(wheel_url, wheel_path):
+                        continue
+                        
+                    # Install wheel with --no-deps to avoid dependency resolution issues
+                    returncode, _, stderr = self._run_command([
+                        python_cmd, "-m", "pip", "install", wheel_path, "--no-deps"
+                    ])
+                    
+                    if returncode == 0:
+                        # Install dependencies separately
+                        self._print("Installing piper-phonemize dependencies...", "cyan")
+                        self._run_command([
+                            python_cmd, "-m", "pip", "install", "numpy", "onnxruntime==1.15.1"
+                        ])
+                        
+                        self._print("Successfully installed piper-phonemize from wheel", "green")
+                        return True
+                    else:
+                        self._print(f"Error installing wheel: {stderr}", "yellow")
+                except Exception as e:
+                    self._print(f"Error with wheel {wheel_filename}: {e}", "yellow")
+                    continue
+            
+            self._print("All Windows 11 compatible wheels failed to install", "yellow")
+            return False
+            
+        except Exception as e:
+            self._print(f"Error in Windows 11 piper-phonemize installation: {e}", "red")
+            return False
+
     def _install_piper_phonemize_bin(self, python_cmd: str) -> bool:
         """
         Install pre-built piper-phonemize wheel.
@@ -869,15 +1060,16 @@ class MaggieInstaller:
         Install piper-phonemize package using multiple fallback strategies.
         
         Attempts to install piper-phonemize using several methods:
-        1. Pre-built wheel (for supported platforms)
-        2. Direct installation from GitHub (if Git is available)
-        3. Installation from downloaded source
-        4. Skipping if all methods fail
+        1. Windows 11 specific installation method (for Windows 11)
+        2. Pre-built wheel (for supported platforms)
+        3. Direct installation from GitHub (if Git is available)
+        4. Installation from downloaded source
+        5. Skipping if all methods fail
         
         Parameters
         ----------
         python_cmd : str
-            Path to Python executable in virtual environment
+            Path to Python executable
             
         Returns
         -------
@@ -886,12 +1078,22 @@ class MaggieInstaller:
         """
         self._print("Installing piper-phonemize directly...", "cyan")
         
-        # First try pre-built wheel
+        # Check if we should skip due to --skip-problematic-packages flag
+        if self.skip_problematic:
+            self._print("Skipping piper-phonemize installation (--skip-problematic-packages flag enabled)", "yellow")
+            return True
+        
+        # For Windows, try the enhanced Windows 11 installation method first
+        if self.platform == "Windows":
+            if self._install_piper_phonemize_win11(python_cmd):
+                return True
+        
+        # Then try the regular pre-built wheel approach
         if self.platform == "Windows":
             if self._install_piper_phonemize_bin(python_cmd):
                 return True
         
-        # If wheel installation fails and we have Git, try direct installation (non-editable)
+        # If wheel installation fails and we have Git, try direct installation
         if self.has_git:
             self._print("Installing piper-phonemize from GitHub (non-editable)...", "cyan")
             returncode, _, stderr = self._run_command([
@@ -903,7 +1105,7 @@ class MaggieInstaller:
                 return True
             
             self._print(f"Error installing piper-phonemize from GitHub: {stderr}", "red")
-            
+        
         # If we get here, try downloading the repository and installing
         try:
             # Create temporary directory for the package
@@ -1974,9 +2176,11 @@ def main():
     """
     parser = argparse.ArgumentParser(description="Maggie AI Assistant Installer")
     parser.add_argument("--verbose", action="store_true", help="Enable verbose output")
+    parser.add_argument("--skip-problematic-packages", action="store_true",
+                        help="Skip packages that require compilation and may have compatibility issues")
     args = parser.parse_args()
     
-    installer = MaggieInstaller(verbose=args.verbose)
+    installer = MaggieInstaller(verbose=args.verbose, skip_problematic=args.skip_problematic_packages)
     success = installer.install()
     
     return 0 if success else 1
