@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """
 Maggie AI Assistant - Unified Installation Script
 =============================================
@@ -43,6 +44,7 @@ import time
 import zipfile
 from typing import List, Dict, Any, Optional, Tuple
 from pathlib import Path
+
 
 class MaggieInstaller:
     """
@@ -1520,3 +1522,468 @@ class MaggieInstaller:
         except Exception as e:
             self._print(f"Error creating recipe template: {e}", "red")
             return False
+    
+    def _windows_optimizations(self) -> None:
+        """
+        Apply Windows-specific optimizations.
+        
+        Sets process priority and CPU affinity for optimal performance
+        on Windows systems, with special optimizations for Ryzen 9 5900X.
+        This includes power plan settings and CPU/memory optimizations.
+        """
+        try:
+            # Set power plan to high performance
+            self._print("Setting power plan to High Performance...", "cyan")
+            returncode, _, _ = self._run_command([
+                "powercfg", "/s", "8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c"  # High Performance power scheme GUID
+            ], check=False, shell=True)
+            
+            # If the high performance plan isn't available, try the Ultimate Performance plan
+            if returncode != 0:
+                self._run_command([
+                    "powercfg", "/s", "e9a42b02-d5df-448d-aa00-03f14749eb61"  # Ultimate Performance power scheme GUID
+                ], check=False, shell=True)
+                
+            # Process priority and affinity optimizations
+            import psutil
+            # Get current process
+            process = psutil.Process(os.getpid())
+            
+            # Set process priority to high
+            process.nice(psutil.HIGH_PRIORITY_CLASS)
+            self._print("Set process priority to high", "green")
+            
+            # CPU affinity optimization for Ryzen 9 5900X
+            # Use the first 8 cores (16 threads for Ryzen)
+            cpu_count = psutil.cpu_count(logical=True)
+            if cpu_count >= 16:  # Likely Ryzen 9 with hyperthreading
+                # Create affinity mask for first 8 physical cores (16 threads)
+                # For Ryzen, logical processors are arranged as:
+                # 0, 2, 4, ... are first 12 cores, 1, 3, 5, ... are their hyperthreaded pairs
+                affinity = list(range(16))
+                process.cpu_affinity(affinity)
+                self._print(f"Set CPU affinity to first 8 physical cores", "green")
+                
+            # Configure Windows memory management for better performance
+            self._run_command([
+                "reg", "add", "HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Memory Management", 
+                "/v", "LargeSystemCache", "/t", "REG_DWORD", "/d", "1", "/f"
+            ], check=False, shell=True)
+            
+            # Disable system visual effects for better performance
+            self._run_command([
+                "reg", "add", "HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\VisualEffects", 
+                "/v", "VisualFXSetting", "/t", "REG_DWORD", "/d", "2", "/f"
+            ], check=False, shell=True)
+            
+        except ImportError:
+            self._print("psutil not available for Windows optimizations", "yellow")
+        except Exception as e:
+            self._print(f"Failed to apply Windows performance optimizations: {e}", "yellow")
+    
+    def _linux_optimizations(self) -> None:
+        """
+        Apply Linux-specific optimizations.
+        
+        Sets CPU governor and process nice level for optimal performance
+        on Linux systems. Configures CPU frequency scaling and process priority,
+        with specific optimizations for AMD Ryzen 9 5900X processors.
+        """
+        try:
+            # Check if running as root (required for some optimizations)
+            is_root = os.geteuid() == 0
+            
+            if is_root:
+                # Set CPU governor to performance for all cores
+                self._print("Setting CPU governor to performance mode...", "cyan")
+                os.system("echo performance | tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor")
+                self._print("Set CPU governor to performance mode", "green")
+                
+                # Optimize CPU frequency scaling for Ryzen 9 5900X
+                for cpu_dir in os.listdir("/sys/devices/system/cpu"):
+                    if cpu_dir.startswith("cpu") and cpu_dir != "cpuidle" and cpu_dir != "cpufreq":
+                        try:
+                            # Set minimum frequency to 3.7 GHz (3700000 KHz) if available
+                            min_freq_path = f"/sys/devices/system/cpu/{cpu_dir}/cpufreq/scaling_min_freq"
+                            if os.path.exists(min_freq_path):
+                                with open(min_freq_path, "w") as f:
+                                    f.write("3700000")
+                        except:
+                            pass
+                
+                # Set I/O scheduler to deadline for better I/O performance
+                for disk in os.listdir("/sys/block"):
+                    if disk.startswith("sd") or disk.startswith("nvme"):
+                        try:
+                            scheduler_path = f"/sys/block/{disk}/queue/scheduler"
+                            if os.path.exists(scheduler_path):
+                                with open(scheduler_path, "w") as f:
+                                    f.write("deadline")
+                        except:
+                            pass
+            else:
+                self._print("Not running as root, skipping some system optimizations", "yellow")
+                
+            # Set process nice level for better responsiveness
+            os.nice(-10)  # Higher priority (lower nice value)
+            self._print("Set process nice level to -10", "green")
+            
+            # Set GPU optimization if applicable
+            if os.path.exists("/proc/driver/nvidia/params"):
+                # Apply NVIDIA driver optimizations using nvidia-settings if available
+                self._run_command([
+                    "nvidia-settings", "-a", "[gpu:0]/GPUPowerMizerMode=1"
+                ], check=False)
+                
+        except Exception as e:
+            self._print(f"Failed to apply Linux performance optimizations: {e}", "yellow")
+    
+    def _common_optimizations(self) -> None:
+        """
+        Apply common optimizations for all platforms.
+        
+        Implements cross-platform optimizations including Python memory management,
+        garbage collection tuning, and process naming for easier identification.
+        Applies optimizations specifically beneficial for AI workloads.
+        """
+        try:
+            # Set process name for better identification
+            try:
+                import setproctitle
+                setproctitle.setproctitle("maggie-ai-assistant")
+                self._print("Set process title to 'maggie-ai-assistant'", "green")
+            except ImportError:
+                pass
+            
+            # Python memory and GC optimizations
+            try:
+                import gc
+                
+                # Disable automatic garbage collection and run it manually when needed
+                gc.disable()
+                self._print("Disabled automatic garbage collection for better performance", "green")
+                
+                # Run initial collection to start with clean state
+                gc.collect()
+            except:
+                pass
+            
+            # Optimize Python threading for better parallelism
+            try:
+                import threading
+                threading.stack_size(256 * 1024)  # 256 KB stack for threads (default is often too large)
+            except:
+                pass
+            
+            # Set Python-specific optimizations
+            if hasattr(sys, 'set_int_max_str_digits'):
+                # Limit maximum string conversion size (Python 3.10+)
+                sys.set_int_max_str_digits(4096)
+                self._print("Set Python integer-to-string conversion limit to 4096 digits", "green")
+                
+            # Configure NumPy/TensorFlow thread optimizations if installed
+            try:
+                # Set number of threads for parallel operations
+                os.environ["OMP_NUM_THREADS"] = "8"  # Optimal for Ryzen 9 5900X
+                os.environ["MKL_NUM_THREADS"] = "8"
+                os.environ["NUMEXPR_NUM_THREADS"] = "8"
+                
+                self._print("Set optimal thread count for numerical libraries", "green")
+            except:
+                pass
+            
+            # CUDA optimizations for RTX 3080
+            os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"  # Consistent device numbering
+            os.environ["TF_FORCE_GPU_ALLOW_GROWTH"] = "true"  # Dynamic memory growth
+            
+            self._print("Applied common cross-platform optimizations", "green")
+        except Exception as e:
+            self._print(f"Failed to apply common optimizations: {e}", "yellow")
+            
+    def _optimize_system(self) -> bool:
+        """
+        Optimize system settings for best performance.
+        
+        Applies platform-specific and hardware-specific optimizations to maximize
+        performance for the Maggie AI Assistant, with specific enhancements for
+        AMD Ryzen 9 5900X and NVIDIA RTX 3080 hardware.
+        
+        Returns
+        -------
+        bool
+            True if optimization succeeded, False otherwise
+            
+        Notes
+        -----
+        This function optimizes system settings for running Maggie,
+        including process priority and thread affinity on Windows,
+        and governor settings on Linux.
+        """
+        try:
+            # Apply platform-specific optimizations
+            if self.platform == "Windows":
+                self._windows_optimizations()
+            elif self.platform == "Linux":
+                self._linux_optimizations()
+        
+            # Apply common optimizations
+            self._common_optimizations()
+        
+            return True
+        except Exception as e:
+            self._print(f"Failed to optimize system: {e}", "red")
+            return False
+
+    def _verify_system(self) -> bool:
+        """
+        Verify system configuration and installed components.
+        
+        Performs a comprehensive verification of the system configuration,
+        installed dependencies, and hardware compatibility. This ensures
+        that all components are properly installed and configured before
+        starting the application.
+        
+        Returns
+        -------
+        bool
+            True if system verification passed, False otherwise
+        
+        Notes
+        -----
+        This function runs the main.py script with the --verify flag to perform
+        various checks including Python version, CUDA availability, required
+        directories, and critical dependencies.
+        """
+        self._print("\nVerifying system configuration...", "cyan")
+        
+        # Determine python command based on platform
+        if self.platform == "Windows":
+            python_cmd = os.path.join(self.base_dir, "venv", "Scripts", "python")
+        else:
+            python_cmd = os.path.join(self.base_dir, "venv", "bin", "python")
+        
+        # First perform our own basic verification
+        if not self._check_python_version():
+            self._print("Python version verification failed", "red")
+            return False
+        
+        # Check for PyTorch with CUDA
+        try:
+            returncode, stdout, _ = self._run_command([
+                python_cmd, 
+                "-c", 
+                "import torch; print(f'CUDA available: {torch.cuda.is_available()}')"
+            ], check=False)
+            
+            if "CUDA available: True" in stdout:
+                self._print("CUDA is available for PyTorch", "green")
+            else:
+                self._print("CUDA is not available for PyTorch, GPU acceleration will be limited", "yellow")
+        except:
+            self._print("Could not verify PyTorch CUDA support", "yellow")
+            
+        # Run the built-in verification script
+        returncode, stdout, stderr = self._run_command([python_cmd, "main.py", "--verify"])
+        
+        if returncode != 0:
+            self._print("System verification failed", "red")
+            
+            # If we have error output, show it for debugging
+            if stderr:
+                self._print("Verification errors:", "red")
+                for line in stderr.splitlines():
+                    self._print(f"  {line}", "red")
+                    
+            self._print("Some functionality may not work correctly", "yellow")
+            
+            # Ask user if they want to continue anyway
+            response = input(f"{self.colors['magenta']}System verification failed. Continue anyway? (y/n): {self.colors['reset']}")
+            
+            if response.lower() != "y":
+                return False
+                
+            self._print("Continuing despite verification failure", "yellow")
+            return True
+            
+        self._print("System verification passed", "green")
+        return True
+        
+    def install(self) -> bool:
+        """
+        Run the full installation process.
+        
+        Executes the complete installation workflow for Maggie AI Assistant,
+        handling system checks, dependency installation, configuration setup,
+        model downloads, and system optimization. Provides a comprehensive
+        summary of the installation status and next steps.
+        
+        Returns
+        -------
+        bool
+            True if installation successful, False otherwise
+        
+        Notes
+        -----
+        This is the main method that orchestrates the entire installation process.
+        It performs all necessary steps in the correct order, with appropriate
+        error handling and user feedback at each stage.
+        """
+        self._print("=== Maggie AI Assistant Installation ===", "cyan")
+        self._print(f"Platform: {self.platform}", "cyan")
+        
+        # Print current timestamp for installation timing
+        start_time = time.time()
+        self._print(f"Installation started at: {time.strftime('%Y-%m-%d %H:%M:%S')}", "cyan")
+        
+        if not self.is_admin:
+            if self.platform == "Windows":
+                self._print("Note: Running without Administrator privileges", "yellow")
+                self._print("Some optimizations may not be applied", "yellow")
+            else:
+                self._print("Note: Running without root privileges", "yellow")
+                self._print("Some optimizations may not be applied", "yellow")
+        
+        # Check Python version
+        if not self._check_python_version():
+            return False
+            
+        # Check GPU
+        gpu_info = self._check_gpu()
+        
+        # Create directories
+        if not self._create_directories():
+            return False
+            
+        # Setup virtual environment
+        if not self._setup_virtual_env():
+            return False
+            
+        # Install dependencies
+        self._print("\nInstalling dependencies (this may take some time)...", "cyan")
+        dependency_result = self._install_dependencies()
+        if not dependency_result:
+            self._print("Some dependencies failed to install", "yellow")
+            self._print("Continuing with installation, but some features may not work", "yellow")
+            
+            # Ask user if they want to continue despite dependency failures
+            response = input(f"{self.colors['magenta']}Some dependencies failed to install. Continue anyway? (y/n): {self.colors['reset']}")
+            
+            if response.lower() != "y":
+                self._print("Installation aborted by user due to dependency failures", "red")
+                return False
+            
+        # Setup configuration
+        if not self._setup_config():
+            return False
+            
+        # Download models
+        if not self._download_models():
+            self._print("Some models failed to download", "yellow")
+            self._print("Continuing with installation, but some features may not work", "yellow")
+            
+        # Create recipe template
+        if not self._create_recipe_template():
+            self._print("Recipe template creation failed", "yellow")
+            self._print("Recipe functionality may not work properly", "yellow")
+            
+        # Optimize system
+        if not self._optimize_system():
+            self._print("System optimization failed", "yellow")
+            self._print("Using default configuration", "yellow")
+            
+        # Verify system
+        verify_result = self._verify_system()
+            
+        # Installation complete
+        end_time = time.time()
+        installation_time = end_time - start_time
+        self._print(f"\n=== Installation Complete ({installation_time:.1f} seconds) ===", "green")
+        
+        # Show summary of installation status
+        self._print("\nInstallation Summary:", "cyan")
+        self._print(f"Platform: {self.platform} ({platform.release()})", "green")
+        self._print(f"Python: {platform.python_version()}", "green")
+        
+        # Hardware detection
+        if gpu_info["available"]:
+            gpu_text = f"Detected: {gpu_info['name']}"
+            if gpu_info["is_rtx_3080"]:
+                gpu_text += " (Optimized)"
+            self._print(f"GPU: {gpu_text}", "green")
+        else:
+            self._print("GPU: Not detected or not compatible", "yellow")
+            
+        # Tools detection
+        self._print(f"Git found: {'Yes' if self.has_git else 'No'}", "green" if self.has_git else "yellow")
+        self._print(f"C++ compiler found: {'Yes' if self.has_cpp_compiler else 'No'}", "green" if self.has_cpp_compiler else "yellow")
+        self._print(f"Windows SDK found: {'Yes' if self.has_windows_sdk else 'No'}", "green" if self.has_windows_sdk else "yellow")
+        self._print(f"System verification: {'Passed' if verify_result else 'Failed'}", "green" if verify_result else "yellow")
+        
+        # Reminders
+        self._print("\nImportant Reminders:", "cyan")
+        self._print("1. Edit config.yaml to add your Picovoice access key from https://console.picovoice.ai/", "yellow")
+        self._print("2. To run Maggie AI Assistant:", "yellow")
+        
+        if self.platform == "Windows":
+            self._print("   .\\venv\\Scripts\\activate", "cyan")
+            self._print("   python main.py", "cyan")
+        else:
+            self._print("   source venv/bin/activate", "cyan")
+            self._print("   python main.py", "cyan")
+        
+        # Required tools not found warnings
+        missing_tools = []
+        if not self.has_git:
+            missing_tools.append(("Git", "https://git-scm.com/download/win"))
+            
+        if not self.has_cpp_compiler:
+            missing_tools.append(("Visual C++ Build Tools", "https://visualstudio.microsoft.com/visual-cpp-build-tools/"))
+            
+        if not self.has_windows_sdk and self.platform == "Windows":
+            missing_tools.append(("Windows SDK", "https://developer.microsoft.com/en-us/windows/downloads/windows-sdk/"))
+            
+        if missing_tools:
+            self._print("\nMissing Required Tools:", "yellow")
+            for i, (tool, url) in enumerate(missing_tools, 1):
+                self._print(f"{i}. {tool} not found", "yellow")
+                self._print(f"   Install from: {url}", "yellow")
+            self._print("\nInstalling these tools will enable full functionality.", "yellow")
+            
+        # Ask if user wants to start Maggie
+        response = input(f"\n{self.colors['magenta']}Would you like to start Maggie now? (y/n): {self.colors['reset']}")
+        
+        if response.lower() == "y":
+            self._print("\nStarting Maggie AI Assistant...", "cyan")
+            
+            if self.platform == "Windows":
+                python_cmd = os.path.join(self.base_dir, "venv", "Scripts", "python")
+            else:
+                python_cmd = os.path.join(self.base_dir, "venv", "bin", "python")
+                
+            self._run_command([python_cmd, "main.py"])
+            
+        return True
+
+
+def main():
+    """
+    Main entry point for the installer.
+    
+    Parses command-line arguments and runs the installation process.
+    
+    Returns
+    -------
+    int
+        Exit code - 0 for success, 1 for error
+    """
+    parser = argparse.ArgumentParser(description="Maggie AI Assistant Installer")
+    parser.add_argument("--verbose", action="store_true", help="Enable verbose output")
+    args = parser.parse_args()
+    
+    installer = MaggieInstaller(verbose=args.verbose)
+    success = installer.install()
+    
+    return 0 if success else 1
+
+if __name__ == "__main__":
+    sys.exit(main())
