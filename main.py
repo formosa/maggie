@@ -29,10 +29,9 @@ $ python main.py --optimize
 
 # Standard library imports
 import os
+import argparse
 import sys
 sys.path.append(r"c:\ai\claude\maggie\venv\lib\site-packages")
-
-import argparse
 import platform
 import multiprocessing
 import yaml  # Added missing import
@@ -563,7 +562,8 @@ def check_dependencies() -> bool:
         try:
             module_name = dep.replace("-", "_")
             if dep == "PyQt6":
-                module_name = "PyQt6.QtCore"
+                # module_name = "PyQt6.QtCore"
+                 module_name = "PyQt6"
             __import__(module_name)
         except ImportError:
             missing_deps.append(dep)

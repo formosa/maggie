@@ -19,7 +19,9 @@ Examples
 """
 
 # Standard library imports
+import argparse
 import sys
+sys.path.append(r"c:\ai\claude\maggie\venv\lib\site-packages")
 import threading
 import queue
 import time
