@@ -5,7 +5,7 @@
 wake_word:
   sensitivity: 0.5
   keyword_path: null  # Set this to a custom keyword file path or keep null to use default "maggie"
-  porcupine_access_key: ""  # Your Porcupine access key - REQUIRED
+  porcupine_access_key: "9hQNkT59LV9YLj02ilmzaIg4zqUjX0YycaHTcHPEJuQ1/58G/r4BXA=="  # Your Porcupine access key - REQUIRED
   cpu_threshold: 5.0  # Maximum CPU usage percentage
 
 # Speech processing configuration
