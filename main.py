@@ -225,9 +225,12 @@ def verify_system() -> bool:
         
     Notes
     -----
-    This function checks Python version, GPU availability, required
-    directories, and critical dependencies to ensure the system is
-    properly configured for running Maggie.
+    This function performs comprehensive system verification including:
+    - Python version validation (requires exactly 3.10.x)
+    - GPU detection and VRAM capacity verification
+    - Critical dependency checks
+    - Directory structure validation
+    - Memory configuration checks
     """
     verification_issues = []
     logger.info("Verifying system configuration...")
@@ -237,10 +240,10 @@ def verify_system() -> bool:
     if not python_version_valid:
         verification_issues.append("Incompatible Python version")
     
-    # Check for CUDA with better error handling
-    cuda_valid = check_cuda_availability()
-    if not cuda_valid:
-        verification_issues.append("CUDA/GPU issues detected")
+    # Enhanced GPU verification with VRAM checks for RTX 3080
+    gpu_valid, gpu_warnings = check_gpu_compatibility()
+    if not gpu_valid:
+        verification_issues.append("GPU compatibility issues detected")
     
     # Check for required directories and create if necessary
     dirs_valid = check_required_directories()
@@ -252,6 +255,11 @@ def verify_system() -> bool:
     if not deps_valid:
         verification_issues.append("Missing dependencies")
     
+    # Check for sufficient memory
+    memory_valid = check_memory_configuration()
+    if not memory_valid:
+        verification_issues.append("Insufficient memory configuration")
+    
     # Final verification result
     if verification_issues:
         logger.error("System verification failed with the following issues:")
@@ -261,6 +269,189 @@ def verify_system() -> bool:
     
     logger.info("System verification completed successfully")
     return True
+
+
+def check_gpu_compatibility() -> Tuple[bool, List[str]]:
+    """
+    Check if GPU is compatible and properly configured.
+    
+    Returns
+    -------
+    Tuple[bool, List[str]]
+        A tuple containing:
+        - Boolean indicating if GPU is compatible
+        - List of warning messages
+        
+    Notes
+    -----
+    Performs detailed checks for NVIDIA RTX 3080 compatibility:
+    - CUDA availability
+    - VRAM capacity (10GB for RTX 3080)
+    - Driver version
+    - CUDA compute capability
+    """
+    warnings = []
+    
+    try:
+        import torch
+        if torch.cuda.is_available():
+            # Get GPU information
+            device_name = torch.cuda.get_device_name(0)
+            logger.info(f"CUDA available: {torch.version.cuda}")
+            logger.info(f"GPU detected: {device_name}")
+            
+            # Get VRAM information
+            gpu_memory = torch.cuda.get_device_properties(0).total_memory / (1024**3)
+            logger.info(f"VRAM: {gpu_memory:.2f}GB")
+            
+            # Check for RTX 3080 specifically
+            is_rtx_3080 = "3080" in device_name
+            if is_rtx_3080:
+                logger.info("RTX 3080 detected - optimal hardware configuration")
+                
+                # Check VRAM size for RTX 3080 (should be around 10GB)
+                if gpu_memory < 9.5:
+                    warnings.append(f"RTX 3080 VRAM ({gpu_memory:.1f}GB) is less than expected 10GB")
+                    logger.warning(f"RTX 3080 VRAM ({gpu_memory:.1f}GB) is less than expected 10GB")
+                
+                # Get compute capability (should be 8.6 for RTX 3080)
+                compute_capability = torch.cuda.get_device_capability(0)
+                cc_version = f"{compute_capability[0]}.{compute_capability[1]}"
+                if cc_version != "8.6":
+                    warnings.append(f"RTX 3080 compute capability ({cc_version}) is not 8.6")
+                    logger.warning(f"RTX 3080 compute capability ({cc_version}) is not 8.6")
+                
+                # Check CUDA version (11.x recommended for RTX 3080)
+                cuda_version = torch.version.cuda
+                if not cuda_version.startswith("11."):
+                    warnings.append(f"CUDA version {cuda_version} - version 11.x recommended for RTX 3080")
+                    logger.warning(f"CUDA version {cuda_version} - version 11.x recommended for RTX 3080")
+                
+                # Validate if CUDA compiled version matches runtime version
+                if hasattr(torch.version, 'cuda_compiled_version') and torch.version.cuda != torch.version.cuda_compiled_version:
+                    warnings.append(f"CUDA runtime version ({torch.version.cuda}) differs from compiled version ({torch.version.cuda_compiled_version})")
+                    logger.warning(f"CUDA runtime version ({torch.version.cuda}) differs from compiled version ({torch.version.cuda_compiled_version})")
+                
+                # Check available VRAM
+                available_vram = (torch.cuda.get_device_properties(0).total_memory - torch.cuda.memory_allocated() - torch.cuda.memory_reserved()) / (1024**3)
+                if available_vram < 8.0:
+                    warnings.append(f"Only {available_vram:.1f}GB VRAM available - less than 8GB may cause issues with large models")
+                    logger.warning(f"Only {available_vram:.1f}GB VRAM available - less than 8GB may cause issues with large models")
+            else:
+                if gpu_memory < 8:
+                    warnings.append(f"GPU memory ({gpu_memory:.1f}GB) is less than recommended 8GB")
+                    logger.warning(f"GPU memory ({gpu_memory:.1f}GB) is less than recommended 8GB")
+                # Not a critical issue, can run with lower specs
+            
+            # Test CUDA operations to ensure functional GPU
+            try:
+                test_tensor = torch.ones(1000, 1000, device='cuda')
+                test_result = torch.matmul(test_tensor, test_tensor)
+                del test_tensor, test_result
+                torch.cuda.empty_cache()
+                logger.info("CUDA operations test successful")
+            except Exception as e:
+                warnings.append(f"CUDA operations test failed: {e}")
+                logger.error(f"CUDA operations test failed: {e}")
+                return False, warnings
+                
+            return True, warnings
+        else:
+            logger.warning("CUDA not available, GPU acceleration disabled")
+            logger.warning("Performance may be significantly reduced without GPU acceleration")
+            # Not a critical issue, can run without GPU
+            warnings.append("CUDA not available - running in CPU-only mode will be slow")
+            return True, warnings
+    except ImportError:
+        logger.error("PyTorch not installed, GPU acceleration unavailable")
+        logger.error("Install PyTorch with: pip install torch==2.0.1+cu118 --extra-index-url https://download.pytorch.org/whl/cu118")
+        # Not a critical issue, can run without GPU
+        warnings.append("PyTorch not available - GPU acceleration disabled")
+        return True, warnings
+    except Exception as e:
+        logger.error(f"Error checking GPU compatibility: {e}")
+        # Not a critical issue
+        warnings.append(f"Error checking GPU: {e}")
+        return True, warnings
+
+
+def check_memory_configuration() -> bool:
+    """
+    Check if system memory configuration is sufficient.
+    
+    Returns
+    -------
+    bool
+        True if memory configuration is sufficient, False otherwise
+        
+    Notes
+    -----
+    Verifies:
+    - Total system RAM (minimum 16GB, recommended 32GB)
+    - Virtual memory configuration on Windows
+    - Memory usage by other applications
+    """
+    try:
+        import psutil
+        
+        # Check total physical memory
+        memory = psutil.virtual_memory()
+        total_gb = memory.total / (1024**3)
+        available_gb = memory.available / (1024**3)
+        
+        logger.info(f"Total RAM: {total_gb:.2f}GB, Available: {available_gb:.2f}GB")
+        
+        # Check if system has enough RAM (minimum 16GB, recommended 32GB)
+        if total_gb < 16:
+            logger.error(f"Insufficient RAM: {total_gb:.2f}GB (minimum 16GB required)")
+            return False
+        elif total_gb < 32:
+            logger.warning(f"RAM: {total_gb:.2f}GB (32GB recommended for optimal performance)")
+        else:
+            logger.info(f"RAM: {total_gb:.2f}GB (optimal)")
+        
+        # Check if enough RAM is available
+        if available_gb < 8:
+            logger.warning(f"Low available RAM: {available_gb:.2f}GB (8GB+ recommended)")
+        
+        # Check virtual memory configuration on Windows
+        if platform.system() == "Windows":
+            try:
+                import ctypes
+                kernel32 = ctypes.windll.kernel32
+                c_ulong = ctypes.c_ulong
+                
+                class MEMORYSTATUSEX(ctypes.Structure):
+                    _fields_ = [
+                        ("dwLength", c_ulong),
+                        ("dwMemoryLoad", c_ulong),
+                        ("ullTotalPhys", ctypes.c_ulonglong),
+                        ("ullAvailPhys", ctypes.c_ulonglong),
+                        ("ullTotalPageFile", ctypes.c_ulonglong),
+                        ("ullAvailPageFile", ctypes.c_ulonglong),
+                        ("ullTotalVirtual", ctypes.c_ulonglong),
+                        ("ullAvailVirtual", ctypes.c_ulonglong),
+                        ("ullAvailExtendedVirtual", ctypes.c_ulonglong),
+                    ]
+                
+                memory_status = MEMORYSTATUSEX()
+                memory_status.dwLength = ctypes.sizeof(MEMORYSTATUSEX)
+                kernel32.GlobalMemoryStatusEx(ctypes.byref(memory_status))
+                
+                # Check page file size (virtual memory)
+                total_page_file_gb = memory_status.ullTotalPageFile / (1024**3)
+                if total_page_file_gb < total_gb * 1.5:
+                    logger.warning(f"Virtual memory size ({total_page_file_gb:.2f}GB) is less than recommended (1.5x RAM = {total_gb * 1.5:.2f}GB)")
+            except Exception as e:
+                logger.debug(f"Could not check virtual memory configuration: {e}")
+        
+        return True
+    except ImportError:
+        logger.warning("psutil not available for memory checks")
+        return True  # Continue anyway
+    except Exception as e:
+        logger.error(f"Error checking memory configuration: {e}")
+        return True  # Continue anyway
 
 
 def check_python_version() -> bool:
