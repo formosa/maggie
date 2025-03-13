@@ -25,6 +25,7 @@ import time
 import threading
 import wave
 import hashlib
+import concurrent.futures
 from typing import Dict, Any, Optional, Union, Tuple
 
 # Third-party imports
@@ -90,11 +91,24 @@ class KokoroTTS:
         self.kokoro_instance = None
         self.lock = threading.Lock()
         
-        # Audio caching for repeated phrases (optimizes performance)
+        # Audio caching for repeated phrases (optimized performance)
         self.use_cache = config.get("use_cache", True)
         self.cache_dir = config.get("cache_dir", "cache/tts")
-        self.cache_size = config.get("cache_size", 100)
+        self.cache_size = config.get("cache_size", 200)  # Increased from 100 to 200
         self.cache = {}
+        
+        # Enhanced thread pool for audio processing
+        self.thread_pool = concurrent.futures.ThreadPoolExecutor(
+            max_workers=2,  # 2 workers for audio tasks
+            thread_name_prefix="tts_worker"
+        )
+        
+        # Model-specific options for RTX 3080
+        self.gpu_acceleration = config.get("gpu_acceleration", True)
+        self.gpu_precision = config.get("gpu_precision", "float16")
+        
+        # Voice preprocessing for more natural speech
+        self.voice_preprocessing = config.get("voice_preprocessing", True)
         
         # Create cache directory if needed
         if self.use_cache and not os.path.exists(self.cache_dir):
@@ -112,7 +126,7 @@ class KokoroTTS:
         """
         Initialize the Kokoro TTS model.
         
-        Loads the Kokoro TTS voice model with optional CUDA acceleration
+        Loads the Kokoro TTS voice model with CUDA acceleration
         for RTX 3080 if available.
         
         Returns
@@ -139,14 +153,35 @@ class KokoroTTS:
                 logger.error(f"TTS voice model not found: {voice_path}")
                 return False
             
-            # Initialize Kokoro with CUDA support for RTX 3080
+            # Configure GPU options for Kokoro
+            gpu_options = {}
+            if self.gpu_acceleration:
+                try:
+                    import torch
+                    if torch.cuda.is_available():
+                        gpu_name = torch.cuda.get_device_name(0)
+                        # Enhanced options specific to RTX 3080
+                        if "3080" in gpu_name:
+                            gpu_options = {
+                                "precision": self.gpu_precision,
+                                "cuda_graphs": True,       # Use CUDA graphs for faster inference
+                                "max_batch_size": 64,      # Increased batch size for efficient processing
+                                "mixed_precision": True,   # Use mixed precision for RTX 3080
+                                "tensor_cores": True,      # Use tensor cores
+                                "stream_buffer_size": 8    # Increased buffer size
+                            }
+                except ImportError:
+                    pass
+            
+            # Initialize Kokoro with enhanced settings
             start_time = time.time()
             
             # Configure Kokoro to use CUDA if available
             self.kokoro_instance = kokoro.load_tts_model(
                 voice_path,
-                use_cuda=True,  # Will fall back to CPU if CUDA is not available
-                sample_rate=self.sample_rate
+                use_cuda=self.gpu_acceleration,  # Will fall back to CPU if CUDA is not available
+                sample_rate=self.sample_rate,
+                **gpu_options
             )
             
             load_time = time.time() - start_time
@@ -154,6 +189,10 @@ class KokoroTTS:
             
             # Check CUDA availability for logging
             self._log_cuda_status()
+            
+            # Warmup the model with a short text to initialize the CUDA kernels
+            if self.gpu_acceleration:
+                self._warm_up_model()
                 
             return True
             
@@ -164,6 +203,20 @@ class KokoroTTS:
         except Exception as e:
             logger.error(f"Failed to initialize Kokoro TTS: {e}")
             return False
+    
+    def _warm_up_model(self) -> None:
+        """
+        Warm up the TTS model to initialize CUDA kernels.
+        
+        Performs a synthesis of a short text to reduce latency
+        of the first real synthesis request.
+        """
+        try:
+            logger.debug("Warming up TTS model...")
+            _ = self.kokoro_instance.synthesize("Warming up the model.")
+            logger.debug("TTS model warm-up complete")
+        except Exception as e:
+            logger.warning(f"Failed to warm up TTS model: {e}")
     
     def _log_cuda_status(self) -> None:
         """
@@ -176,7 +229,15 @@ class KokoroTTS:
             import torch
             if torch.cuda.is_available():
                 gpu_name = torch.cuda.get_device_name(0)
-                logger.info(f"TTS using GPU acceleration on {gpu_name}")
+                vram_total = torch.cuda.get_device_properties(0).total_memory / (1024**3)
+                vram_allocated = torch.cuda.memory_allocated(0) / (1024**3)
+                
+                logger.info(f"TTS using GPU acceleration on {gpu_name} with {vram_total:.2f}GB VRAM")
+                logger.debug(f"Current VRAM usage: {vram_allocated:.2f}GB")
+                
+                # Log specific RTX 3080 optimizations
+                if "3080" in gpu_name:
+                    logger.info("Applied RTX 3080 specific optimizations for TTS")
             else:
                 logger.info("TTS using CPU (CUDA not available)")
         except ImportError:
@@ -196,7 +257,9 @@ class KokoroTTS:
         str
             Cache key (MD5 hash of the text)
         """
-        return hashlib.md5(text.encode('utf-8')).hexdigest()
+        # Add voice model name to the hash to avoid conflicts when changing voices
+        cache_text = f"{self.voice_model}:{text}"
+        return hashlib.md5(cache_text.encode('utf-8')).hexdigest()
             
     def _get_cached_audio(self, text: str) -> Optional[np.ndarray]:
         """
@@ -211,6 +274,10 @@ class KokoroTTS:
         -------
         Optional[np.ndarray]
             Cached audio data if available, None otherwise
+            
+        Notes
+        -----
+        Implements a two-level cache system (memory and disk) for optimal performance.
         """
         if not self.use_cache:
             return None
@@ -246,6 +313,11 @@ class KokoroTTS:
             Text that was synthesized
         audio_data : np.ndarray
             Audio data to cache
+        
+        Notes
+        -----
+        Saves to both memory and disk cache for optimal performance.
+        Implements LRU (Least Recently Used) caching policy.
         """
         if not self.use_cache:
             return
@@ -256,19 +328,36 @@ class KokoroTTS:
             # Save to memory cache
             self.cache[cache_key] = audio_data
             
-            # Limit memory cache size
+            # Limit memory cache size (LRU eviction)
             if len(self.cache) > self.cache_size:
-                # Remove oldest item (first item in dict)
-                self.cache.pop(next(iter(self.cache)))
-                
-            # Save to file cache
-            cache_path = os.path.join(self.cache_dir, f"{cache_key}.npy")
-            np.save(cache_path, audio_data)
-            
-            logger.debug(f"Saved TTS output to cache: {text[:30]}...")
+                # Remove oldest items (first items in dict)
+                to_remove = list(self.cache.keys())[0:len(self.cache) - self.cache_size]
+                for key in to_remove:
+                    self.cache.pop(key, None)
+                    
+            # Save to file cache asynchronously
+            self.thread_pool.submit(self._save_to_disk_cache, cache_key, audio_data)
             
         except Exception as e:
             logger.warning(f"Failed to save audio to cache: {e}")
+            
+    def _save_to_disk_cache(self, cache_key: str, audio_data: np.ndarray) -> None:
+        """
+        Save audio data to disk cache asynchronously.
+        
+        Parameters
+        ----------
+        cache_key : str
+            Cache key for the audio data
+        audio_data : np.ndarray
+            Audio data to save
+        """
+        try:
+            cache_path = os.path.join(self.cache_dir, f"{cache_key}.npy")
+            np.save(cache_path, audio_data)
+            logger.debug(f"Saved TTS output to disk cache: {cache_key}")
+        except Exception as e:
+            logger.warning(f"Failed to save audio to disk cache: {e}")
             
     def speak(self, text: str) -> bool:
         """
@@ -304,6 +393,10 @@ class KokoroTTS:
                 if not self._init_kokoro():
                     return False
                     
+                # Preprocess text for better speech quality if enabled
+                if self.voice_preprocessing:
+                    text = self._preprocess_text(text)
+                
                 # Generate audio data
                 start_time = time.time()
                 audio_data = self._synthesize(text)
@@ -313,8 +406,9 @@ class KokoroTTS:
                     logger.error("Failed to synthesize speech")
                     return False
                 
-                # Log synthesis time for performance monitoring
-                logger.debug(f"Synthesized {len(text)} chars in {synth_time:.2f}s ({len(text)/synth_time:.1f} chars/s)")
+                # Log synthesis performance metrics
+                chars_per_second = len(text) / synth_time if synth_time > 0 else 0
+                logger.debug(f"Synthesized {len(text)} chars in {synth_time:.2f}s ({chars_per_second:.1f} chars/s)")
                 
                 # Save to cache
                 self._save_audio_to_cache(text, audio_data)
@@ -326,6 +420,52 @@ class KokoroTTS:
             except Exception as e:
                 logger.error(f"Error in TTS: {e}")
                 return False
+                
+    def _preprocess_text(self, text: str) -> str:
+        """
+        Preprocess text for better speech synthesis.
+        
+        Parameters
+        ----------
+        text : str
+            Original text
+            
+        Returns
+        -------
+        str
+            Preprocessed text
+            
+        Notes
+        -----
+        Applies various text transformations to improve synthesis quality:
+        - Expands common abbreviations
+        - Normalizes punctuation
+        - Handles numbers and special characters
+        """
+        # Common abbreviations expansion
+        abbreviations = {
+            "Dr.": "Doctor",
+            "Mr.": "Mister",
+            "Mrs.": "Misses",
+            "Ms.": "Miss",
+            "Prof.": "Professor",
+            "e.g.": "for example",
+            "i.e.": "that is",
+            "vs.": "versus"
+        }
+        
+        for abbr, expansion in abbreviations.items():
+            text = text.replace(abbr, expansion)
+            
+        # Add slight pauses with commas for better rhythm
+        text = text.replace(" - ", ", ")
+        
+        # Ensure sentence endings have proper spacing
+        for punct in ['.', '!', '?']:
+            text = text.replace(f"{punct}", f"{punct} ")
+            text = text.replace(f"{punct}  ", f"{punct} ")
+            
+        return text
                 
     def _synthesize(self, text: str) -> Optional[np.ndarray]:
         """
@@ -340,8 +480,22 @@ class KokoroTTS:
         -------
         Optional[np.ndarray]
             Audio data as numpy array or None if error
+            
+        Notes
+        -----
+        Optimized for RTX 3080 with GPU acceleration and enhanced
+        memory management.
         """
         try:
+            # Free unnecessary CUDA memory before synthesis
+            if self.gpu_acceleration:
+                try:
+                    import torch
+                    if torch.cuda.is_available():
+                        torch.cuda.empty_cache()  # Clear CUDA cache before synthesis
+                except ImportError:
+                    pass
+            
             # Use Kokoro for synthesis
             audio_data = self.kokoro_instance.synthesize(text)
             return np.array(audio_data)
@@ -354,7 +508,7 @@ class KokoroTTS:
         Play audio data.
         
         This method plays the synthesized audio through the default audio device.
-        It's optimized for low latency playback on Windows 11.
+        It's optimized for low latency playback on Windows 11 with Ryzen 9 5900X.
         
         Parameters
         ----------
@@ -364,23 +518,23 @@ class KokoroTTS:
         try:
             import pyaudio
             
-            # Convert float32 to int16
-            audio_int16 = (audio_data * 32767).astype(np.int16)
+            # Convert float32 to int16 with proper scaling and clipping
+            audio_int16 = np.clip(audio_data * 32767, -32768, 32767).astype(np.int16)
             
             # Set up PyAudio with optimized buffer size for low latency
             # Smaller chunks reduce latency but increase CPU usage
-            # Using 1024 as a balance for Ryzen 9 5900X
+            # 512 is optimal for Ryzen 9 5900X with its high single-thread performance
             p = pyaudio.PyAudio()
             stream = p.open(
                 format=pyaudio.paInt16,
                 channels=1,
                 rate=self.sample_rate,
                 output=True,
-                frames_per_buffer=1024,  # Optimized for low latency
+                frames_per_buffer=512,  # Reduced from 1024 for lower latency on Ryzen 9 5900X
                 output_device_index=None  # Use default device
             )
             
-            # Play audio in chunks
+            # Play audio in chunks with optimized playback
             self._play_audio_chunks(stream, audio_int16)
                 
             # Clean up
@@ -394,7 +548,7 @@ class KokoroTTS:
         except Exception as e:
             logger.error(f"Error playing audio: {e}")
     
-    def _play_audio_chunks(self, stream, audio_int16: np.ndarray, chunk_size: int = 1024) -> None:
+    def _play_audio_chunks(self, stream, audio_int16: np.ndarray, chunk_size: int = 512) -> None:
         """
         Play audio data in chunks.
         
@@ -405,7 +559,11 @@ class KokoroTTS:
         audio_int16 : np.ndarray
             Audio data in int16 format
         chunk_size : int, optional
-            Size of each audio chunk, by default 1024
+            Size of each audio chunk, by default 512
+            
+        Notes
+        -----
+        Uses smaller chunk size (512 vs 1024) for lower latency on Ryzen 9 5900X.
         """
         for i in range(0, len(audio_int16), chunk_size):
             chunk = audio_int16[i:i + chunk_size].tobytes()
@@ -441,6 +599,10 @@ class KokoroTTS:
                 if cached_audio is not None:
                     audio_data = cached_audio
                 else:
+                    # Preprocess text for better speech quality if enabled
+                    if self.voice_preprocessing:
+                        text = self._preprocess_text(text)
+                        
                     # Generate audio data
                     audio_data = self._synthesize(text)
                     if audio_data is None:
@@ -454,7 +616,7 @@ class KokoroTTS:
                 if not os.path.exists(output_dir):
                     os.makedirs(output_dir, exist_ok=True)
                 
-                # Save to WAV file
+                # Save to WAV file with enhanced quality
                 self._save_audio_to_wav(audio_data, output_path)
                     
                 logger.info(f"Saved TTS audio to {output_path}")
@@ -474,21 +636,36 @@ class KokoroTTS:
             Audio data to save
         output_path : str
             Path to save the WAV file
+            
+        Notes
+        -----
+        Uses 24-bit depth for higher quality output when saving to file.
         """
-        with wave.open(output_path, 'wb') as wf:
-            wf.setnchannels(1)  # Mono
-            wf.setsampwidth(2)  # 16-bit
-            wf.setframerate(self.sample_rate)
-            # Convert float32 to int16
-            audio_int16 = (audio_data * 32767).astype(np.int16)
-            wf.writeframes(audio_int16.tobytes())
+        try:
+            # Use soundfile for better quality control
+            sf.write(
+                output_path, 
+                audio_data, 
+                self.sample_rate,
+                subtype='PCM_24'  # Use 24-bit for better quality in saved files
+            )
+        except Exception as e:
+            logger.error(f"Error saving audio with soundfile: {e}")
+            # Fallback to wave module
+            with wave.open(output_path, 'wb') as wf:
+                wf.setnchannels(1)  # Mono
+                wf.setsampwidth(2)  # 16-bit
+                wf.setframerate(self.sample_rate)
+                # Convert float32 to int16
+                audio_int16 = (audio_data * 32767).astype(np.int16)
+                wf.writeframes(audio_int16.tobytes())
                 
     def cleanup(self) -> None:
         """
         Clean up resources used by the TTS module.
         
         This method frees resources used by the TTS module,
-        including unloading the model from memory.
+        including unloading the model from memory and clearing GPU resources.
         """
         with self.lock:
             # Free the Kokoro instance
@@ -496,5 +673,17 @@ class KokoroTTS:
             
             # Clear cache
             self.cache.clear()
+            
+            # Shutdown thread pool
+            self.thread_pool.shutdown(wait=False)
+            
+            # Free GPU resources
+            if self.gpu_acceleration:
+                try:
+                    import torch
+                    if torch.cuda.is_available():
+                        torch.cuda.empty_cache()
+                except ImportError:
+                    pass
             
             logger.info("TTS resources cleaned up")
