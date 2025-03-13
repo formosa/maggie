@@ -12,7 +12,7 @@ The installation process includes:
 1. System compatibility verification
 2. Environment setup
 3. Dependency installation
-4. Model downloads
+4. Model downloads (including 'af_heart' TTS voice model)
 5. Configuration creation
 6. System optimization
 
@@ -26,6 +26,9 @@ For verbose output:
 
 To skip problematic packages:
     $ python install.py --skip-problematic-packages
+
+To install without GPU support (CPU only):
+    $ python install.py --cpu-only
 
 Notes
 -----
@@ -46,7 +49,8 @@ import re
 import urllib.request
 import time
 import zipfile
-from typing import List, Dict, Any, Optional, Tuple
+import json
+from typing import List, Dict, Any, Optional, Tuple, Union
 from pathlib import Path
 
 
@@ -60,16 +64,47 @@ class MaggieInstaller:
     
     Parameters
     ----------
-    verbose : bool, optional
-        Whether to display verbose output, by default False
-    skip_problematic : bool, optional
-        Whether to skip problematic packages that may have compilation issues,
-        by default False
+    verbose : bool
+        Whether to display verbose output, default=False
+    skip_problematic : bool
+        Whether to skip problematic packages with compilation issues, default=False
+    cpu_only : bool
+        Whether to install without GPU support, default=False
+    force_reinstall : bool
+        Whether to force reinstallation of packages, default=False
+    
+    Attributes
+    ----------
+    verbose : bool
+        Flag for verbose output
+    skip_problematic : bool
+        Flag to skip problematic packages
+    cpu_only : bool
+        Flag to disable GPU support
+    force_reinstall : bool
+        Flag to force package reinstallation
+    platform : str
+        Detected platform ("Windows" or "Linux")
+    base_dir : Path
+        Base directory for installation
+    colors : Dict[str, str]
+        ANSI color codes for terminal output
+    required_dirs : List[str]
+        Required directories for installation
+    is_admin : bool
+        Whether script is running with admin/root privileges
+    has_cpp_compiler : bool
+        Whether C++ compiler is available
+    has_git : bool
+        Whether Git is available
+    has_windows_sdk : bool
+        Whether Windows SDK is available
     """
     
-    def __init__(self, verbose: bool = False, skip_problematic: bool = False):
+    def __init__(self, verbose: bool = False, skip_problematic: bool = False, 
+                 cpu_only: bool = False, force_reinstall: bool = False):
         """
-        Initialize the installer.
+        Initialize the installer with configuration options.
         
         Parameters
         ----------
@@ -78,9 +113,15 @@ class MaggieInstaller:
         skip_problematic : bool, optional
             Whether to skip problematic packages that may have compilation issues,
             by default False
+        cpu_only : bool, optional
+            Whether to install without GPU support, by default False
+        force_reinstall : bool, optional
+            Whether to force reinstallation of packages, by default False
         """
         self.verbose = verbose
         self.skip_problematic = skip_problematic
+        self.cpu_only = cpu_only
+        self.force_reinstall = force_reinstall
         self.platform = platform.system()
         self.base_dir = Path(os.path.dirname(os.path.abspath(__file__)))
         
@@ -96,7 +137,8 @@ class MaggieInstaller:
             "yellow": "\033[93m",
             "blue": "\033[94m",
             "magenta": "\033[95m",
-            "cyan": "\033[96m"
+            "cyan": "\033[96m",
+            "bold": "\033[1m"
         }
         
         # Required directories
@@ -104,13 +146,14 @@ class MaggieInstaller:
             "logs",
             "models",
             "models/tts",
-            "models/tts/en_US-kathleen-medium",
+            "models/tts/af_heart",  # Changed from en_US-kathleen-medium to af_heart
             "recipes",
             "templates",
             "cache",
             "cache/tts",
             "downloads",  # Directory for downloaded files
             "downloads/wheels",  # Directory for wheel files
+            "downloads/models",  # Directory for model downloads
             "site-packages"  # Directory for manually installed packages
         ]
         
@@ -122,9 +165,9 @@ class MaggieInstaller:
         self.has_git = False
         self.has_windows_sdk = False
     
-    def _print(self, message: str, color: str = None):
+    def _print(self, message: str, color: Optional[str] = None, bold: bool = False):
         """
-        Print a message with optional color.
+        Print a message with optional color and formatting.
         
         Parameters
         ----------
@@ -132,11 +175,15 @@ class MaggieInstaller:
             Message to print
         color : str, optional
             Color name, by default None
+        bold : bool, optional
+            Whether to apply bold formatting, by default False
         """
+        formatted_message = message
+        if bold and "bold" in self.colors:
+            formatted_message = f"{self.colors['bold']}{formatted_message}"
         if color and color in self.colors:
-            print(f"{self.colors[color]}{message}{self.colors['reset']}")
-        else:
-            print(message)
+            formatted_message = f"{self.colors[color]}{formatted_message}{self.colors['reset']}"
+        print(formatted_message)
             
     def _check_admin(self) -> bool:
         """
@@ -156,18 +203,21 @@ class MaggieInstaller:
         else:
             return os.geteuid() == 0
             
-    def _run_command(self, cmd: List[str], check: bool = True, shell: bool = False) -> Tuple[int, str, str]:
+    def _run_command(self, cmd: List[str], check: bool = True, shell: bool = False, 
+                    capture_output: bool = True) -> Tuple[int, str, str]:
         """
         Run a command and return the result.
         
         Parameters
         ----------
         cmd : List[str]
-            Command to run
+            Command to run as a list of strings
         check : bool, optional
             Whether to check for errors, by default True
         shell : bool, optional
             Whether to run as shell command, by default False
+        capture_output : bool, optional
+            Whether to capture stdout/stderr, by default True
             
         Returns
         -------
@@ -178,17 +228,26 @@ class MaggieInstaller:
             self._print(f"Running command: {' '.join(cmd)}", "cyan")
             
         try:
-            process = subprocess.Popen(
-                cmd if not shell else " ".join(cmd),
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                shell=shell,
-                text=True
-            )
+            if capture_output:
+                process = subprocess.Popen(
+                    cmd if not shell else " ".join(cmd),
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    shell=shell,
+                    text=True
+                )
+                
+                stdout, stderr = process.communicate()
+            else:
+                # Run with direct output to terminal
+                process = subprocess.Popen(
+                    cmd if not shell else " ".join(cmd),
+                    shell=shell
+                )
+                stdout, stderr = "", ""
+                process.communicate()
             
-            stdout, stderr = process.communicate()
-            
-            if check and process.returncode != 0:
+            if check and process.returncode != 0 and capture_output:
                 self._print(f"Command failed: {' '.join(cmd)}", "red")
                 self._print(f"Error: {stderr}", "red")
                 
@@ -198,9 +257,10 @@ class MaggieInstaller:
             self._print(f"Error running command: {e}", "red")
             return -1, "", str(e)
     
-    def _download_file(self, url: str, destination: str) -> bool:
+    def _download_file(self, url: str, destination: str, 
+                      show_progress: bool = True) -> bool:
         """
-        Download a file from a URL.
+        Download a file from a URL with progress tracking.
         
         Parameters
         ----------
@@ -208,6 +268,8 @@ class MaggieInstaller:
             URL to download from
         destination : str
             Path to save the file to
+        show_progress : bool, optional
+            Whether to show a progress bar, by default True
             
         Returns
         -------
@@ -224,7 +286,7 @@ class MaggieInstaller:
             with urllib.request.urlopen(url) as response, open(destination, 'wb') as out_file:
                 file_size = int(response.info().get('Content-Length', 0))
                 downloaded = 0
-                block_size = 1024 * 8  # 8KB blocks
+                block_size = 1024 * 16  # 16KB blocks for faster downloads
                 
                 while True:
                     buffer = response.read(block_size)
@@ -235,12 +297,15 @@ class MaggieInstaller:
                     out_file.write(buffer)
                     
                     # Show progress
-                    if file_size > 0:
+                    if show_progress and file_size > 0:
                         percent = int(downloaded * 100 / file_size)
-                        sys.stdout.write(f"\rDownloaded: {downloaded} / {file_size} bytes ({percent}%)")
+                        bar_length = 30
+                        filled_length = int(bar_length * downloaded // file_size)
+                        bar = '█' * filled_length + '░' * (bar_length - filled_length)
+                        sys.stdout.write(f"\r|{bar}| {percent}% ({downloaded/1024/1024:.1f}MB / {file_size/1024/1024:.1f}MB)")
                         sys.stdout.flush()
             
-            if file_size > 0:
+            if show_progress and file_size > 0:
                 sys.stdout.write("\n")
                 
             self._print(f"Download completed: {destination}", "green")
@@ -271,7 +336,7 @@ class MaggieInstaller:
         the 'stddef.h' missing header issue on Windows 11.
         """
         try:
-            self._print("Attempting to fix Windows SDK paths...", "cyan")
+            self._print("Configuring Windows SDK paths...", "cyan")
             
             # Find latest SDK version
             versions = []
@@ -335,7 +400,7 @@ class MaggieInstaller:
                 return False
                 
         except Exception as e:
-            self._print(f"Error fixing Windows SDK paths: {e}", "red")
+            self._print(f"Error configuring Windows SDK paths: {e}", "red")
             return False
             
     def _check_git(self) -> bool:
@@ -373,14 +438,16 @@ class MaggieInstaller:
         """
         Check if Windows SDK is properly installed and configured.
         
-        Verifies that the Windows SDK is installed and includes the necessary
-        header files for C++ compilation. Specifically checks for the stddef.h
-        header file that is required for building C++ extensions.
-        
         Returns
         -------
         bool
             True if Windows SDK is properly installed and configured, False otherwise
+            
+        Notes
+        -----
+        Verifies that the Windows SDK is installed and includes the necessary
+        header files for C++ compilation. Specifically checks for the stddef.h
+        header file that is required for building C++ extensions.
         """
         if self.platform != "Windows":
             return True  # Not relevant for non-Windows platforms
@@ -455,14 +522,16 @@ class MaggieInstaller:
         """
         Check if C++ compiler is available for building wheels.
         
-        Verifies that the necessary C++ compiler and build tools are available
-        for building Python extensions from source. On Windows, checks for
-        Visual C++ Build Tools and Windows SDK. On Linux, checks for GCC.
-        
         Returns
         -------
         bool
             True if compiler is available, False otherwise
+            
+        Notes
+        -----
+        Verifies that the necessary C++ compiler and build tools are available
+        for building Python extensions from source. On Windows, checks for
+        Visual C++ Build Tools and Windows SDK. On Linux, checks for GCC.
         """
         if self.platform == "Windows":
             # On Windows, check for Visual C++ Build Tools
@@ -552,15 +621,20 @@ class MaggieInstaller:
         Returns
         -------
         Dict[str, Any]
-            GPU information
+            GPU information including device name, VRAM, and CUDA version
         """
         gpu_info = {
             "available": False,
             "name": None,
             "is_rtx_3080": False,
             "cuda_available": False,
-            "cuda_version": None
+            "cuda_version": None,
+            "vram_gb": None
         }
+        
+        if self.cpu_only:
+            self._print("CPU-only mode selected, skipping GPU checks", "yellow")
+            return gpu_info
         
         try:
             # Check if PyTorch is installed
@@ -577,7 +651,7 @@ class MaggieInstaller:
             returncode, stdout, _ = self._run_command([
                 sys.executable, 
                 "-c", 
-                "import torch; print(f'CUDA available: {torch.cuda.is_available()}'); print(f'GPU: {torch.cuda.get_device_name(0)}' if torch.cuda.is_available() else 'No CUDA-capable GPU detected')"
+                "import torch; print(f'CUDA available: {torch.cuda.is_available()}'); print(f'GPU: {torch.cuda.get_device_name(0)}' if torch.cuda.is_available() else 'No CUDA-capable GPU detected'); print(f'CUDA Version: {torch.version.cuda}' if torch.cuda.is_available() else 'No CUDA')"
             ], check=False)
             
             if returncode != 0:
@@ -596,25 +670,31 @@ class MaggieInstaller:
                     if "3080" in gpu_name:
                         gpu_info["is_rtx_3080"] = True
                         self._print(f"RTX 3080 detected - Will use optimized settings", "green")
+                elif "CUDA Version:" in line and "No CUDA" not in line:
+                    gpu_info["cuda_version"] = line.split("CUDA Version:")[1].strip()
                     
-            # Check CUDA version if available
+            # Get VRAM if available
             if gpu_info["cuda_available"]:
                 returncode, stdout, _ = self._run_command([
                     sys.executable,
                     "-c",
-                    "import torch; print(f'CUDA Version: {torch.version.cuda}')"
+                    "import torch; print(f'VRAM: {torch.cuda.get_device_properties(0).total_memory / (1024**3):.2f} GB')"
                 ], check=False)
                 
-                if returncode == 0 and "CUDA Version:" in stdout:
-                    gpu_info["cuda_version"] = stdout.split("CUDA Version:")[1].strip()
+                if returncode == 0 and "VRAM:" in stdout:
+                    vram_str = stdout.split("VRAM:")[1].strip().split(" GB")[0]
+                    try:
+                        gpu_info["vram_gb"] = float(vram_str)
+                        self._print(f"GPU VRAM: {gpu_info['vram_gb']:.2f} GB", "green")
+                    except ValueError:
+                        pass
+            
+            # Log detailed GPU information
+            if gpu_info["available"]:
+                self._print(f"GPU: {gpu_info['name']}", "green")
+                if gpu_info["cuda_version"]:
                     self._print(f"CUDA Version: {gpu_info['cuda_version']}", "green")
-                    
-                    # Check if CUDA 11.8 (optimal for RTX 3080)
-                    if gpu_info["cuda_version"].startswith("11.8"):
-                        self._print("Optimal CUDA version 11.8 detected", "green")
-                    else:
-                        self._print(f"Note: CUDA 11.8 recommended for best performance with RTX 3080", "yellow")
-                        
+                
         except Exception as e:
             self._print(f"Error checking GPU: {e}", "yellow")
             
@@ -629,7 +709,7 @@ class MaggieInstaller:
         bool
             True if all directories created successfully, False otherwise
         """
-        self._print("\nCreating required directories...", "cyan")
+        self._print("\nCreating required directories...", "cyan", bold=True)
         
         success = True
         for directory in self.required_dirs:
@@ -685,7 +765,7 @@ class MaggieInstaller:
         bool
             True if virtual environment created successfully, False otherwise
         """
-        self._print("\nSetting up Python virtual environment...", "cyan")
+        self._print("\nSetting up Python virtual environment...", "cyan", bold=True)
         
         venv_dir = os.path.join(self.base_dir, "venv")
         
@@ -738,7 +818,7 @@ class MaggieInstaller:
             return False
             
         # Install other basic dependencies
-        basic_deps = ["urllib3", "tqdm"]
+        basic_deps = ["urllib3", "tqdm", "numpy", "psutil", "PyYAML"]
         self._print(f"Installing basic packages: {', '.join(basic_deps)}...", "cyan")
         returncode, _, stderr = self._run_command([python_cmd, "-m", "pip", "install", "--upgrade"] + basic_deps)
         
@@ -911,6 +991,274 @@ class MaggieInstaller:
             self._print(f"Error installing {package_name} from wheel: {e}", "red")
             return False
 
+    def _install_kokoro(self, python_cmd: str) -> bool:
+        """
+        Install the kokoro TTS package.
+        
+        Parameters
+        ----------
+        python_cmd : str
+            Path to Python executable
+            
+        Returns
+        -------
+        bool
+            True if installation successful, False otherwise
+            
+        Notes
+        -----
+        Kokoro is a TTS (Text-to-Speech) package required for the af_heart voice model.
+        It requires PyTorch installation.
+        """
+        try:
+            self._print("\nInstalling kokoro TTS package...", "cyan", bold=True)
+            
+            # First check if kokoro is already installed
+            returncode, stdout, _ = self._run_command([
+                python_cmd, "-c", "import kokoro; print('kokoro available')"
+            ], check=False)
+            
+            if returncode == 0 and "kokoro available" in stdout:
+                self._print("kokoro package already installed", "green")
+                return True
+                
+            # First check if PyTorch is installed
+            returncode, stdout, _ = self._run_command([
+                python_cmd, "-c", "import torch; print('PyTorch available')"
+            ], check=False)
+            
+            if returncode != 0:
+                self._print("PyTorch must be installed before kokoro", "yellow")
+                return False
+                
+            # Install dependencies
+            dependencies = ["numpy", "tqdm", "soundfile", "pyaudio", "onnxruntime"]
+            
+            # Add onnxruntime-gpu if GPU is available and not in CPU-only mode
+            if not self.cpu_only:
+                try:
+                    import_returncode, _, _ = self._run_command([
+                        python_cmd, "-c", "import torch; print(torch.cuda.is_available())"
+                    ], check=False)
+                    
+                    if import_returncode == 0:
+                        dependencies = ["numpy", "tqdm", "soundfile", "pyaudio", "onnxruntime-gpu==1.15.1"]
+                except:
+                    pass
+                
+            self._print(f"Installing kokoro dependencies: {', '.join(dependencies)}", "cyan")
+            returncode, _, stderr = self._run_command([
+                python_cmd, "-m", "pip", "install", "--upgrade"] + dependencies
+            )
+            
+            if returncode != 0:
+                self._print(f"Error installing kokoro dependencies: {stderr}", "red")
+                self._print("Continuing with kokoro installation anyway", "yellow")
+                
+            # Install kokoro from GitHub
+            if self.has_git:
+                self._print("Installing kokoro from GitHub...", "cyan")
+                returncode, _, stderr = self._run_command([
+                    python_cmd, "-m", "pip", "install", "git+https://github.com/hexgrad/kokoro.git"
+                ])
+                
+                if returncode == 0:
+                    self._print("Successfully installed kokoro from GitHub", "green")
+                    return True
+                else:
+                    self._print(f"Error installing kokoro from GitHub: {stderr}", "red")
+            
+            # If Git installation failed or Git not available, try direct download
+            self._print("Trying alternative installation method for kokoro...", "cyan")
+            
+            # Download the repository
+            kokoro_dir = os.path.join(self.base_dir, "downloads", "kokoro")
+            if not self._download_github_repo("hexgrad/kokoro", "main", kokoro_dir):
+                self._print("Failed to download kokoro repository", "red")
+                return False
+                
+            # Install from the downloaded directory
+            returncode, _, stderr = self._run_command([
+                python_cmd, "-m", "pip", "install", kokoro_dir
+            ])
+            
+            if returncode == 0:
+                self._print("Successfully installed kokoro from downloaded repository", "green")
+                return True
+            else:
+                self._print(f"Error installing kokoro from downloaded repository: {stderr}", "red")
+                
+                # Final method - offer to skip
+                response = input(f"{self.colors['magenta']}Failed to install kokoro. Skip this dependency? (y/n): {self.colors['reset']}")
+                if response.lower() == "y":
+                    self._print("Skipping kokoro installation", "yellow")
+                    return True  # True to continue with installation
+                return False
+                
+        except Exception as e:
+            self._print(f"Error installing kokoro: {e}", "red")
+            return False
+
+    def _download_af_heart_model(self) -> bool:
+        """
+        Download the af_heart TTS voice model.
+        
+        Returns
+        -------
+        bool
+            True if download successful, False otherwise
+            
+        Notes
+        -----
+        The af_heart voice model is used by the kokoro TTS package for speech synthesis.
+        It consists of ONNX and JSON model files.
+        """
+        try:
+            self._print("\nDownloading af_heart voice model...", "cyan", bold=True)
+            
+            # Define model files and directories
+            model_dir = os.path.join(self.base_dir, "models", "tts", "af_heart")
+            os.makedirs(model_dir, exist_ok=True)
+            
+            # Check if model files already exist
+            onnx_file = os.path.join(model_dir, "af_heart.onnx")
+            json_file = os.path.join(model_dir, "af_heart.json")
+            
+            if os.path.exists(onnx_file) and os.path.exists(json_file):
+                self._print("af_heart voice model files already exist", "green")
+                return True
+                
+            # URLs for af_heart model files - replace these with actual URLs
+            # NOTE: These are placeholder URLs, the actual URLs should be provided
+            onnx_url = "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/aflight/medium/af_heart.onnx"
+            json_url = "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/aflight/medium/af_heart.json"
+            
+            # Download ONNX model file
+            if not os.path.exists(onnx_file):
+                self._print(f"Downloading af_heart ONNX model file to {onnx_file}...", "cyan")
+                if not self._download_file(onnx_url, onnx_file):
+                    self._print("Failed to download af_heart ONNX model", "red")
+                    return False
+                
+            # Download JSON model file
+            if not os.path.exists(json_file):
+                self._print(f"Downloading af_heart JSON model file to {json_file}...", "cyan")
+                if not self._download_file(json_url, json_file):
+                    self._print("Failed to download af_heart JSON model", "red")
+                    return False
+                    
+            self._print("Successfully downloaded af_heart voice model files", "green")
+            return True
+            
+        except Exception as e:
+            self._print(f"Error downloading af_heart voice model: {e}", "red")
+            return False
+
+    def _install_piper_phonemize(self, python_cmd: str) -> bool:
+        """
+        Install piper-phonemize package using multiple fallback strategies.
+        
+        Parameters
+        ----------
+        python_cmd : str
+            Path to Python executable
+            
+        Returns
+        -------
+        bool
+            True if installation successful or skipped, False otherwise
+            
+        Notes
+        -----
+        Attempts to install piper-phonemize using several methods:
+        1. Windows 11 specific installation method
+        2. Pre-built wheel for supported platforms
+        3. Direct installation from GitHub (if Git is available)
+        4. Installation from downloaded source
+        5. Skipping if all methods fail
+        """
+        self._print("Installing piper-phonemize directly...", "cyan")
+        
+        # Check if we should skip due to --skip-problematic-packages flag
+        if self.skip_problematic:
+            self._print("Skipping piper-phonemize installation (--skip-problematic-packages flag enabled)", "yellow")
+            return True
+        
+        # Check if piper-phonemize is already installed
+        returncode, stdout, _ = self._run_command([
+            python_cmd, "-c", "import piper_phonemize; print('piper-phonemize available')"
+        ], check=False)
+        
+        if returncode == 0 and "piper-phonemize available" in stdout:
+            self._print("piper-phonemize package already installed", "green")
+            return True
+        
+        # Windows-specific installation methods
+        if self.platform == "Windows":
+            # Windows 11 specific installation method
+            if self._install_piper_phonemize_win11(python_cmd):
+                return True
+                
+            # Try regular pre-built wheel approach
+            if self._install_piper_phonemize_bin(python_cmd):
+                return True
+        
+        # If wheel installation fails and we have Git, try direct installation
+        if self.has_git:
+            self._print("Installing piper-phonemize from GitHub (non-editable)...", "cyan")
+            returncode, _, stderr = self._run_command([
+                python_cmd, "-m", "pip", "install", "git+https://github.com/rhasspy/piper-phonemize.git"
+            ])
+            
+            if returncode == 0:
+                self._print("Successfully installed piper-phonemize from GitHub", "green")
+                return True
+            
+            self._print(f"Error installing piper-phonemize from GitHub: {stderr}", "red")
+        
+        # If we get here, try downloading the repository and installing
+        try:
+            # Create temporary directory for the package
+            package_dir = os.path.join(self.base_dir, "downloads", "piper-phonemize")
+            
+            # Download the repository
+            if not self._download_github_repo("rhasspy/piper-phonemize", "master", package_dir):
+                return False
+            
+            # Try to install in non-editable mode
+            self._print("Installing piper-phonemize from sources (non-editable)...", "cyan")
+            returncode, _, stderr = self._run_command([
+                python_cmd, "-m", "pip", "install", package_dir
+            ])
+            
+            if returncode == 0:
+                self._print("Successfully installed piper-phonemize from sources", "green")
+                return True
+                
+            self._print(f"Error installing piper-phonemize from sources: {stderr}", "red")
+            
+            # If all installation methods failed, ask user if they want to skip this dependency
+            self._print("This package requires Visual C++ Build Tools and Windows SDK", "yellow")
+            response = input(f"{self.colors['magenta']}All installation methods for piper-phonemize failed. Skip this dependency? (y/n): {self.colors['reset']}")
+            
+            if response.lower() == "y":
+                self._print("Skipping piper-phonemize installation", "yellow")
+                return True  # Return True to continue with installation
+            
+            return False
+            
+        except Exception as e:
+            self._print(f"Error installing piper-phonemize: {e}", "red")
+            
+            # If installation fails due to exception, ask user if they want to skip
+            response = input(f"{self.colors['magenta']}An error occurred while installing piper-phonemize. Skip this dependency? (y/n): {self.colors['reset']}")
+            
+            if response.lower() == "y":
+                self._print("Skipping piper-phonemize installation", "yellow")
+                return True  # Return True to continue with installation
+            
+            return False
+
     def _install_piper_phonemize_win11(self, python_cmd: str) -> bool:
         """
         Install piper_phonemize package specifically for Windows 11.
@@ -996,9 +1344,6 @@ class MaggieInstaller:
         """
         Install pre-built piper-phonemize wheel.
         
-        Attempts to download and install a pre-built wheel for piper-phonemize,
-        trying multiple sources and Python version combinations for better compatibility.
-        
         Parameters
         ----------
         python_cmd : str
@@ -1008,6 +1353,11 @@ class MaggieInstaller:
         -------
         bool
             True if installation successful, False otherwise
+            
+        Notes
+        -----
+        Attempts to download and install a pre-built wheel for piper-phonemize,
+        trying multiple sources and Python version combinations for better compatibility.
         """
         try:
             self._print("Installing pre-built piper-phonemize wheel...", "cyan")
@@ -1056,100 +1406,6 @@ class MaggieInstaller:
             self._print(f"Error installing piper-phonemize from wheel: {e}", "red")
             return False
 
-    def _install_piper_phonemize(self, python_cmd: str) -> bool:
-        """
-        Install piper-phonemize package using multiple fallback strategies.
-        
-        Attempts to install piper-phonemize using several methods:
-        1. Windows 11 specific installation method (for Windows 11)
-        2. Pre-built wheel (for supported platforms)
-        3. Direct installation from GitHub (if Git is available)
-        4. Installation from downloaded source
-        5. Skipping if all methods fail
-        
-        Parameters
-        ----------
-        python_cmd : str
-            Path to Python executable
-            
-        Returns
-        -------
-        bool
-            True if installation successful or skipped, False otherwise
-        """
-        self._print("Installing piper-phonemize directly...", "cyan")
-        
-        # Check if we should skip due to --skip-problematic-packages flag
-        if self.skip_problematic:
-            self._print("Skipping piper-phonemize installation (--skip-problematic-packages flag enabled)", "yellow")
-            return True
-        
-        # For Windows, try the enhanced Windows 11 installation method first
-        if self.platform == "Windows":
-            if self._install_piper_phonemize_win11(python_cmd):
-                return True
-        
-        # Then try the regular pre-built wheel approach
-        if self.platform == "Windows":
-            if self._install_piper_phonemize_bin(python_cmd):
-                return True
-        
-        # If wheel installation fails and we have Git, try direct installation
-        if self.has_git:
-            self._print("Installing piper-phonemize from GitHub (non-editable)...", "cyan")
-            returncode, _, stderr = self._run_command([
-                python_cmd, "-m", "pip", "install", "git+https://github.com/rhasspy/piper-phonemize.git"
-            ])
-            
-            if returncode == 0:
-                self._print("Successfully installed piper-phonemize from GitHub", "green")
-                return True
-            
-            self._print(f"Error installing piper-phonemize from GitHub: {stderr}", "red")
-        
-        # If we get here, try downloading the repository and installing
-        try:
-            # Create temporary directory for the package
-            package_dir = os.path.join(self.base_dir, "downloads", "piper-phonemize")
-            
-            # Download the repository
-            if not self._download_github_repo("rhasspy/piper-phonemize", "master", package_dir):
-                return False
-            
-            # Try to install in non-editable mode
-            self._print("Installing piper-phonemize from sources (non-editable)...", "cyan")
-            returncode, _, stderr = self._run_command([
-                python_cmd, "-m", "pip", "install", package_dir
-            ])
-            
-            if returncode == 0:
-                self._print("Successfully installed piper-phonemize from sources", "green")
-                return True
-                
-            self._print(f"Error installing piper-phonemize from sources: {stderr}", "red")
-            
-            # If all installation methods failed, ask user if they want to skip this dependency
-            self._print("This package requires Visual C++ Build Tools and Windows SDK", "yellow")
-            response = input(f"{self.colors['magenta']}All installation methods for piper-phonemize failed. Skip this dependency? (y/n): {self.colors['reset']}")
-            
-            if response.lower() == "y":
-                self._print("Skipping piper-phonemize installation", "yellow")
-                return True  # Return True to continue with installation
-            
-            return False
-            
-        except Exception as e:
-            self._print(f"Error installing piper-phonemize: {e}", "red")
-            
-            # If installation fails due to exception, ask user if they want to skip
-            response = input(f"{self.colors['magenta']}An error occurred while installing piper-phonemize. Skip this dependency? (y/n): {self.colors['reset']}")
-            
-            if response.lower() == "y":
-                self._print("Skipping piper-phonemize installation", "yellow")
-                return True  # Return True to continue with installation
-            
-            return False
-            
     def _install_whisper_streaming(self, python_cmd: str) -> bool:
         """
         Install whisper-streaming package directly.
@@ -1163,10 +1419,24 @@ class MaggieInstaller:
         -------
         bool
             True if installation successful, False otherwise
+            
+        Notes
+        -----
+        Whisper-streaming is a package that provides streaming inference
+        for the Whisper speech recognition model.
         """
         self._print("Installing whisper-streaming directly...", "cyan")
         
         try:
+            # Check if whisper-streaming is already installed
+            returncode, stdout, _ = self._run_command([
+                python_cmd, "-c", "import whisper_online; print('whisper-streaming available')"
+            ], check=False)
+            
+            if returncode == 0 and "whisper-streaming available" in stdout:
+                self._print("whisper-streaming package already installed", "green")
+                return True
+            
             # Create temporary directory for the package
             package_dir = os.path.join(self.base_dir, "downloads", "whisper-streaming")
             
@@ -1259,13 +1529,15 @@ class MaggieInstaller:
         """
         Find pre-built wheel URLs for required packages.
         
-        Searches for pre-built wheels that match the current Python version
-        and platform, favoring wheels that avoid compilation issues on Windows.
-        
         Returns
         -------
         Dict[str, str]
             Dictionary mapping package names to wheel URLs
+            
+        Notes
+        -----
+        Searches for pre-built wheels that match the current Python version
+        and platform, favoring wheels that avoid compilation issues on Windows.
         """
         wheel_urls = {}
         py_version = f"cp{sys.version_info.major}{sys.version_info.minor}"
@@ -1319,16 +1591,18 @@ class MaggieInstaller:
         """
         Install dependencies in virtual environment.
         
-        Installs all required dependencies, handling special cases for packages
-        that require compilation or have pre-built wheels. Provides fallback
-        mechanisms and options to skip problematic dependencies.
-        
         Returns
         -------
         bool
             True if critical dependencies installed successfully, False otherwise
+            
+        Notes
+        -----
+        Installs all required dependencies, handling special cases for packages
+        that require compilation or have pre-built wheels. Provides fallback
+        mechanisms and options to skip problematic dependencies.
         """
-        self._print("\nInstalling dependencies...", "cyan")
+        self._print("\nInstalling dependencies...", "cyan", bold=True)
         
         # Check for Git first
         self._check_git()
@@ -1346,14 +1620,20 @@ class MaggieInstaller:
         if not self._install_basic_dependencies(python_cmd):
             self._print("Warning: Failed to install basic dependencies, continuing anyway", "yellow")
         
-        # Install PyTorch with CUDA support
-        self._print("Installing PyTorch with CUDA 11.8 support (optimized for RTX 3080)...", "cyan")
-        returncode, _, stderr = self._run_command([
-            python_cmd, "-m", "pip", "install", "torch==2.0.1+cu118", "--extra-index-url", "https://download.pytorch.org/whl/cu118"
-        ])
+        # Install PyTorch with CUDA support (or CPU version if --cpu-only)
+        if self.cpu_only:
+            self._print("Installing PyTorch CPU version...", "cyan")
+            returncode, _, stderr = self._run_command([
+                python_cmd, "-m", "pip", "install", "torch==2.0.1", "torchvision==0.15.2", "torchaudio==2.0.2"
+            ])
+        else:
+            self._print("Installing PyTorch with CUDA 11.8 support (optimized for RTX 3080)...", "cyan")
+            returncode, _, stderr = self._run_command([
+                python_cmd, "-m", "pip", "install", "torch==2.0.1+cu118", "torchvision==0.15.2+cu118", "torchaudio==2.0.2+cu118", "--extra-index-url", "https://download.pytorch.org/whl/cu118"
+            ])
         
         if returncode != 0:
-            self._print(f"Error installing PyTorch with CUDA support: {stderr}", "red")
+            self._print(f"Error installing PyTorch: {stderr}", "red")
             self._print("Continuing with installation, but GPU acceleration may not work", "yellow")
         
         # Get pre-built wheels if possible
@@ -1375,6 +1655,9 @@ class MaggieInstaller:
                 not "llama-cpp-python" in line.lower() and
                 not "PyAudio" in line.lower()  # PyAudio often needs special handling on Windows
             ])
+            
+            # Add kokoro which is needed for the af_heart voice model
+            filtered_content += "\n# TTS engine\n# kokoro must be installed separately, see installation script\n"
             
             with open(temp_req_path, "w") as f:
                 f.write(filtered_content)
@@ -1419,15 +1702,21 @@ class MaggieInstaller:
             else:
                 self._print("Skipping piper-tts installation due to missing dependency", "yellow")
                 self._print("Note: Text-to-speech functionality will be limited", "yellow")
+            
+            # 3. Install kokoro TTS engine for af_heart voice model
+            kokoro_installed = self._install_kokoro(python_cmd)
+            if not kokoro_installed:
+                self._print("Warning: kokoro TTS package installation failed", "yellow")
+                self._print("The af_heart voice model will not work properly", "yellow")
                 
-            # 3. Install whisper-streaming using our custom method
+            # 4. Install whisper-streaming using our custom method
             whisper_installed = self._install_whisper_streaming(python_cmd)
                 
             if not whisper_installed:
                 self._print("Warning: whisper-streaming installation failed", "yellow")
                 self._print("Voice recognition may not work properly", "yellow")
                 
-            # 4. Install llama-cpp-python
+            # 5. Install llama-cpp-python
             llama_installed = False
             
             # Try pre-built wheel first
@@ -1458,7 +1747,7 @@ class MaggieInstaller:
                     self._print("Please install Visual C++ Build Tools", "yellow")
                     self._print("Note: LLM functionality will be limited without this package", "yellow")
             
-            # 5. Install PyAudio if available as pre-built wheel
+            # 6. Install PyAudio if available as pre-built wheel
             if "PyAudio" in wheel_urls:
                 self._print("Installing PyAudio from pre-built wheel...", "cyan")
                 pyaudio_installed = self._install_from_wheel_url(
@@ -1470,13 +1759,14 @@ class MaggieInstaller:
                     self._print("You may need to install PyAudio manually", "yellow")
                     self._print("Note: Audio input functionality will be limited", "yellow")
             
-            # 6. Install GPU-specific dependencies
-            self._print("Installing GPU-specific dependencies...", "cyan")
-            returncode, _, stderr = self._run_command([python_cmd, "-m", "pip", "install", "onnxruntime-gpu==1.15.1"])
-            
-            if returncode != 0:
-                self._print(f"Error installing GPU-specific dependencies: {stderr}", "red")
-                self._print("Continuing with CPU-only operation", "yellow")
+            # 7. Install GPU-specific dependencies if not in CPU-only mode
+            if not self.cpu_only:
+                self._print("Installing GPU-specific dependencies...", "cyan")
+                returncode, _, stderr = self._run_command([python_cmd, "-m", "pip", "install", "onnxruntime-gpu==1.15.1"])
+                
+                if returncode != 0:
+                    self._print(f"Error installing GPU-specific dependencies: {stderr}", "red")
+                    self._print("Continuing with CPU-only operation", "yellow")
                 
             self._print("Dependencies installed successfully", "green")
             return True
@@ -1495,8 +1785,13 @@ class MaggieInstaller:
         -------
         bool
             True if configuration set up successfully, False otherwise
+            
+        Notes
+        -----
+        Creates a configuration file for Maggie AI Assistant,
+        with optimized settings for Ryzen 9 5900X and RTX 3080.
         """
-        self._print("\nSetting up configuration...", "cyan")
+        self._print("\nSetting up configuration...", "cyan", bold=True)
         
         config_path = os.path.join(self.base_dir, "config.yaml")
         example_path = os.path.join(self.base_dir, "config.yaml.example")
@@ -1514,17 +1809,75 @@ class MaggieInstaller:
         # Check if config already exists
         if os.path.exists(config_path):
             self._print("Configuration file already exists", "yellow")
-            return True
+            
+            # Update the TTS voice model to af_heart
+            try:
+                import yaml
+                with open(config_path, 'r') as f:
+                    config = yaml.safe_load(f)
+                
+                # Set TTS voice model to af_heart
+                if 'speech' in config and 'tts' in config['speech']:
+                    if config['speech']['tts']['voice_model'] != "af_heart":
+                        config['speech']['tts']['voice_model'] = "af_heart"
+                        with open(config_path, 'w') as f:
+                            yaml.dump(config, f, default_flow_style=False)
+                        self._print("Updated configuration to use af_heart voice model", "green")
+                
+                return True
+            except Exception as e:
+                self._print(f"Error updating configuration: {e}", "red")
+                return False
             
         # Check if example exists
         if not os.path.exists(example_path):
             self._print("Configuration example file not found", "red")
             return False
             
-        # Copy example to config
+        # Copy example to config and modify for af_heart
         try:
-            shutil.copy(example_path, config_path)
-            self._print(f"Configuration file created from example", "green")
+            # Read example config
+            import yaml
+            with open(example_path, 'r') as f:
+                config = yaml.safe_load(f)
+            
+            # Set TTS voice model to af_heart
+            if 'speech' in config and 'tts' in config['speech']:
+                config['speech']['tts']['voice_model'] = "af_heart"
+            
+            # Optimize for Ryzen 9 5900X and RTX 3080
+            if not self.cpu_only:
+                # Add optimized LLM settings for RTX 3080
+                if 'llm' in config:
+                    config['llm']['gpu_layers'] = 32  # Optimal for 10GB VRAM
+                    config['llm']['gpu_layer_auto_adjust'] = True
+                    config['llm']['precision'] = "float16"  # Best for tensor cores
+                
+                # Optimize threading for Ryzen 9 5900X
+                if 'threading' not in config:
+                    config['threading'] = {}
+                config['threading']['max_workers'] = 8  # Using 8 of the 12 available cores
+                
+                # Add GPU-specific settings
+                if 'gpu' not in config:
+                    config['gpu'] = {}
+                config['gpu']['enabled'] = True
+                config['gpu']['compute_type'] = "float16"
+                config['gpu']['tensor_cores'] = True
+                config['gpu']['reserved_memory_mb'] = 512
+            else:
+                # CPU-only settings
+                if 'llm' in config:
+                    config['llm']['gpu_layers'] = 0
+                if 'gpu' not in config:
+                    config['gpu'] = {}
+                config['gpu']['enabled'] = False
+            
+            # Write modified config
+            with open(config_path, 'w') as f:
+                yaml.dump(config, f, default_flow_style=False)
+            
+            self._print(f"Configuration file created from example with af_heart voice model", "green")
             self._print("NOTE: You need to edit config.yaml to add your Picovoice access key", "yellow")
             return True
         except Exception as e:
@@ -1539,32 +1892,17 @@ class MaggieInstaller:
         -------
         bool
             True if models downloaded successfully, False otherwise
-        """
-        # 1. Download TTS voice model
-        self._print("Downloading TTS models...", "cyan")
-        
-        voice_dir = os.path.join(self.base_dir, "models", "tts", "en_US-kathleen-medium")
-        onnx_file = os.path.join(voice_dir, "en_US-kathleen-medium.onnx")
-        json_file = os.path.join(voice_dir, "en_US-kathleen-medium.json")
-        
-        os.makedirs(voice_dir, exist_ok=True)
-        
-        onnx_url = "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/kathleen/medium/en_US-kathleen-medium.onnx"
-        json_url = "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/kathleen/medium/en_US-kathleen-medium.json"
-        
-        success = True
-        
-        if not os.path.exists(onnx_file):
-            if not self._download_file_with_requests(onnx_url, onnx_file):
-                success = False
-        else:
-            self._print("TTS ONNX file already exists", "yellow")
             
-        if not os.path.exists(json_file):
-            if not self._download_file_with_requests(json_url, json_file):
-                success = False
-        else:
-            self._print("TTS JSON file already exists", "yellow")
+        Notes
+        -----
+        Downloads the af_heart TTS voice model and other required models
+        using direct HTTP download rather than Git.
+        """
+        # 1. Download TTS voice model (af_heart)
+        success = self._download_af_heart_model()
+        if not success:
+            self._print("Warning: Failed to download af_heart TTS model", "yellow")
+            self._print("Text-to-speech functionality will be limited", "yellow")
             
         return success
             
@@ -1576,8 +1914,13 @@ class MaggieInstaller:
         -------
         bool
             True if models downloaded successfully, False otherwise
+            
+        Notes
+        -----
+        Downloads the required models for Maggie AI Assistant,
+        including the Mistral 7B LLM model and af_heart TTS model.
         """
-        self._print("\nChecking model downloads...", "cyan")
+        self._print("\nChecking model downloads...", "cyan", bold=True)
         
         # Ask user if they want to download models
         response = input(f"{self.colors['magenta']}Download models? This may take significant time and bandwidth (y/n): {self.colors['reset']}")
@@ -1612,9 +1955,10 @@ class MaggieInstaller:
             mistral_dir = os.path.join(self.base_dir, "models", "mistral-7b-instruct-v0.3-GPTQ-4bit")
             if not os.path.exists(mistral_dir):
                 self._print("Downloading Mistral 7B model... (this may take a while)", "cyan")
+                # For better visibility, don't capture the output
                 returncode, _, _ = self._run_command([
                     "git", "clone", "https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.3-GPTQ", mistral_dir
-                ])
+                ], capture_output=False)
                 
                 if returncode != 0:
                     self._print("Error downloading Mistral model", "red")
@@ -1633,19 +1977,17 @@ class MaggieInstaller:
         """
         Create recipe template document.
         
-        Creates a Microsoft Word document template for recipes if it doesn't exist.
-        This template is used by the recipe creator utility to generate formatted recipe documents.
-        
         Returns
         -------
         bool
             True if template created successfully or already exists, False otherwise
-        
+            
         Notes
         -----
-        Uses python-docx if available, otherwise tries to run main.py with --create-template flag.
+        Creates a Microsoft Word document template for recipes if it doesn't exist.
+        This template is used by the recipe creator utility to generate formatted recipe documents.
         """
-        self._print("\nChecking recipe template...", "cyan")
+        self._print("\nChecking recipe template...", "cyan", bold=True)
         
         # Determine python command based on platform
         if self.platform == "Windows":
@@ -1892,9 +2234,10 @@ class MaggieInstaller:
                 pass
             
             # CUDA optimizations for RTX 3080
-            os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"  # Consistent device numbering
-            os.environ["TF_FORCE_GPU_ALLOW_GROWTH"] = "true"  # Dynamic memory growth
-            
+            if not self.cpu_only:
+                os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"  # Consistent device numbering
+                os.environ["TF_FORCE_GPU_ALLOW_GROWTH"] = "true"  # Dynamic memory growth
+                
             self._print("Applied common cross-platform optimizations", "green")
         except Exception as e:
             self._print(f"Failed to apply common optimizations: {e}", "yellow")
@@ -1919,6 +2262,8 @@ class MaggieInstaller:
         and governor settings on Linux.
         """
         try:
+            self._print("\nOptimizing system settings...", "cyan", bold=True)
+            
             # Apply platform-specific optimizations
             if self.platform == "Windows":
                 self._windows_optimizations()
@@ -1949,11 +2294,11 @@ class MaggieInstaller:
         
         Notes
         -----
-        This function runs the main.py script with the --verify flag to perform
-        various checks including Python version, CUDA availability, required
-        directories, and critical dependencies.
+        This function checks various aspects of the system including
+        Python version, CUDA availability, required directories,
+        critical dependencies, and hardware compatibility.
         """
-        self._print("\nVerifying system configuration...", "cyan")
+        self._print("\nVerifying system configuration...", "cyan", bold=True)
         
         # Determine python command based on platform
         if self.platform == "Windows":
@@ -1967,21 +2312,63 @@ class MaggieInstaller:
             return False
         
         # Check for PyTorch with CUDA
+        if not self.cpu_only:
+            try:
+                returncode, stdout, _ = self._run_command([
+                    python_cmd, 
+                    "-c", 
+                    "import torch; print(f'CUDA available: {torch.cuda.is_available()}')"
+                ], check=False)
+                
+                if "CUDA available: True" in stdout:
+                    self._print("CUDA is available for PyTorch", "green")
+                else:
+                    self._print("CUDA is not available for PyTorch, GPU acceleration will be limited", "yellow")
+            except:
+                self._print("Could not verify PyTorch CUDA support", "yellow")
+        else:
+            self._print("Running in CPU-only mode", "yellow")
+            
+        # Check for kokoro TTS package
         try:
             returncode, stdout, _ = self._run_command([
                 python_cmd, 
                 "-c", 
-                "import torch; print(f'CUDA available: {torch.cuda.is_available()}')"
+                "import kokoro; print('kokoro TTS available')"
             ], check=False)
             
-            if "CUDA available: True" in stdout:
-                self._print("CUDA is available for PyTorch", "green")
+            if "kokoro TTS available" in stdout:
+                self._print("kokoro TTS package is available", "green")
             else:
-                self._print("CUDA is not available for PyTorch, GPU acceleration will be limited", "yellow")
+                self._print("kokoro TTS package is not available", "yellow")
+                self._print("Text-to-speech functionality may be limited", "yellow")
         except:
-            self._print("Could not verify PyTorch CUDA support", "yellow")
+            self._print("Could not verify kokoro TTS package", "yellow")
             
-        # Run the built-in verification script
+        # Check for af_heart voice model
+        model_dir = os.path.join(self.base_dir, "models", "tts", "af_heart")
+        onnx_file = os.path.join(model_dir, "af_heart.onnx")
+        json_file = os.path.join(model_dir, "af_heart.json")
+        
+        if os.path.exists(onnx_file) and os.path.exists(json_file):
+            self._print("af_heart voice model files are available", "green")
+        else:
+            self._print("af_heart voice model files are missing", "yellow")
+            self._print("Text-to-speech functionality may be limited", "yellow")
+            
+        # Verify all critical directories exist
+        for directory in self.required_dirs:
+            dir_path = os.path.join(self.base_dir, directory)
+            if not os.path.exists(dir_path):
+                self._print(f"Required directory is missing: {directory}", "red")
+                try:
+                    os.makedirs(dir_path, exist_ok=True)
+                    self._print(f"Created directory: {directory}", "green")
+                except:
+                    pass
+        
+        # Run main.py verification
+        self._print("Running complete system verification...", "cyan")
         returncode, stdout, stderr = self._run_command([python_cmd, "main.py", "--verify"])
         
         if returncode != 0:
@@ -2027,12 +2414,17 @@ class MaggieInstaller:
         It performs all necessary steps in the correct order, with appropriate
         error handling and user feedback at each stage.
         """
-        self._print("=== Maggie AI Assistant Installation ===", "cyan")
+        self._print("=== Maggie AI Assistant Installation ===", "cyan", bold=True)
         self._print(f"Platform: {self.platform}", "cyan")
         
         # Print current timestamp for installation timing
         start_time = time.time()
         self._print(f"Installation started at: {time.strftime('%Y-%m-%d %H:%M:%S')}", "cyan")
+        
+        # Print hardware optimization information
+        self._print(f"Hardware Target: AMD Ryzen 9 5900X + NVIDIA RTX 3080", "cyan")
+        if self.cpu_only:
+            self._print("CPU-only mode: GPU acceleration disabled", "yellow")
         
         if not self.is_admin:
             if self.platform == "Windows":
@@ -2046,8 +2438,9 @@ class MaggieInstaller:
         if not self._check_python_version():
             return False
             
-        # Check GPU
-        gpu_info = self._check_gpu()
+        # Check GPU if not in CPU-only mode
+        if not self.cpu_only:
+            gpu_info = self._check_gpu()
         
         # Create directories
         if not self._create_directories():
@@ -2058,7 +2451,7 @@ class MaggieInstaller:
             return False
             
         # Install dependencies
-        self._print("\nInstalling dependencies (this may take some time)...", "cyan")
+        self._print("\nInstalling dependencies (this may take some time)...", "cyan", bold=True)
         dependency_result = self._install_dependencies()
         if not dependency_result:
             self._print("Some dependencies failed to install", "yellow")
@@ -2096,30 +2489,35 @@ class MaggieInstaller:
         # Installation complete
         end_time = time.time()
         installation_time = end_time - start_time
-        self._print(f"\n=== Installation Complete ({installation_time:.1f} seconds) ===", "green")
+        self._print(f"\n=== Installation Complete ({installation_time:.1f} seconds) ===", "green", bold=True)
         
         # Show summary of installation status
-        self._print("\nInstallation Summary:", "cyan")
+        self._print("\nInstallation Summary:", "cyan", bold=True)
         self._print(f"Platform: {self.platform} ({platform.release()})", "green")
         self._print(f"Python: {platform.python_version()}", "green")
         
         # Hardware detection
-        if gpu_info["available"]:
-            gpu_text = f"Detected: {gpu_info['name']}"
-            if gpu_info["is_rtx_3080"]:
-                gpu_text += " (Optimized)"
-            self._print(f"GPU: {gpu_text}", "green")
+        if not self.cpu_only:
+            gpu_info = self._check_gpu()
+            if gpu_info["available"]:
+                gpu_text = f"Detected: {gpu_info['name']}"
+                if gpu_info["is_rtx_3080"]:
+                    gpu_text += " (Optimized)"
+                self._print(f"GPU: {gpu_text}", "green")
+            else:
+                self._print("GPU: Not detected or not compatible", "yellow")
         else:
-            self._print("GPU: Not detected or not compatible", "yellow")
+            self._print("GPU: Disabled (CPU-only mode)", "yellow")
             
         # Tools detection
         self._print(f"Git found: {'Yes' if self.has_git else 'No'}", "green" if self.has_git else "yellow")
         self._print(f"C++ compiler found: {'Yes' if self.has_cpp_compiler else 'No'}", "green" if self.has_cpp_compiler else "yellow")
-        self._print(f"Windows SDK found: {'Yes' if self.has_windows_sdk else 'No'}", "green" if self.has_windows_sdk else "yellow")
+        if self.platform == "Windows":
+            self._print(f"Windows SDK found: {'Yes' if self.has_windows_sdk else 'No'}", "green" if self.has_windows_sdk else "yellow")
         self._print(f"System verification: {'Passed' if verify_result else 'Failed'}", "green" if verify_result else "yellow")
         
         # Reminders
-        self._print("\nImportant Reminders:", "cyan")
+        self._print("\nImportant Reminders:", "cyan", bold=True)
         self._print("1. Edit config.yaml to add your Picovoice access key from https://console.picovoice.ai/", "yellow")
         self._print("2. To run Maggie AI Assistant:", "yellow")
         
@@ -2135,7 +2533,7 @@ class MaggieInstaller:
         if not self.has_git:
             missing_tools.append(("Git", "https://git-scm.com/download/win"))
             
-        if not self.has_cpp_compiler:
+        if not self.has_cpp_compiler and self.platform == "Windows":
             missing_tools.append(("Visual C++ Build Tools", "https://visualstudio.microsoft.com/visual-cpp-build-tools/"))
             
         if not self.has_windows_sdk and self.platform == "Windows":
@@ -2152,19 +2550,20 @@ class MaggieInstaller:
         response = input(f"\n{self.colors['magenta']}Would you like to start Maggie now? (y/n): {self.colors['reset']}")
         
         if response.lower() == "y":
-            self._print("\nStarting Maggie AI Assistant...", "cyan")
+            self._print("\nStarting Maggie AI Assistant...", "cyan", bold=True)
             
             if self.platform == "Windows":
                 python_cmd = os.path.join(self.base_dir, "venv", "Scripts", "python")
             else:
                 python_cmd = os.path.join(self.base_dir, "venv", "bin", "python")
                 
-            self._run_command([python_cmd, "main.py"])
+            # Run without capturing output so user can see and interact directly
+            self._run_command([python_cmd, "main.py"], capture_output=False)
             
         return True
 
 
-def main():
+def main() -> int:
     """
     Main entry point for the installer.
     
@@ -2174,14 +2573,33 @@ def main():
     -------
     int
         Exit code - 0 for success, 1 for error
+        
+    Notes
+    -----
+    Handles command-line arguments for verbose output, skipping problematic
+    packages, CPU-only mode, and forcing reinstallation of packages.
     """
-    parser = argparse.ArgumentParser(description="Maggie AI Assistant Installer")
+    parser = argparse.ArgumentParser(
+        description="Maggie AI Assistant Installer",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
     parser.add_argument("--verbose", action="store_true", help="Enable verbose output")
     parser.add_argument("--skip-problematic-packages", action="store_true",
                         help="Skip packages that require compilation and may have compatibility issues")
+    parser.add_argument("--cpu-only", action="store_true",
+                        help="Install without GPU support (for systems without compatible GPUs)")
+    parser.add_argument("--force-reinstall", action="store_true",
+                        help="Force reinstallation of packages even if already installed")
+    
     args = parser.parse_args()
     
-    installer = MaggieInstaller(verbose=args.verbose, skip_problematic=args.skip_problematic_packages)
+    installer = MaggieInstaller(
+        verbose=args.verbose,
+        skip_problematic=args.skip_problematic_packages,
+        cpu_only=args.cpu_only,
+        force_reinstall=args.force_reinstall
+    )
+    
     success = installer.install()
     
     return 0 if success else 1
