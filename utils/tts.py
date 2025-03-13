@@ -7,19 +7,32 @@ This module provides Text-to-Speech functionality for the Maggie AI Assistant
 using the Piper TTS library. It includes optimizations for AMD Ryzen 9 5900X
 and NVIDIA RTX 3080 hardware, offering low-latency speech synthesis with
 high-quality voice output.
+
+Examples
+--------
+>>> from utils.tts import PiperTTS
+>>> config = {"voice_model": "en_US-kathleen-medium", "model_path": "models/tts"}
+>>> tts = PiperTTS(config)
+>>> tts.speak("Hello, I am Maggie AI Assistant")
+>>> # Save to file
+>>> tts.save_to_file("This is a test", "test_output.wav")
 """
 
+# Standard library imports
 import io
 import os
 import time
 import threading
 import wave
+import hashlib
+from typing import Dict, Any, Optional, Union, Tuple
+
+# Third-party imports
 import numpy as np
 import soundfile as sf
-import tempfile
-from pathlib import Path
-from typing import Dict, Any, Optional, Union, Tuple
 from loguru import logger
+
+__all__ = ['PiperTTS']
 
 class PiperTTS:
     """
@@ -29,17 +42,20 @@ class PiperTTS:
     speech synthesis. It supports hardware acceleration through ONNX runtime
     when available, particularly optimized for RTX 3080 GPUs.
     
-    Attributes
+    Parameters
     ----------
     config : Dict[str, Any]
         Configuration dictionary for TTS settings
+        
+    Attributes
+    ----------
     voice_model : str
         Name of the voice model to use
     model_path : str
         Path to the directory containing TTS models
     sample_rate : int
         Sample rate for audio output (Hz)
-    piper_instance : Optional[PiperVoice]
+    piper_instance : Optional[Any]
         Loaded Piper TTS model instance
     lock : threading.Lock
         Lock for thread-safe operations
@@ -47,6 +63,10 @@ class PiperTTS:
         Directory for TTS audio caching
     use_cache : bool
         Whether to use caching for repeated phrases
+    cache_size : int
+        Maximum number of cached phrases
+    cache : Dict[str, np.ndarray]
+        In-memory cache of synthesized audio
     """
     
     def __init__(self, config: Dict[str, Any]):
@@ -78,7 +98,12 @@ class PiperTTS:
         
         # Create cache directory if needed
         if self.use_cache and not os.path.exists(self.cache_dir):
-            os.makedirs(self.cache_dir, exist_ok=True)
+            try:
+                os.makedirs(self.cache_dir, exist_ok=True)
+                logger.info(f"Created TTS cache directory: {self.cache_dir}")
+            except Exception as e:
+                logger.error(f"Failed to create TTS cache directory: {e}")
+                self.use_cache = False
         
         # Lazy initialization - will load when first needed
         # This speeds up startup time and reduces memory usage when TTS is not used
@@ -132,21 +157,34 @@ class PiperTTS:
             logger.info(f"Initialized Piper TTS with voice {self.voice_model} in {load_time:.2f}s")
             
             # Check CUDA availability for logging
-            try:
-                import torch
-                if torch.cuda.is_available():
-                    gpu_name = torch.cuda.get_device_name(0)
-                    logger.info(f"TTS using GPU acceleration on {gpu_name}")
-                else:
-                    logger.info("TTS using CPU (CUDA not available)")
-            except ImportError:
-                pass
+            self._log_cuda_status()
                 
             return True
             
+        except ImportError as import_error:
+            logger.error(f"Failed to import Piper TTS module: {import_error}")
+            logger.error("Please install piper-tts with: pip install piper-tts==1.2.0")
+            return False
         except Exception as e:
             logger.error(f"Failed to initialize Piper TTS: {e}")
             return False
+    
+    def _log_cuda_status(self) -> None:
+        """
+        Log CUDA availability and GPU information.
+        
+        Provides diagnostic information about the GPU acceleration
+        capabilities for TTS.
+        """
+        try:
+            import torch
+            if torch.cuda.is_available():
+                gpu_name = torch.cuda.get_device_name(0)
+                logger.info(f"TTS using GPU acceleration on {gpu_name}")
+            else:
+                logger.info("TTS using CPU (CUDA not available)")
+        except ImportError:
+            logger.debug("PyTorch not available for GPU detection")
             
     def _get_cache_key(self, text: str) -> str:
         """
@@ -162,7 +200,6 @@ class PiperTTS:
         str
             Cache key (MD5 hash of the text)
         """
-        import hashlib
         return hashlib.md5(text.encode('utf-8')).hexdigest()
             
     def _get_cached_audio(self, text: str) -> Optional[np.ndarray]:
@@ -186,6 +223,7 @@ class PiperTTS:
         
         # Check memory cache first (faster)
         if cache_key in self.cache:
+            logger.debug(f"TTS cache hit (memory): {text[:30]}...")
             return self.cache[cache_key]
             
         # Check file cache
@@ -195,6 +233,7 @@ class PiperTTS:
                 audio_data = np.load(cache_path)
                 # Add to memory cache
                 self.cache[cache_key] = audio_data
+                logger.debug(f"TTS cache hit (disk): {text[:30]}...")
                 return audio_data
             except Exception as e:
                 logger.warning(f"Failed to load cached audio: {e}")
@@ -229,6 +268,9 @@ class PiperTTS:
             # Save to file cache
             cache_path = os.path.join(self.cache_dir, f"{cache_key}.npy")
             np.save(cache_path, audio_data)
+            
+            logger.debug(f"Saved TTS output to cache: {text[:30]}...")
+            
         except Exception as e:
             logger.warning(f"Failed to save audio to cache: {e}")
             
@@ -272,6 +314,7 @@ class PiperTTS:
                 synth_time = time.time() - start_time
                 
                 if audio_data is None:
+                    logger.error("Failed to synthesize speech")
                     return False
                 
                 # Log synthesis time for performance monitoring
@@ -342,18 +385,35 @@ class PiperTTS:
             )
             
             # Play audio in chunks
-            chunk_size = 1024
-            for i in range(0, len(audio_int16), chunk_size):
-                chunk = audio_int16[i:i + chunk_size].tobytes()
-                stream.write(chunk)
+            self._play_audio_chunks(stream, audio_int16)
                 
             # Clean up
             stream.stop_stream()
             stream.close()
             p.terminate()
             
+        except ImportError as import_error:
+            logger.error(f"Failed to import PyAudio: {import_error}")
+            logger.error("Please install PyAudio with: pip install PyAudio==0.2.13")
         except Exception as e:
             logger.error(f"Error playing audio: {e}")
+    
+    def _play_audio_chunks(self, stream, audio_int16: np.ndarray, chunk_size: int = 1024) -> None:
+        """
+        Play audio data in chunks.
+        
+        Parameters
+        ----------
+        stream : pyaudio.Stream
+            PyAudio stream to play through
+        audio_int16 : np.ndarray
+            Audio data in int16 format
+        chunk_size : int, optional
+            Size of each audio chunk, by default 1024
+        """
+        for i in range(0, len(audio_int16), chunk_size):
+            chunk = audio_int16[i:i + chunk_size].tobytes()
+            stream.write(chunk)
     
     def save_to_file(self, text: str, output_path: str) -> bool:
         """
@@ -394,16 +454,12 @@ class PiperTTS:
                     self._save_audio_to_cache(text, audio_data)
                 
                 # Ensure output directory exists
-                os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
+                output_dir = os.path.dirname(os.path.abspath(output_path))
+                if not os.path.exists(output_dir):
+                    os.makedirs(output_dir, exist_ok=True)
                 
                 # Save to WAV file
-                with wave.open(output_path, 'wb') as wf:
-                    wf.setnchannels(1)  # Mono
-                    wf.setsampwidth(2)  # 16-bit
-                    wf.setframerate(self.sample_rate)
-                    # Convert float32 to int16
-                    audio_int16 = (audio_data * 32767).astype(np.int16)
-                    wf.writeframes(audio_int16.tobytes())
+                self._save_audio_to_wav(audio_data, output_path)
                     
                 logger.info(f"Saved TTS audio to {output_path}")
                 return True
@@ -411,6 +467,25 @@ class PiperTTS:
             except Exception as e:
                 logger.error(f"Error saving TTS to file: {e}")
                 return False
+    
+    def _save_audio_to_wav(self, audio_data: np.ndarray, output_path: str) -> None:
+        """
+        Save audio data to a WAV file.
+        
+        Parameters
+        ----------
+        audio_data : np.ndarray
+            Audio data to save
+        output_path : str
+            Path to save the WAV file
+        """
+        with wave.open(output_path, 'wb') as wf:
+            wf.setnchannels(1)  # Mono
+            wf.setsampwidth(2)  # 16-bit
+            wf.setframerate(self.sample_rate)
+            # Convert float32 to int16
+            audio_int16 = (audio_data * 32767).astype(np.int16)
+            wf.writeframes(audio_int16.tobytes())
                 
     def cleanup(self) -> None:
         """
