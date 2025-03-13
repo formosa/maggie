@@ -6,6 +6,29 @@ Handles installation and setup of the Maggie AI Assistant.
 This script provides a unified installation experience for
 Windows and Linux, with specific optimizations for
 AMD Ryzen 9 5900X and NVIDIA RTX 3080 hardware.
+
+The installation process includes:
+1. System compatibility verification
+2. Environment setup
+3. Dependency installation
+4. Model downloads
+5. Configuration creation
+6. System optimization
+
+Example
+-------
+To install Maggie AI Assistant:
+    $ python install.py
+
+For verbose output:
+    $ python install.py --verbose
+
+Notes
+-----
+- Requires Python 3.10.x specifically
+- Windows installation requires Visual C++ Build Tools and Windows SDK
+- GPU acceleration requires NVIDIA GPU with CUDA support
+- Optimized for AMD Ryzen 9 5900X and NVIDIA RTX 3080
 """
 
 import os
@@ -83,6 +106,7 @@ class MaggieInstaller:
         # Flags for special handling
         self.has_cpp_compiler = False
         self.has_git = False
+        self.has_windows_sdk = False
     
     def _print(self, message: str, color: str = None):
         """
@@ -243,9 +267,84 @@ class MaggieInstaller:
             self._print(f"Error checking for Git: {e}", "red")
             return False
     
+    def _check_windows_sdk(self) -> bool:
+        """
+        Check if Windows SDK is properly installed and configured.
+        
+        Verifies that the Windows SDK is installed and includes the necessary
+        header files for C++ compilation. Specifically checks for the stddef.h
+        header file that is required for building C++ extensions.
+        
+        Returns
+        -------
+        bool
+            True if Windows SDK is properly installed and configured, False otherwise
+        """
+        if self.platform != "Windows":
+            return True  # Not relevant for non-Windows platforms
+        
+        try:
+            # Check for Windows SDK installation
+            sdk_paths = [
+                "C:\\Program Files (x86)\\Windows Kits\\10\\Include",
+                "C:\\Program Files\\Windows Kits\\10\\Include"
+            ]
+            
+            sdk_installed = False
+            for sdk_path in sdk_paths:
+                if os.path.exists(sdk_path):
+                    sdk_installed = True
+                    self._print(f"Found Windows SDK at {sdk_path}", "green")
+                    break
+            
+            if not sdk_installed:
+                self._print("Windows SDK not found", "yellow")
+                self._print("Some packages may fail to build", "yellow")
+                self._print("To install Windows SDK:", "yellow")
+                self._print("1. Download from https://developer.microsoft.com/en-us/windows/downloads/windows-sdk/", "yellow")
+                self._print("2. Run the installer and select 'Windows SDK for Desktop C++ x64 Apps'", "yellow")
+                self._print("3. Restart this installation after installing Windows SDK", "yellow")
+                return False
+            
+            # Check for Universal CRT include directories
+            ucrt_paths = [
+                "C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.22000.0\\ucrt",
+                "C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.20348.0\\ucrt",
+                "C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.19041.0\\ucrt",
+                "C:\\Program Files (x86)\\Windows Kits\\10\\Include\\10.0.18362.0\\ucrt"
+            ]
+            
+            stddef_found = False
+            for ucrt_path in ucrt_paths:
+                if os.path.exists(ucrt_path):
+                    stddef_path = os.path.join(ucrt_path, "stddef.h")
+                    if os.path.exists(stddef_path):
+                        stddef_found = True
+                        self._print(f"Found stddef.h in Windows SDK at {stddef_path}", "green")
+                        self.has_windows_sdk = True
+                        break
+            
+            if not stddef_found:
+                self._print("Required header file 'stddef.h' not found in Windows SDK", "yellow")
+                self._print("This will cause problems when building C++ extensions", "yellow")
+                self._print("To fix this issue:", "yellow")
+                self._print("1. Reinstall Visual C++ Build Tools with the 'Desktop development with C++' workload", "yellow")
+                self._print("2. Ensure 'Windows 10 SDK' component is selected during installation", "yellow")
+                return False
+            
+            return True
+        
+        except Exception as e:
+            self._print(f"Error checking Windows SDK: {e}", "red")
+            return False
+    
     def _check_cpp_compiler(self) -> bool:
         """
         Check if C++ compiler is available for building wheels.
+        
+        Verifies that the necessary C++ compiler and build tools are available
+        for building Python extensions from source. On Windows, checks for
+        Visual C++ Build Tools and Windows SDK. On Linux, checks for GCC.
         
         Returns
         -------
@@ -259,8 +358,10 @@ class MaggieInstaller:
                 returncode, _, _ = self._run_command(["where", "cl.exe"], check=False)
                 if returncode == 0:
                     self._print("Visual C++ compiler (cl.exe) found", "green")
-                    self.has_cpp_compiler = True
-                    return True
+                    # Now check for Windows SDK
+                    sdk_ok = self._check_windows_sdk()
+                    self.has_cpp_compiler = returncode == 0 and sdk_ok
+                    return self.has_cpp_compiler
                 
                 # Check if Visual Studio Build Tools are installed by checking registry
                 returncode, stdout, _ = self._run_command(
@@ -270,8 +371,10 @@ class MaggieInstaller:
                 
                 if returncode == 0:
                     self._print("Visual C++ Build Tools found in registry", "green")
-                    self.has_cpp_compiler = True
-                    return True
+                    # Now check for Windows SDK
+                    sdk_ok = self._check_windows_sdk()
+                    self.has_cpp_compiler = returncode == 0 and sdk_ok
+                    return self.has_cpp_compiler
                 
                 # If we get here, compiler not found
                 self._print("Visual C++ Build Tools not found", "yellow")
@@ -279,7 +382,8 @@ class MaggieInstaller:
                 self._print("To install Visual C++ Build Tools:", "yellow")
                 self._print("1. Download from https://visualstudio.microsoft.com/visual-cpp-build-tools/", "yellow")
                 self._print("2. Select 'Desktop development with C++' workload", "yellow")
-                self._print("3. Restart this installation after installing Build Tools", "yellow")
+                self._print("3. Ensure 'Windows 10 SDK' and 'MSVC C++ x64/x86 build tools' are selected", "yellow")
+                self._print("4. Restart this installation after installing Build Tools", "yellow")
                 
                 return False
             except Exception as e:
@@ -690,6 +794,9 @@ class MaggieInstaller:
         """
         Install pre-built piper-phonemize wheel.
         
+        Attempts to download and install a pre-built wheel for piper-phonemize,
+        trying multiple sources and Python version combinations for better compatibility.
+        
         Parameters
         ----------
         pip_cmd : str
@@ -703,29 +810,45 @@ class MaggieInstaller:
         try:
             self._print("Installing pre-built piper-phonemize wheel...", "cyan")
             
-            # Define URL for the pre-built wheel for Python 3.10 on Windows
-            wheel_url = "https://github.com/rhasspy/piper-phonemize/releases/download/v1.2.0/piper_phonemize-1.2.0-cp310-cp310-win_amd64.whl"
+            # Get Python version info for wheel
+            py_version = f"cp{sys.version_info.major}{sys.version_info.minor}"
             
-            # Download and install the wheel
-            wheel_dir = os.path.join(self.base_dir, "downloads", "wheels")
-            os.makedirs(wheel_dir, exist_ok=True)
+            # Try multiple wheel sources and Python ABI tags for better reliability
+            wheel_urls = [
+                f"https://github.com/rhasspy/piper-phonemize/releases/download/v1.2.0/piper_phonemize-1.2.0-{py_version}-{py_version}-win_amd64.whl",
+                f"https://github.com/rhasspy/piper-phonemize/releases/download/v1.2.0/piper_phonemize-1.2.0-{py_version}-{py_version}m-win_amd64.whl",
+                # Try alternative mirrors if available
+                "https://github.com/rhasspy/piper-phonemize/releases/download/v1.2.0/piper_phonemize-1.2.0-cp310-cp310-win_amd64.whl"
+            ]
             
-            wheel_path = os.path.join(wheel_dir, "piper_phonemize-1.2.0-cp310-cp310-win_amd64.whl")
-            
-            if not self._download_file_with_requests(wheel_url, wheel_path):
-                return False
-            
-            # Install the wheel
-            returncode, _, stderr = self._run_command([
-                pip_cmd, "install", wheel_path
-            ])
-            
-            if returncode != 0:
-                self._print(f"Error installing piper-phonemize wheel: {stderr}", "red")
-                return False
+            for wheel_url in wheel_urls:
+                # Download the wheel
+                wheel_dir = os.path.join(self.base_dir, "downloads", "wheels")
+                os.makedirs(wheel_dir, exist_ok=True)
                 
-            self._print("Successfully installed piper-phonemize from wheel", "green")
-            return True
+                wheel_filename = os.path.basename(wheel_url)
+                wheel_path = os.path.join(wheel_dir, wheel_filename)
+                
+                self._print(f"Trying wheel from: {wheel_url}", "cyan")
+                
+                try:
+                    if self._download_file_with_requests(wheel_url, wheel_path):
+                        # Install the wheel
+                        returncode, _, stderr = self._run_command([
+                            pip_cmd, "install", wheel_path
+                        ])
+                        
+                        if returncode == 0:
+                            self._print("Successfully installed piper-phonemize from wheel", "green")
+                            return True
+                        else:
+                            self._print(f"Error installing wheel: {stderr}", "red")
+                except Exception as download_error:
+                    self._print(f"Error with this wheel source: {download_error}", "yellow")
+                    continue  # Try next URL
+            
+            self._print("All pre-built wheels failed to install", "yellow")
+            return False
             
         except Exception as e:
             self._print(f"Error installing piper-phonemize from wheel: {e}", "red")
@@ -733,7 +856,13 @@ class MaggieInstaller:
 
     def _install_piper_phonemize(self, pip_cmd: str) -> bool:
         """
-        Install piper-phonemize package using non-editable mode.
+        Install piper-phonemize package using multiple fallback strategies.
+        
+        Attempts to install piper-phonemize using several methods:
+        1. Pre-built wheel (for supported platforms)
+        2. Direct installation from GitHub (if Git is available)
+        3. Installation from downloaded source
+        4. Skipping if all methods fail
         
         Parameters
         ----------
@@ -743,7 +872,7 @@ class MaggieInstaller:
         Returns
         -------
         bool
-            True if installation successful, False otherwise
+            True if installation successful or skipped, False otherwise
         """
         self._print("Installing piper-phonemize directly...", "cyan")
         
@@ -785,11 +914,27 @@ class MaggieInstaller:
                 return True
                 
             self._print(f"Error installing piper-phonemize from sources: {stderr}", "red")
-            self._print("This package requires Visual C++ Build Tools", "yellow")
+            
+            # If all installation methods failed, ask user if they want to skip this dependency
+            self._print("This package requires Visual C++ Build Tools and Windows SDK", "yellow")
+            response = input(f"{self.colors['magenta']}All installation methods for piper-phonemize failed. Skip this dependency? (y/n): {self.colors['reset']}")
+            
+            if response.lower() == "y":
+                self._print("Skipping piper-phonemize installation", "yellow")
+                return True  # Return True to continue with installation
+            
             return False
             
         except Exception as e:
             self._print(f"Error installing piper-phonemize: {e}", "red")
+            
+            # If installation fails due to exception, ask user if they want to skip
+            response = input(f"{self.colors['magenta']}An error occurred while installing piper-phonemize. Skip this dependency? (y/n): {self.colors['reset']}")
+            
+            if response.lower() == "y":
+                self._print("Skipping piper-phonemize installation", "yellow")
+                return True  # Return True to continue with installation
+            
             return False
             
     def _install_whisper_streaming(self, pip_cmd: str, python_cmd: str) -> bool:
@@ -903,6 +1048,9 @@ class MaggieInstaller:
         """
         Find pre-built wheel URLs for required packages.
         
+        Searches for pre-built wheels that match the current Python version
+        and platform, favoring wheels that avoid compilation issues on Windows.
+        
         Returns
         -------
         Dict[str, str]
@@ -922,8 +1070,8 @@ class MaggieInstaller:
             try:
                 # For Windows with Python 3.10
                 if self.platform == "Windows":
-                    # Hardcoded URL to a known compatible wheel
-                    wheel_urls["llama-cpp-python"] = "https://github.com/abetlen/llama-cpp-python/releases/download/v0.2.11/llama_cpp_python-0.2.11-cp310-cp310-win_amd64.whl"
+                    # Try multiple URLs based on different Python ABI tags
+                    wheel_urls["llama-cpp-python"] = f"https://github.com/abetlen/llama-cpp-python/releases/download/v0.2.11/llama_cpp_python-0.2.11-{py_version}-{py_version}-win_amd64.whl"
                     self._print(f"Found pre-built wheel for llama-cpp-python", "green")
                 else:
                     # For Linux, search the releases
@@ -943,8 +1091,13 @@ class MaggieInstaller:
             
             # 2. Add piper-phonemize wheel for Windows
             if self.platform == "Windows":
-                wheel_urls["piper-phonemize"] = "https://github.com/rhasspy/piper-phonemize/releases/download/v1.2.0/piper_phonemize-1.2.0-cp310-cp310-win_amd64.whl"
+                # Try both ABI tags for better compatibility
+                wheel_urls["piper-phonemize"] = f"https://github.com/rhasspy/piper-phonemize/releases/download/v1.2.0/piper_phonemize-1.2.0-{py_version}-{py_version}-win_amd64.whl"
                 self._print("Found pre-built wheel for piper-phonemize", "green")
+                
+                # Add other difficult-to-compile packages for Windows
+                wheel_urls["PyAudio"] = f"https://download.lfd.uci.edu/pythonlibs/archived/PyAudio-0.2.13-{py_version}-{py_version}-win_amd64.whl"
+                self._print("Found pre-built wheel for PyAudio", "green")
             
         except ImportError:
             self._print("Could not import requests module for finding wheels", "yellow")
@@ -955,10 +1108,14 @@ class MaggieInstaller:
         """
         Install dependencies in virtual environment.
         
+        Installs all required dependencies, handling special cases for packages
+        that require compilation or have pre-built wheels. Provides fallback
+        mechanisms and options to skip problematic dependencies.
+        
         Returns
         -------
         bool
-            True if dependencies installed successfully, False otherwise
+            True if critical dependencies installed successfully, False otherwise
         """
         self._print("\nInstalling dependencies...", "cyan")
         
@@ -1014,7 +1171,8 @@ class MaggieInstaller:
                 not line.startswith("torch") and not "cu118" in line and
                 not "whisper" in line.lower() and 
                 not "piper" in line.lower() and
-                not "llama-cpp-python" in line.lower()
+                not "llama-cpp-python" in line.lower() and
+                not "PyAudio" in line.lower()  # PyAudio often needs special handling on Windows
             ])
             
             with open(temp_req_path, "w") as f:
@@ -1046,7 +1204,7 @@ class MaggieInstaller:
             if not piper_phonemize_installed:
                 piper_phonemize_installed = self._install_piper_phonemize(pip_cmd)
             
-            # 2. Now install piper-tts after its dependency is installed
+            # 2. Now install piper-tts after its dependency is installed or if user opted to skip
             if piper_phonemize_installed:
                 self._print("Installing piper-tts...", "cyan")
                 returncode, _, stderr = self._run_command([
@@ -1056,8 +1214,10 @@ class MaggieInstaller:
                 if returncode != 0:
                     self._print(f"Error installing piper-tts: {stderr}", "red")
                     self._print("Continuing installation process", "yellow")
+                    self._print("Note: Text-to-speech functionality will be limited", "yellow")
             else:
                 self._print("Skipping piper-tts installation due to missing dependency", "yellow")
+                self._print("Note: Text-to-speech functionality will be limited", "yellow")
                 
             # 3. Install whisper-streaming using our custom method
             whisper_installed = self._install_whisper_streaming(pip_cmd, python_cmd)
@@ -1091,11 +1251,25 @@ class MaggieInstaller:
                     else:
                         self._print(f"Error installing llama-cpp-python: {stderr}", "red")
                         self._print("You may need to install llama-cpp-python manually", "yellow")
+                        self._print("Note: LLM functionality will be limited without this package", "yellow")
                 else:
                     self._print("Cannot install llama-cpp-python without C++ compiler", "yellow")
                     self._print("Please install Visual C++ Build Tools", "yellow")
+                    self._print("Note: LLM functionality will be limited without this package", "yellow")
             
-            # 5. Install GPU-specific dependencies
+            # 5. Install PyAudio if available as pre-built wheel
+            if "PyAudio" in wheel_urls:
+                self._print("Installing PyAudio from pre-built wheel...", "cyan")
+                pyaudio_installed = self._install_from_wheel_url(
+                    pip_cmd, "PyAudio", wheel_urls["PyAudio"]
+                )
+                
+                if not pyaudio_installed:
+                    self._print("Error installing PyAudio from wheel", "red")
+                    self._print("You may need to install PyAudio manually", "yellow")
+                    self._print("Note: Audio input functionality will be limited", "yellow")
+            
+            # 6. Install GPU-specific dependencies
             self._print("Installing GPU-specific dependencies...", "cyan")
             returncode, _, _ = self._run_command([pip_cmd, "install", "onnxruntime-gpu==1.15.1"])
             
@@ -1256,14 +1430,21 @@ class MaggieInstaller:
         
     def _create_recipe_template(self) -> bool:
         """
-        Create recipe template.
+        Create recipe template document.
+        
+        Creates a Microsoft Word document template for recipes if it doesn't exist.
+        This template is used by the recipe creator utility to generate formatted recipe documents.
         
         Returns
         -------
         bool
-            True if template created successfully, False otherwise
+            True if template created successfully or already exists, False otherwise
+        
+        Notes
+        -----
+        Uses python-docx if available, otherwise tries to run main.py with --create-template flag.
         """
-        self._print("\nCreating recipe template...", "cyan")
+        self._print("\nChecking recipe template...", "cyan")
         
         # Determine python command based on platform
         if self.platform == "Windows":
@@ -1288,6 +1469,8 @@ class MaggieInstaller:
                 from docx import Document
                 
                 doc = Document()
+                
+                # Add metadata section
                 doc.add_heading("Recipe Name", level=1)
                 
                 # Add metadata section
@@ -1301,13 +1484,13 @@ class MaggieInstaller:
                 info_table.cell(2, 0).text = "Servings"
                 info_table.cell(2, 1).text = "0 servings"
                 
-                # Add ingredients section
+                # Add ingredients section with better formatting
                 doc.add_heading("Ingredients", level=2)
                 doc.add_paragraph("• Ingredient 1", style='ListBullet')
                 doc.add_paragraph("• Ingredient 2", style='ListBullet')
                 doc.add_paragraph("• Ingredient 3", style='ListBullet')
                 
-                # Add instructions section
+                # Add steps section with numbered steps
                 doc.add_heading("Instructions", level=2)
                 doc.add_paragraph("1. Step 1", style='ListNumber')
                 doc.add_paragraph("2. Step 2", style='ListNumber')
@@ -1319,6 +1502,7 @@ class MaggieInstaller:
                 
                 # Save the template
                 doc.save(template_path)
+                
                 self._print(f"Recipe template created at {template_path}", "green")
                 return True
                 
@@ -1336,183 +1520,3 @@ class MaggieInstaller:
         except Exception as e:
             self._print(f"Error creating recipe template: {e}", "red")
             return False
-        
-    def _optimize_config(self) -> bool:
-        """
-        Optimize configuration for detected hardware.
-        
-        Returns
-        -------
-        bool
-            True if configuration optimized successfully, False otherwise
-        """
-        self._print("\nOptimizing configuration for detected hardware...", "cyan")
-        
-        # Determine python command based on platform
-        if self.platform == "Windows":
-            python_cmd = os.path.join(self.base_dir, "venv", "Scripts", "python")
-        else:
-            python_cmd = os.path.join(self.base_dir, "venv", "bin", "python")
-            
-        returncode, _, _ = self._run_command([python_cmd, "main.py", "--optimize"])
-        
-        if returncode != 0:
-            self._print("Error optimizing configuration", "red")
-            self._print("Continuing with default configuration", "yellow")
-            return False
-            
-        self._print("Configuration optimized for your hardware", "green")
-        return True
-        
-    def _verify_system(self) -> bool:
-        """
-        Verify system configuration.
-        
-        Returns
-        -------
-        bool
-            True if system verification passed, False otherwise
-        """
-        self._print("\nVerifying system configuration...", "cyan")
-        
-        # Determine python command based on platform
-        if self.platform == "Windows":
-            python_cmd = os.path.join(self.base_dir, "venv", "Scripts", "python")
-        else:
-            python_cmd = os.path.join(self.base_dir, "venv", "bin", "python")
-            
-        returncode, stdout, _ = self._run_command([python_cmd, "main.py", "--verify"])
-        
-        if returncode != 0:
-            self._print("System verification failed", "red")
-            self._print("Some functionality may not work correctly", "yellow")
-            return False
-            
-        self._print("System verification passed", "green")
-        return True
-        
-    def install(self) -> bool:
-        """
-        Run the full installation process.
-        
-        Returns
-        -------
-        bool
-            True if installation successful, False otherwise
-        """
-        self._print("=== Maggie AI Assistant Installation ===", "cyan")
-        self._print(f"Platform: {self.platform}", "cyan")
-        
-        if not self.is_admin:
-            if self.platform == "Windows":
-                self._print("Note: Running without Administrator privileges", "yellow")
-                self._print("Some optimizations may not be applied", "yellow")
-            else:
-                self._print("Note: Running without root privileges", "yellow")
-                self._print("Some optimizations may not be applied", "yellow")
-        
-        # Check Python version
-        if not self._check_python_version():
-            return False
-            
-        # Check GPU
-        gpu_info = self._check_gpu()
-        
-        # Create directories
-        if not self._create_directories():
-            return False
-            
-        # Setup virtual environment
-        if not self._setup_virtual_env():
-            return False
-            
-        # Install dependencies
-        if not self._install_dependencies():
-            self._print("Some dependencies failed to install", "yellow")
-            self._print("Continuing with installation, but some features may not work", "yellow")
-            
-        # Setup configuration
-        if not self._setup_config():
-            return False
-            
-        # Download models
-        if not self._download_models():
-            self._print("Some models failed to download", "yellow")
-            self._print("Continuing with installation, but some features may not work", "yellow")
-            
-        # Create recipe template
-        if not self._create_recipe_template():
-            self._print("Recipe template creation failed", "yellow")
-            self._print("Recipe functionality may not work properly", "yellow")
-            
-        # Optimize configuration
-        if not self._optimize_config():
-            self._print("Configuration optimization failed", "yellow")
-            self._print("Using default configuration", "yellow")
-            
-        # Verify system
-        verify_result = self._verify_system()
-            
-        # Installation complete
-        self._print("\n=== Installation Complete ===", "green")
-        
-        # Show summary of installation status
-        self._print("\nInstallation Summary:", "cyan")
-        self._print(f"Python: {platform.python_version()}", "green")
-        self._print(f"Git found: {'Yes' if self.has_git else 'No'}", "green" if self.has_git else "yellow")
-        self._print(f"C++ compiler found: {'Yes' if self.has_cpp_compiler else 'No'}", "green" if self.has_cpp_compiler else "yellow")
-        self._print(f"System verification: {'Passed' if verify_result else 'Failed'}", "green" if verify_result else "yellow")
-        
-        # Reminders
-        self._print("\nReminders:", "cyan")
-        self._print("1. Edit config.yaml to add your Picovoice access key from https://console.picovoice.ai/", "yellow")
-        self._print("2. To run Maggie:", "yellow")
-        
-        if self.platform == "Windows":
-            self._print("   .\venv\Scripts\activate", "cyan")
-            self._print("   python main.py", "cyan")
-        else:
-            self._print("   source venv/bin/activate", "cyan")
-            self._print("   python main.py", "cyan")
-        
-        # Required tools not found warnings
-        if not self.has_git:
-            self._print("\nWarning: Git not found", "yellow")
-            self._print("For full functionality, install Git from: https://git-scm.com/download/win", "yellow")
-            
-        if not self.has_cpp_compiler:
-            self._print("\nWarning: Visual C++ Build Tools not found", "yellow")
-            self._print("For full functionality, install Visual C++ Build Tools from:", "yellow")
-            self._print("https://visualstudio.microsoft.com/visual-cpp-build-tools/", "yellow")
-            
-        # Ask if user wants to start Maggie
-        response = input(f"\n{self.colors['magenta']}Would you like to start Maggie now? (y/n): {self.colors['reset']}")
-        
-        if response.lower() == "y":
-            self._print("\nStarting Maggie...", "cyan")
-            
-            if self.platform == "Windows":
-                python_cmd = os.path.join(self.base_dir, "venv", "Scripts", "python")
-            else:
-                python_cmd = os.path.join(self.base_dir, "venv", "bin", "python")
-                
-            self._run_command([python_cmd, "main.py"])
-            
-        return True
-
-
-def main():
-    """
-    Main entry point for the installer.
-    """
-    parser = argparse.ArgumentParser(description="Maggie AI Assistant Installer")
-    parser.add_argument("--verbose", action="store_true", help="Enable verbose output")
-    args = parser.parse_args()
-    
-    installer = MaggieInstaller(verbose=args.verbose)
-    success = installer.install()
-    
-    return 0 if success else 1
-
-if __name__ == "__main__":
-    sys.exit(main())
