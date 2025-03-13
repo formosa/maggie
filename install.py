@@ -594,14 +594,14 @@ class MaggieInstaller:
         self._print("Virtual environment created successfully", "green")
         return True
         
-    def _install_basic_dependencies(self, pip_cmd: str) -> bool:
+    def _install_basic_dependencies(self, python_cmd: str) -> bool:
         """
         Install basic dependencies needed for further installation.
         
         Parameters
         ----------
-        pip_cmd : str
-            Path to pip executable
+        python_cmd : str
+            Path to Python executable in virtual environment
             
         Returns
         -------
@@ -610,21 +610,29 @@ class MaggieInstaller:
         """
         self._print("Installing basic dependencies...", "cyan")
         
-        # Install requests for URL operations
-        self._print("Installing requests package...", "cyan")
-        returncode, _, _ = self._run_command([pip_cmd, "install", "requests"])
+        # Upgrade pip, setuptools, and wheel using the proper method
+        self._print("Upgrading pip, setuptools, and wheel...", "cyan")
+        returncode, stdout, stderr = self._run_command([python_cmd, "-m", "pip", "install", "--upgrade", "pip", "setuptools", "wheel"])
         
         if returncode != 0:
-            self._print("Error installing requests package", "red")
+            self._print(f"Error upgrading pip, setuptools, and wheel: {stderr}", "red")
+            return False
+        
+        # Install requests for URL operations
+        self._print("Installing requests package...", "cyan")
+        returncode, _, stderr = self._run_command([python_cmd, "-m", "pip", "install", "requests"])
+        
+        if returncode != 0:
+            self._print(f"Error installing requests package: {stderr}", "red")
             return False
             
         # Install other basic dependencies
-        basic_deps = ["wheel", "setuptools", "urllib3", "tqdm"]
+        basic_deps = ["urllib3", "tqdm"]
         self._print(f"Installing basic packages: {', '.join(basic_deps)}...", "cyan")
-        returncode, _, _ = self._run_command([pip_cmd, "install", "--upgrade"] + basic_deps)
+        returncode, _, stderr = self._run_command([python_cmd, "-m", "pip", "install", "--upgrade"] + basic_deps)
         
         if returncode != 0:
-            self._print("Error installing basic packages", "red")
+            self._print(f"Error installing basic packages: {stderr}", "red")
             return False
             
         return True
@@ -745,14 +753,14 @@ class MaggieInstaller:
             self._print(f"Error downloading GitHub repository: {e}", "red")
             return False
     
-    def _install_from_wheel_url(self, pip_cmd: str, package_name: str, wheel_url: str) -> bool:
+    def _install_from_wheel_url(self, python_cmd: str, package_name: str, wheel_url: str) -> bool:
         """
         Install a package from a wheel URL.
         
         Parameters
         ----------
-        pip_cmd : str
-            Path to pip executable
+        python_cmd : str
+            Path to Python executable in virtual environment
         package_name : str
             Name of the package
         wheel_url : str
@@ -778,7 +786,7 @@ class MaggieInstaller:
                 
             # Install the wheel
             returncode, _, stderr = self._run_command([
-                pip_cmd, "install", wheel_path
+                python_cmd, "-m", "pip", "install", wheel_path
             ])
             
             if returncode != 0:
@@ -792,7 +800,7 @@ class MaggieInstaller:
             self._print(f"Error installing {package_name} from wheel: {e}", "red")
             return False
 
-    def _install_piper_phonemize_bin(self, pip_cmd: str) -> bool:
+    def _install_piper_phonemize_bin(self, python_cmd: str) -> bool:
         """
         Install pre-built piper-phonemize wheel.
         
@@ -801,8 +809,8 @@ class MaggieInstaller:
         
         Parameters
         ----------
-        pip_cmd : str
-            Path to pip executable
+        python_cmd : str
+            Path to Python executable in virtual environment
             
         Returns
         -------
@@ -837,7 +845,7 @@ class MaggieInstaller:
                     if self._download_file_with_requests(wheel_url, wheel_path):
                         # Install the wheel
                         returncode, _, stderr = self._run_command([
-                            pip_cmd, "install", wheel_path
+                            python_cmd, "-m", "pip", "install", wheel_path
                         ])
                         
                         if returncode == 0:
@@ -856,7 +864,7 @@ class MaggieInstaller:
             self._print(f"Error installing piper-phonemize from wheel: {e}", "red")
             return False
 
-    def _install_piper_phonemize(self, pip_cmd: str) -> bool:
+    def _install_piper_phonemize(self, python_cmd: str) -> bool:
         """
         Install piper-phonemize package using multiple fallback strategies.
         
@@ -868,8 +876,8 @@ class MaggieInstaller:
         
         Parameters
         ----------
-        pip_cmd : str
-            Path to pip executable
+        python_cmd : str
+            Path to Python executable in virtual environment
             
         Returns
         -------
@@ -880,14 +888,14 @@ class MaggieInstaller:
         
         # First try pre-built wheel
         if self.platform == "Windows":
-            if self._install_piper_phonemize_bin(pip_cmd):
+            if self._install_piper_phonemize_bin(python_cmd):
                 return True
         
         # If wheel installation fails and we have Git, try direct installation (non-editable)
         if self.has_git:
             self._print("Installing piper-phonemize from GitHub (non-editable)...", "cyan")
             returncode, _, stderr = self._run_command([
-                pip_cmd, "install", "git+https://github.com/rhasspy/piper-phonemize.git"
+                python_cmd, "-m", "pip", "install", "git+https://github.com/rhasspy/piper-phonemize.git"
             ])
             
             if returncode == 0:
@@ -908,7 +916,7 @@ class MaggieInstaller:
             # Try to install in non-editable mode
             self._print("Installing piper-phonemize from sources (non-editable)...", "cyan")
             returncode, _, stderr = self._run_command([
-                pip_cmd, "install", package_dir
+                python_cmd, "-m", "pip", "install", package_dir
             ])
             
             if returncode == 0:
@@ -939,16 +947,14 @@ class MaggieInstaller:
             
             return False
             
-    def _install_whisper_streaming(self, pip_cmd: str, python_cmd: str) -> bool:
+    def _install_whisper_streaming(self, python_cmd: str) -> bool:
         """
         Install whisper-streaming package directly.
         
         Parameters
         ----------
-        pip_cmd : str
-            Path to pip executable
         python_cmd : str
-            Path to python executable
+            Path to Python executable in virtual environment
             
         Returns
         -------
@@ -1017,7 +1023,7 @@ class MaggieInstaller:
                     if os.path.exists(req_file):
                         self._print("Installing whisper-streaming requirements...", "cyan")
                         returncode, _, stderr = self._run_command([
-                            pip_cmd, "install", "-r", req_file
+                            python_cmd, "-m", "pip", "install", "-r", req_file
                         ])
                         
                         if returncode != 0:
@@ -1032,7 +1038,7 @@ class MaggieInstaller:
                 # Standard Python package - install it
                 self._print("Installing whisper-streaming as a standard package...", "cyan")
                 returncode, _, stderr = self._run_command([
-                    pip_cmd, "install", package_dir
+                    python_cmd, "-m", "pip", "install", package_dir
                 ])
                 
                 if returncode != 0:
@@ -1127,34 +1133,24 @@ class MaggieInstaller:
         # Check for C++ compiler
         self._check_cpp_compiler()
         
-        # Determine pip command based on platform
+        # Determine python command based on platform
         if self.platform == "Windows":
-            pip_cmd = os.path.join(self.base_dir, "venv", "Scripts", "pip")
             python_cmd = os.path.join(self.base_dir, "venv", "Scripts", "python")
         else:
-            pip_cmd = os.path.join(self.base_dir, "venv", "bin", "pip")
             python_cmd = os.path.join(self.base_dir, "venv", "bin", "python")
             
-        # Upgrade pip, setuptools, wheel
-        self._print("Upgrading pip, setuptools, and wheel...", "cyan")
-        returncode, _, _ = self._run_command([pip_cmd, "install", "--upgrade", "pip", "setuptools", "wheel"])
-        
-        if returncode != 0:
-            self._print("Error upgrading pip, setuptools, and wheel", "red")
-            return False
-            
-        # Install basic dependencies needed for further installation
-        if not self._install_basic_dependencies(pip_cmd):
+        # Upgrade pip, setuptools, wheel using proper method
+        if not self._install_basic_dependencies(python_cmd):
             self._print("Warning: Failed to install basic dependencies, continuing anyway", "yellow")
         
         # Install PyTorch with CUDA support
         self._print("Installing PyTorch with CUDA 11.8 support (optimized for RTX 3080)...", "cyan")
-        returncode, _, _ = self._run_command([
-            pip_cmd, "install", "torch==2.0.1+cu118", "--extra-index-url", "https://download.pytorch.org/whl/cu118"
+        returncode, _, stderr = self._run_command([
+            python_cmd, "-m", "pip", "install", "torch==2.0.1+cu118", "--extra-index-url", "https://download.pytorch.org/whl/cu118"
         ])
         
         if returncode != 0:
-            self._print("Error installing PyTorch with CUDA support", "red")
+            self._print(f"Error installing PyTorch with CUDA support: {stderr}", "red")
             self._print("Continuing with installation, but GPU acceleration may not work", "yellow")
         
         # Get pre-built wheels if possible
@@ -1182,13 +1178,13 @@ class MaggieInstaller:
                 
             # Install from the temporary requirements file
             self._print("Installing standard dependencies...", "cyan")
-            returncode, _, _ = self._run_command([pip_cmd, "install", "-r", temp_req_path])
+            returncode, _, stderr = self._run_command([python_cmd, "-m", "pip", "install", "-r", temp_req_path])
             
             # Clean up
             os.remove(temp_req_path)
             
             if returncode != 0:
-                self._print("Error installing standard dependencies", "red")
+                self._print(f"Error installing standard dependencies: {stderr}", "red")
                 self._print("Continuing with installation of critical components", "yellow")
             
             # Install specialized dependencies in the correct order
@@ -1199,18 +1195,18 @@ class MaggieInstaller:
             # First try pre-built wheel if available for Windows
             if "piper-phonemize" in wheel_urls:
                 piper_phonemize_installed = self._install_from_wheel_url(
-                    pip_cmd, "piper-phonemize", wheel_urls["piper-phonemize"]
+                    python_cmd, "piper-phonemize", wheel_urls["piper-phonemize"]
                 )
             
             # If wheel installation failed, try other methods
             if not piper_phonemize_installed:
-                piper_phonemize_installed = self._install_piper_phonemize(pip_cmd)
+                piper_phonemize_installed = self._install_piper_phonemize(python_cmd)
             
             # 2. Now install piper-tts after its dependency is installed or if user opted to skip
             if piper_phonemize_installed:
                 self._print("Installing piper-tts...", "cyan")
                 returncode, _, stderr = self._run_command([
-                    pip_cmd, "install", "piper-tts==1.2.0"
+                    python_cmd, "-m", "pip", "install", "piper-tts==1.2.0"
                 ])
                 
                 if returncode != 0:
@@ -1222,7 +1218,7 @@ class MaggieInstaller:
                 self._print("Note: Text-to-speech functionality will be limited", "yellow")
                 
             # 3. Install whisper-streaming using our custom method
-            whisper_installed = self._install_whisper_streaming(pip_cmd, python_cmd)
+            whisper_installed = self._install_whisper_streaming(python_cmd)
                 
             if not whisper_installed:
                 self._print("Warning: whisper-streaming installation failed", "yellow")
@@ -1234,7 +1230,7 @@ class MaggieInstaller:
             # Try pre-built wheel first
             if "llama-cpp-python" in wheel_urls:
                 llama_installed = self._install_from_wheel_url(
-                    pip_cmd, "llama-cpp-python", wheel_urls["llama-cpp-python"]
+                    python_cmd, "llama-cpp-python", wheel_urls["llama-cpp-python"]
                 )
             
             # If wheel installation failed or no wheel found, try source installation
@@ -1244,7 +1240,7 @@ class MaggieInstaller:
                 # If we have a compiler, we can try to build from source
                 if self.has_cpp_compiler:
                     returncode, _, stderr = self._run_command([
-                        pip_cmd, "install", "llama-cpp-python==0.2.11", "--no-cache-dir"
+                        python_cmd, "-m", "pip", "install", "llama-cpp-python==0.2.11", "--no-cache-dir"
                     ])
                     
                     if returncode == 0:
@@ -1263,7 +1259,7 @@ class MaggieInstaller:
             if "PyAudio" in wheel_urls:
                 self._print("Installing PyAudio from pre-built wheel...", "cyan")
                 pyaudio_installed = self._install_from_wheel_url(
-                    pip_cmd, "PyAudio", wheel_urls["PyAudio"]
+                    python_cmd, "PyAudio", wheel_urls["PyAudio"]
                 )
                 
                 if not pyaudio_installed:
@@ -1273,10 +1269,10 @@ class MaggieInstaller:
             
             # 6. Install GPU-specific dependencies
             self._print("Installing GPU-specific dependencies...", "cyan")
-            returncode, _, _ = self._run_command([pip_cmd, "install", "onnxruntime-gpu==1.15.1"])
+            returncode, _, stderr = self._run_command([python_cmd, "-m", "pip", "install", "onnxruntime-gpu==1.15.1"])
             
             if returncode != 0:
-                self._print("Error installing GPU-specific dependencies", "red")
+                self._print(f"Error installing GPU-specific dependencies: {stderr}", "red")
                 self._print("Continuing with CPU-only operation", "yellow")
                 
             self._print("Dependencies installed successfully", "green")
