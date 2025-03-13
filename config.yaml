@@ -9,12 +9,14 @@ wake_word:
   cpu_threshold: 5.0  # Maximum CPU usage percentage
 
 # Speech processing configuration
+# Speech processing configuration
 speech:
   whisper:
-    model_size: "base"  # Options: tiny, base, small, medium, large
-    compute_type: "float16"  # Optimized for RTX 3080
+    model_size: "base"
+    compute_type: "float16"
   tts:
-    voice_model: "en_US-kathleen-medium"
+    # Changed from en_US-kathleen-medium to af_heart
+    voice_model: "af_heart"
     model_path: "models/tts"
     sample_rate: 22050
 
