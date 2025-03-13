@@ -12,6 +12,7 @@ import platform
 import logging
 import threading
 import traceback
+import sys  # Added missing import
 from datetime import datetime
 from typing import Dict, Any, Optional
 

@@ -33,6 +33,7 @@ import sys
 import argparse
 import platform
 import multiprocessing
+import yaml  # Added missing import
 from typing import Dict, Any, Optional, List, Tuple
 
 # Third-party imports
@@ -676,7 +677,7 @@ def start_maggie(args: argparse.Namespace) -> int:
     Parameters
     ----------
     args : argparse.Namespace
-        Command-line arguments
+        Command-line arguments containing configuration options
         
     Returns
     -------
@@ -687,8 +688,26 @@ def start_maggie(args: argparse.Namespace) -> int:
         # Import here to avoid circular imports
         from maggie import MaggieAI
         
+        # Load config from file
+        config = {}
+        if os.path.exists(args.config):
+            try:
+                with open(args.config, 'r') as f:
+                    config = yaml.safe_load(f)
+                    if config is None:
+                        logger.warning(f"Empty config file: {args.config}, using defaults")
+                        config = {}
+            except yaml.YAMLError as e:
+                logger.error(f"Error parsing config file: {e}")
+                return 1
+            except Exception as e:
+                logger.error(f"Error reading config file: {e}")
+                return 1
+        else:
+            logger.warning(f"Config file not found: {args.config}, using defaults")
+        
         # Initialize and start Maggie AI
-        maggie = MaggieAI(config_path=args.config)
+        maggie = MaggieAI(config)
         
         # Register signal handlers for graceful shutdown
         register_signal_handlers(maggie)

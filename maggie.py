@@ -30,26 +30,7 @@ from concurrent.futures import ThreadPoolExecutor
 # Third-party imports
 from loguru import logger
 
-<<<<<<< HEAD
-# Import utility modules
-from utils.kokoro_tts import KokoroTTS
-from utils.gui import MainWindow
-from utils.config import Config
-from utils.recipe_creator import RecipeCreator  # Fixed import path
-
-
-class MaggieState(Enum):
-    """Enumeration of possible states for the Maggie AI Assistant."""
-    IDLE = auto()
-    STARTUP = auto()
-    READY = auto()
-    ACTIVE = auto()
-    BUSY = auto()
-    CLEANUP = auto()
-    SHUTDOWN = auto()
-=======
 __all__ = ['State', 'StateTransition', 'EventBus', 'MaggieAI']
->>>>>>> 9c050c2ef726d229607f4518139e12a1de59e7a8
 
 class State(Enum):
     """
@@ -308,16 +289,9 @@ class MaggieAI:
             Configuration dictionary
         """
         self.config = config
-<<<<<<< HEAD
-        self.whisper_model = None
-        self.tts = KokoroTTS(config.get("tts", {}))
-        self.sr_recognizer = sr.Recognizer()
-        self.sr_mic = None
-=======
         self.state = State.IDLE
         self.event_bus = EventBus()
         self.utilities = {}
->>>>>>> 9c050c2ef726d229607f4518139e12a1de59e7a8
         
         # Component references - will be initialized during startup
         self.hardware_manager = None

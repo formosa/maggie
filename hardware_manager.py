@@ -409,6 +409,29 @@ class HardwareManager:
             
         return audio_opt
     
+    def apply_hardware_optimizations(self, hardware_info: Dict[str, Any]) -> None:
+        """
+        Apply hardware-specific optimizations to the configuration.
+        
+        Parameters
+        ----------
+        hardware_info : Dict[str, Any]
+            Hardware information dictionary containing CPU, GPU, and memory details
+            
+        Notes
+        -----
+        Optimizes configuration based on detected hardware capabilities,
+        with specific optimizations for Ryzen 9 5900X and RTX 3080.
+        """
+        # CPU optimizations for Ryzen 9 5900X
+        self._apply_cpu_optimizations(hardware_info.get("cpu", {}))
+            
+        # Memory optimizations for 32GB RAM
+        self._apply_memory_optimizations(hardware_info.get("memory", {}))
+            
+        # GPU optimizations for RTX 3080
+        self._apply_gpu_optimizations(hardware_info.get("gpu", {}))
+
     def optimize_config(self, config: Dict[str, Any]) -> Dict[str, Any]:
         """
         Apply hardware-specific optimizations to configuration.

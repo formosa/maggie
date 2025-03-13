@@ -10,15 +10,9 @@ high-quality voice output.
 
 Examples
 --------
-<<<<<<< HEAD:utils/kokoro_tts.py
 >>> from utils.kokoro_tts import KokoroTTS
 >>> config = {"voice_model": "af_heart", "model_path": "models/tts"}
 >>> tts = KokoroTTS(config)
-=======
->>> from utils.tts import PiperTTS
->>> config = {"voice_model": "en_US-kathleen-medium", "model_path": "models/tts"}
->>> tts = PiperTTS(config)
->>>>>>> 9c050c2ef726d229607f4518139e12a1de59e7a8:utils/tts.py
 >>> tts.speak("Hello, I am Maggie AI Assistant")
 >>> # Save to file
 >>> tts.save_to_file("This is a test", "test_output.wav")
@@ -38,15 +32,9 @@ import numpy as np
 import soundfile as sf
 from loguru import logger
 
-<<<<<<< HEAD:utils/kokoro_tts.py
 __all__ = ['KokoroTTS']
 
 class KokoroTTS:
-=======
-__all__ = ['PiperTTS']
-
-class PiperTTS:
->>>>>>> 9c050c2ef726d229607f4518139e12a1de59e7a8:utils/tts.py
     """
     Text-to-Speech implementation using Kokoro.
     
@@ -67,13 +55,8 @@ class PiperTTS:
         Path to the directory containing TTS models
     sample_rate : int
         Sample rate for audio output (Hz)
-<<<<<<< HEAD:utils/kokoro_tts.py
     kokoro_instance : Optional[Any]
         Loaded Kokoro TTS model instance
-=======
-    piper_instance : Optional[Any]
-        Loaded Piper TTS model instance
->>>>>>> 9c050c2ef726d229607f4518139e12a1de59e7a8:utils/tts.py
     lock : threading.Lock
         Lock for thread-safe operations
     cache_dir : str
@@ -175,21 +158,12 @@ class PiperTTS:
             return True
             
         except ImportError as import_error:
-<<<<<<< HEAD:utils/kokoro_tts.py
             logger.error(f"Failed to import Kokoro TTS module: {import_error}")
             logger.error("Please install kokoro with: pip install git+https://github.com/hexgrad/kokoro")
             return False
         except Exception as e:
             logger.error(f"Failed to initialize Kokoro TTS: {e}")
             return False
-=======
-            logger.error(f"Failed to import Piper TTS module: {import_error}")
-            logger.error("Please install piper-tts with: pip install piper-tts==1.2.0")
-            return False
-        except Exception as e:
-            logger.error(f"Failed to initialize Piper TTS: {e}")
-            return False
->>>>>>> 9c050c2ef726d229607f4518139e12a1de59e7a8:utils/tts.py
     
     def _log_cuda_status(self) -> None:
         """
