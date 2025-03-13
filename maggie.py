@@ -1,40 +1,36 @@
 """
-Maggie AI Assistant - Main Application
-=====================================
-Core implementation of the Maggie AI Assistant, implementing a Finite State Machine
-architecture with event-driven state transitions and modular utility objects.
+Maggie AI Assistant - Core Implementation
+=======================================
+Core FSM implementation of the Maggie AI Assistant.
 
-Optimized for:
-- CPU: AMD Ryzen 9 5900X (12-core)
-- GPU: NVIDIA GeForce RTX 3080 (10GB GDDR6X)
-- RAM: 32GB DDR4-3200
-- OS: Windows 11 Pro
+This module implements a simplified Finite State Machine (FSM) architecture
+with event-driven state transitions and optimized resource management.
+Specifically tuned for AMD Ryzen 9 5900X and NVIDIA RTX 3080 hardware.
+
+Examples
+--------
+>>> from maggie import MaggieAI
+>>> config = {"threading": {"max_workers": 8}, "inactivity_timeout": 300}
+>>> maggie = MaggieAI(config)
+>>> maggie.initialize_components()
+>>> maggie.start()
+>>> # Later, to stop
+>>> maggie.stop()
 """
 
-import os
-import time
+# Standard library imports
 import threading
 import queue
-import yaml
-import numpy as np
-import sys  # Added missing import
-from typing import Dict, List, Any, Optional, Callable, Tuple
+import time
 from enum import Enum, auto
+from typing import Dict, Any, Optional, List, Callable, Tuple
 from dataclasses import dataclass
-from abc import ABC, abstractmethod
-from concurrent.futures import ThreadPoolExecutor  # Added for thread management
+from concurrent.futures import ThreadPoolExecutor
 
-# Core dependencies
-import pvporcupine
-import pyaudio
-import speech_recognition as sr
-from faster_whisper import WhisperModel
-from ctransformers import AutoModelForCausalLM
-from PyQt6.QtWidgets import QApplication, QMainWindow
-from PyQt6.QtCore import QThread, pyqtSignal
-from transitions import Machine
+# Third-party imports
 from loguru import logger
 
+<<<<<<< HEAD
 # Import utility modules
 from utils.kokoro_tts import KokoroTTS
 from utils.gui import MainWindow
@@ -51,1010 +47,836 @@ class MaggieState(Enum):
     BUSY = auto()
     CLEANUP = auto()
     SHUTDOWN = auto()
+=======
+__all__ = ['State', 'StateTransition', 'EventBus', 'MaggieAI']
+>>>>>>> 9c050c2ef726d229607f4518139e12a1de59e7a8
 
+class State(Enum):
+    """
+    Simplified state enumeration for Maggie AI Assistant.
+    
+    Reduces the previous state machine to five essential states
+    for improved clarity and manageability.
+    
+    Attributes
+    ----------
+    IDLE : enum
+        Waiting for wake word, minimal resource usage
+    READY : enum
+        Listening for commands, resources initialized
+    ACTIVE : enum
+        Processing commands and running utilities
+    CLEANUP : enum
+        Cleaning up resources
+    SHUTDOWN : enum
+        Final state before application exit
+    """
+    IDLE = auto()      # Waiting for wake word, minimal resource usage
+    READY = auto()     # Listening for commands, resources initialized
+    ACTIVE = auto()    # Processing commands and running utilities
+    CLEANUP = auto()   # Cleaning up resources
+    SHUTDOWN = auto()  # Final state before application exit
 
 @dataclass
-class StateTransitionEvent:
-    """Data structure for state transition events."""
-    from_state: MaggieState
-    to_state: MaggieState
+class StateTransition:
+    """
+    Data structure for state transition events.
+    
+    Parameters
+    ----------
+    from_state : State
+        Previous state
+    to_state : State
+        New state
+    trigger : str
+        Event that triggered the transition
+    timestamp : float
+        Unix timestamp of the transition
+    """
+    from_state: State
+    to_state: State
     trigger: str
     timestamp: float
 
-
 class EventBus:
     """
-    Central event bus for handling system-wide events and communication between components.
+    Centralized event management system.
+    
+    Handles event publication, subscription, and dispatching with
+    thread-safety and prioritization.
+    
+    Attributes
+    ----------
+    subscribers : Dict[str, List[Tuple[int, Callable]]]
+        Event subscribers mapped by event type with priority
+    queue : queue.PriorityQueue
+        Priority queue for event processing
+    running : bool
+        Whether the event bus is currently running
+    _worker_thread : Optional[threading.Thread]
+        Thread for event processing
     """
     
     def __init__(self):
-        """Initialize the event bus with empty subscribers dictionary."""
-        self.subscribers = {}
-        self.event_queue = queue.Queue()
-        self._running = False
-        self._thread = None
-        
-    def subscribe(self, event_type: str, callback: Callable) -> None:
         """
-        Subscribe a callback function to a specific event type.
+        Initialize the event bus with empty subscribers dictionary.
+        """
+        self.subscribers = {}
+        self.queue = queue.PriorityQueue()
+        self.running = False
+        self._worker_thread = None
+        
+    def subscribe(self, event_type: str, callback: Callable, priority: int = 0) -> None:
+        """
+        Subscribe to an event type with priority support.
         
         Parameters
         ----------
         event_type : str
-            The type of event to subscribe to
+            Event type to subscribe to
         callback : Callable
-            Function to be called when event is published
+            Function to call when event is published
+        priority : int, optional
+            Subscription priority (lower is higher priority), by default 0
         """
         if event_type not in self.subscribers:
             self.subscribers[event_type] = []
-        self.subscribers[event_type].append(callback)
+            
+        self.subscribers[event_type].append((priority, callback))
+        self.subscribers[event_type].sort(key=lambda x: x[0])  # Sort by priority
         
-    def unsubscribe(self, event_type: str, callback: Callable) -> None:
+    def unsubscribe(self, event_type: str, callback: Callable) -> bool:
         """
-        Unsubscribe a callback function from a specific event type.
+        Unsubscribe from an event type.
         
         Parameters
         ----------
         event_type : str
-            The type of event to unsubscribe from
+            Event type to unsubscribe from
         callback : Callable
-            Function to be removed from subscribers
-        """
-        if event_type in self.subscribers and callback in self.subscribers[event_type]:
-            self.subscribers[event_type].remove(callback)
+            Function to unsubscribe
             
-    def publish(self, event_type: str, data: Any = None) -> None:
+        Returns
+        -------
+        bool
+            True if unsubscribed successfully, False otherwise
         """
-        Publish an event to all subscribers.
+        if event_type not in self.subscribers:
+            return False
+            
+        for i, (_, cb) in enumerate(self.subscribers[event_type]):
+            if cb == callback:
+                self.subscribers[event_type].pop(i)
+                return True
+                
+        return False
+        
+    def publish(self, event_type: str, data: Any = None, priority: int = 0) -> None:
+        """
+        Publish an event with priority support.
         
         Parameters
         ----------
         event_type : str
-            The type of event being published
+            Type of event to publish
         data : Any, optional
-            Data payload to send with the event
+            Event data payload, by default None
+        priority : int, optional
+            Event priority (lower is higher priority), by default 0
         """
-        self.event_queue.put((event_type, data))
+        self.queue.put((priority, (event_type, data)))
         
-    def start(self) -> None:
-        """Start the event processing thread."""
-        if self._running:
-            return
-            
-        self._running = True
-        self._thread = threading.Thread(target=self._process_events, daemon=True)
-        self._thread.start()
+    def start(self) -> bool:
+        """
+        Start the event processing thread.
         
-    def stop(self) -> None:
-        """Stop the event processing thread."""
-        self._running = False
-        if self._thread and self._thread.is_alive():
-            self.event_queue.put(None)  # Signal to stop
-            self._thread.join(timeout=2.0)
+        Returns
+        -------
+        bool
+            True if started successfully, False if already running
+        """
+        if self.running:
+            return False
             
+        self.running = True
+        self._worker_thread = threading.Thread(
+            target=self._process_events,
+            name="EventBusThread",
+            daemon=True
+        )
+        self._worker_thread.start()
+        
+        logger.info("Event bus started")
+        return True
+        
+    def stop(self) -> bool:
+        """
+        Stop the event processing thread.
+        
+        Returns
+        -------
+        bool
+            True if stopped successfully, False if not running
+        """
+        if not self.running:
+            return False
+            
+        self.running = False
+        self.queue.put((0, None))  # Signal to stop
+        
+        if self._worker_thread:
+            self._worker_thread.join(timeout=2.0)
+            
+        logger.info("Event bus stopped")
+        return True
+        
     def _process_events(self) -> None:
-        """Process events from the queue and dispatch to subscribers."""
-        while self._running:
+        """
+        Process events from the queue and dispatch to subscribers.
+        """
+        while self.running:
             try:
-                event = self.event_queue.get(timeout=0.1)
+                priority, event = self.queue.get(timeout=0.1)
+                
                 if event is None:  # Stop signal
                     break
                     
                 event_type, data = event
+                
                 if event_type in self.subscribers:
-                    for callback in self.subscribers[event_type]:
+                    for _, callback in self.subscribers[event_type]:
                         try:
                             callback(data)
                         except Exception as e:
                             logger.error(f"Error in event handler for {event_type}: {e}")
                             
-                self.event_queue.task_done()
+                self.queue.task_done()
+                
             except queue.Empty:
                 continue
             except Exception as e:
                 logger.error(f"Error processing events: {e}")
 
-
-class UtilityBase(ABC):
+class MaggieAI:
     """
-    Abstract base class for all utility modules.
-    """
+    Core implementation of the Maggie AI Assistant.
     
-    def __init__(self, event_bus: EventBus, config: Dict[str, Any]):
-        """
-        Initialize the utility module.
-        
-        Parameters
-        ----------
-        event_bus : EventBus
-            Reference to the central event bus
-        config : Dict[str, Any]
-            Configuration parameters for the utility
-        """
-        self.event_bus = event_bus
-        self.config = config
-        self.running = False
-        
-    @abstractmethod
-    def start(self) -> bool:
-        """
-        Start the utility module and return success status.
-        
-        Returns
-        -------
-        bool
-            True if started successfully, False otherwise
-        """
-        pass
-        
-    @abstractmethod
-    def stop(self) -> bool:
-        """
-        Stop the utility module and return success status.
-        
-        Returns
-        -------
-        bool
-            True if stopped successfully, False otherwise
-        """
-        pass
-        
-    @abstractmethod
-    def process_command(self, command: str) -> bool:
-        """
-        Process a command directed to this utility.
-        
-        Parameters
-        ----------
-        command : str
-            The command string to process
-            
-        Returns
-        -------
-        bool
-            True if command was processed, False if not applicable
-        """
-        pass
-
-
-class WakeWordDetector(QThread):
-    """
-    Responsible for detecting the wake word using Porcupine.
-    Optimized for low CPU usage in idle state.
-    """
+    Implements a simplified Finite State Machine architecture with
+    event-driven state transitions and resource management optimized
+    for AMD Ryzen 9 5900X and NVIDIA RTX 3080.
     
-    detected = pyqtSignal()
-    
-    def __init__(self, config: Dict[str, Any]):
-        """
-        Initialize the wake word detector with configuration parameters.
+    Parameters
+    ----------
+    config : Dict[str, Any]
+        Configuration dictionary
         
-        Parameters
-        ----------
-        config : Dict[str, Any]
-            Configuration including sensitivity and keyword paths
-        """
-        super().__init__()
-        self.config = config
-        self.porcupine = None
-        self.pa = None
-        self.audio_stream = None
-        self.running = False
-        self.sensitivity = config.get("sensitivity", 0.5)
-        self.keyword_path = config.get("keyword_path", None)
-        self.access_key = config.get("porcupine_access_key", "")
-        
-    def run(self):
-        """Main execution loop for wake word detection."""
-        try:
-            self.porcupine = pvporcupine.create(
-                access_key=self.access_key,
-                keyword_paths=[self.keyword_path] if self.keyword_path else None,
-                keywords=["maggie"] if not self.keyword_path else None,
-                sensitivities=[self.sensitivity]
-            )
-            
-            self.pa = pyaudio.PyAudio()
-            self.audio_stream = self.pa.open(
-                rate=self.porcupine.sample_rate,
-                channels=1,
-                format=pyaudio.paInt16,
-                input=True,
-                frames_per_buffer=self.porcupine.frame_length
-            )
-            
-            self.running = True
-            logger.info("Wake word detector started")
-            
-            while self.running:
-                pcm = self.audio_stream.read(self.porcupine.frame_length)
-                pcm = np.frombuffer(pcm, dtype=np.int16)
-                keyword_index = self.porcupine.process(pcm)
-                
-                if keyword_index >= 0:
-                    logger.info("Wake word detected!")
-                    self.detected.emit()
-                    
-                # Add a small sleep to reduce CPU usage further
-                time.sleep(0.01)
-                
-        except Exception as e:
-            logger.error(f"Error in wake word detection: {e}")
-        finally:
-            self.cleanup()
-            
-    def cleanup(self):
-        """Clean up resources used by wake word detector."""
-        if self.audio_stream:
-            self.audio_stream.close()
-            self.audio_stream = None
-            
-        if self.pa:
-            self.pa.terminate()
-            self.pa = None
-            
-        if self.porcupine:
-            self.porcupine.delete()
-            self.porcupine = None
-            
-    def stop(self):
-        """Stop the wake word detection thread."""
-        self.running = False
-        self.cleanup()
-
-
-class SpeechProcessor:
-    """
-    Handles speech recognition and text-to-speech conversions.
+    Attributes
+    ----------
+    state : State
+        Current state of the assistant
+    event_bus : EventBus
+        Central event bus for component communication
+    config : Dict[str, Any]
+        Configuration dictionary
+    utilities : Dict[str, Any]
+        Loaded utility modules
+    hardware_manager : Optional[Any]
+        Hardware management component
+    wake_word_detector : Optional[Any]
+        Wake word detection component
+    speech_processor : Optional[Any]
+        Speech processing component
+    llm_processor : Optional[Any]
+        LLM processing component
+    gui : Optional[Any]
+        GUI component
+    thread_pool : ThreadPoolExecutor
+        Worker thread pool for async tasks
+    inactivity_timer : Optional[threading.Timer]
+        Timer for tracking inactivity
+    transition_handlers : Dict[State, Callable]
+        State transition handler functions
     """
     
     def __init__(self, config: Dict[str, Any]):
         """
-        Initialize the speech processor with configuration.
+        Initialize the Maggie AI Core.
         
         Parameters
         ----------
         config : Dict[str, Any]
-            Configuration for speech recognition and TTS
+            Configuration dictionary
         """
         self.config = config
+<<<<<<< HEAD
         self.whisper_model = None
         self.tts = KokoroTTS(config.get("tts", {}))
         self.sr_recognizer = sr.Recognizer()
         self.sr_mic = None
+=======
+        self.state = State.IDLE
+        self.event_bus = EventBus()
+        self.utilities = {}
+>>>>>>> 9c050c2ef726d229607f4518139e12a1de59e7a8
         
-        # Initialize whisper model based on hardware capabilities
-        whisper_config = config.get("whisper", {})
-        self.init_whisper_model(whisper_config)
+        # Component references - will be initialized during startup
+        self.hardware_manager = None
+        self.wake_word_detector = None
+        self.speech_processor = None
+        self.llm_processor = None
+        self.gui = None
         
-    def init_whisper_model(self, whisper_config: Dict[str, Any]):
+        # Worker thread pool - optimized for Ryzen 9 5900X
+        self.thread_pool = ThreadPoolExecutor(
+            max_workers=config.get("threading", {}).get("max_workers", 8),
+            thread_name_prefix="maggie_worker"
+        )
+        
+        # Thread management
+        self.inactivity_timer = None
+        self.inactivity_timeout = config.get("inactivity_timeout", 300)  # 5 minutes
+        
+        # Setup state transition handlers
+        self.transition_handlers = {
+            State.IDLE: self._on_enter_idle,
+            State.READY: self._on_enter_ready,
+            State.ACTIVE: self._on_enter_active,
+            State.CLEANUP: self._on_enter_cleanup,
+            State.SHUTDOWN: self._on_enter_shutdown
+        }
+        
+        # Register event handlers
+        self._register_event_handlers()
+        
+    def _register_event_handlers(self) -> None:
         """
-        Initialize the Whisper model for speech recognition.
+        Register event handlers for the event bus.
         
-        Parameters
-        ----------
-        whisper_config : Dict[str, Any]
-            Configuration for Whisper model
+        Sets up handlers for wake word detection, commands, inactivity timeout,
+        and utility completion events.
         """
-        model_size = whisper_config.get("model_size", "base")
-        compute_type = whisper_config.get("compute_type", "float16")  # Use float16 for RTX 3080
+        self.event_bus.subscribe("wake_word_detected", self._handle_wake_word)
+        self.event_bus.subscribe("command_detected", self._handle_command)
+        self.event_bus.subscribe("inactivity_timeout", self._handle_timeout)
+        self.event_bus.subscribe("utility_completed", self._handle_utility_completed)
         
-        # Load the model with GPU acceleration
-        try:
-            # Use CUDA for RTX 3080
-            self.whisper_model = WhisperModel(
-                model_size,
-                device="cuda",
-                compute_type=compute_type
-            )
-            logger.info(f"Loaded Whisper model {model_size} on CUDA with {compute_type}")
-        except Exception as e:
-            logger.error(f"Failed to load Whisper model on GPU: {e}")
-            # Fallback to CPU
-            self.whisper_model = WhisperModel(model_size, device="cpu", compute_type="int8")
-            logger.info(f"Loaded Whisper model {model_size} on CPU (fallback)")
-            
-    def start_listening(self) -> bool:
+    def initialize_components(self) -> bool:
         """
-        Start the microphone for continuous speech recognition.
+        Initialize all required components.
         
         Returns
         -------
         bool
-            True if microphone started successfully
+            True if all components initialized successfully
+            
+        Raises
+        ------
+        ImportError
+            If required modules cannot be imported
         """
         try:
-            self.sr_mic = sr.Microphone()
+            # Initialize hardware manager
+            from hardware_manager import HardwareManager
+            self.hardware_manager = HardwareManager(self.config)
+            
+            # Apply hardware optimizations to config
+            self.config = self.hardware_manager.optimize_config(self.config)
+            
+            # Initialize wake word detector
+            from wake_word import WakeWordDetector
+            self.wake_word_detector = WakeWordDetector(self.config.get("wake_word", {}))
+            self.wake_word_detector.on_detected = lambda: self.event_bus.publish("wake_word_detected")
+            
+            # Initialize speech processor
+            from speech_processor import SpeechProcessor
+            self.speech_processor = SpeechProcessor(self.config.get("speech", {}))
+            
+            # Initialize LLM processor
+            from llm_processor import LLMProcessor
+            self.llm_processor = LLMProcessor(self.config.get("llm", {}))
+            
+            # Initialize utilities
+            self._initialize_utilities()
+            
+            # Start event bus
+            self.event_bus.start()
+            
+            logger.info("All components initialized successfully")
             return True
+            
+        except ImportError as import_error:
+            logger.error(f"Failed to import required module: {import_error}")
+            return False
         except Exception as e:
-            logger.error(f"Failed to start microphone: {e}")
+            logger.error(f"Error initializing components: {e}")
             return False
             
-    def stop_listening(self) -> bool:
+    def _initialize_utilities(self) -> None:
         """
-        Stop the microphone.
+        Initialize utility modules based on configuration.
+        
+        Loads and initializes utility modules specified in the configuration.
+        """
+        utilities_config = self.config.get("utilities", {})
+        
+        # Load recipe creator if configured
+        if "recipe_creator" in utilities_config:
+            try:
+                from utils.recipe_creator import RecipeCreator
+                self.utilities["recipe_creator"] = RecipeCreator(
+                    self.event_bus, 
+                    utilities_config["recipe_creator"]
+                )
+                logger.info("Recipe Creator utility initialized")
+            except ImportError:
+                logger.warning("Recipe Creator utility module not found")
+            except Exception as e:
+                logger.error(f"Error initializing Recipe Creator: {e}")
+            
+        # Log number of initialized utilities
+        logger.info(f"Initialized {len(self.utilities)} utility modules")
+            
+    def start(self) -> bool:
+        """
+        Start the Maggie AI Assistant.
+        
+        Returns
+        -------
+        bool
+            True if started successfully
+        """
+        try:
+            logger.info("Starting Maggie AI Assistant")
+            
+            # Initialize components
+            if not self.initialize_components():
+                logger.error("Failed to initialize components")
+                return False
+                
+            # Transition to IDLE state
+            self._transition_to(State.IDLE, "startup")
+            
+            # Start hardware monitoring
+            self.hardware_manager.start_monitoring()
+            
+            logger.info("Maggie AI Assistant started successfully")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error starting Maggie AI: {e}")
+            return False
+            
+    def stop(self) -> bool:
+        """
+        Stop the Maggie AI Assistant.
         
         Returns
         -------
         bool
             True if stopped successfully
         """
-        self.sr_mic = None
-        return True
-        
-    def recognize_speech(self, audio_data=None, timeout=None) -> Tuple[bool, str]:
-        """
-        Recognize speech from microphone or provided audio data.
-        
-        Parameters
-        ----------
-        audio_data : Optional
-            Audio data to recognize, if None will listen from microphone
-        timeout : Optional[float]
-            Maximum time to listen for in seconds
-            
-        Returns
-        -------
-        Tuple[bool, str]
-            Success status and recognized text
-        """
         try:
-            if not audio_data and self.sr_mic:
-                with self.sr_mic as source:
-                    logger.info("Adjusting for ambient noise...")
-                    self.sr_recognizer.adjust_for_ambient_noise(source, duration=0.5)
-                    logger.info("Listening...")
-                    audio_data = self.sr_recognizer.listen(source, timeout=timeout)
-                    
-            if audio_data:
-                # Extract audio data as numpy array
-                audio_np = np.frombuffer(audio_data.get_raw_data(), dtype=np.int16)
-                
-                # Use faster-whisper for transcription
-                segments, _ = self.whisper_model.transcribe(audio_np, beam_size=5)
-                text = " ".join([segment.text for segment in segments])
-                
-                return True, text.strip()
-            else:
-                return False, "No audio data available"
-                
-        except sr.WaitTimeoutError:
-            return False, "Listening timed out"
-        except Exception as e:
-            logger.error(f"Speech recognition error: {e}")
-            return False, f"Error: {str(e)}"
+            logger.info("Stopping Maggie AI Assistant")
             
-    def speak(self, text: str) -> bool:
-        """
-        Convert text to speech and play it.
-        
-        Parameters
-        ----------
-        text : str
-            Text to be spoken
+            # Transition to SHUTDOWN state
+            self._transition_to(State.SHUTDOWN, "stop_requested")
             
-        Returns
-        -------
-        bool
-            True if successful
-        """
-        try:
-            return self.tts.speak(text)
-        except Exception as e:
-            logger.error(f"TTS error: {e}")
-            return False
-
-
-class LLMProcessor:
-    """
-    Handles interactions with the LLM for text generation.
-    Optimized for the RTX 3080 GPU.
-    """
-    
-    def __init__(self, config: Dict[str, Any]):
-        """
-        Initialize the LLM processor with configuration.
-        
-        Parameters
-        ----------
-        config : Dict[str, Any]
-            Configuration for LLM including model path and parameters
-        """
-        self.config = config
-        self.model = None
-        self.model_path = config.get("model_path", "")
-        self.model_type = config.get("model_type", "mistral")
-        self.loaded = False
-        
-    def load_model(self) -> bool:
-        """
-        Load the LLM model into memory.
-        
-        Returns
-        -------
-        bool
-            True if loaded successfully
-        """
-        try:
-            # Using ctransformers for optimized inference
-            gpu_layers = self.config.get("gpu_layers", 32)  # Use most layers on GPU for RTX 3080
-            
-            self.model = AutoModelForCausalLM.from_pretrained(
-                self.model_path,
-                model_type=self.model_type,
-                gpu_layers=gpu_layers
-            )
-            
-            self.loaded = True
-            logger.info(f"Loaded LLM model from {self.model_path}, GPU layers: {gpu_layers}")
+            logger.info("Maggie AI Assistant stopped successfully")
             return True
             
         except Exception as e:
-            logger.error(f"Failed to load LLM model: {e}")
+            logger.error(f"Error stopping Maggie AI: {e}")
             return False
             
-    def unload_model(self) -> bool:
+    def _transition_to(self, new_state: State, trigger: str) -> None:
         """
-        Unload the model from memory.
-        
-        Returns
-        -------
-        bool
-            True if unloaded or was not loaded
-        """
-        if self.model:
-            self.model = None
-            self.loaded = False
-            return True
-        return True
-            
-    def generate_text(self, prompt: str, max_tokens: int = 1024) -> str:
-        """
-        Generate text using the LLM model.
+        Transition to a new state.
         
         Parameters
         ----------
-        prompt : str
-            Input prompt for the LLM
-        max_tokens : int, optional
-            Maximum number of tokens to generate
-            
-        Returns
-        -------
-        str
-            Generated text
+        new_state : State
+            State to transition to
+        trigger : str
+            Event that triggered the transition
         """
-        if not self.loaded:
-            logger.warning("LLM model not loaded, loading now...")
-            if not self.load_model():
-                return "Error: Failed to load LLM model"
-                
-        try:
-            # Configure generation parameters optimized for RTX 3080
-            response = self.model(
-                prompt,
-                max_new_tokens=max_tokens,
-                temperature=0.7,
-                top_p=0.95,
-                repetition_penalty=1.1
-            )
-            
-            return response
-        except Exception as e:
-            logger.error(f"Text generation error: {e}")
-            return f"Error in text generation: {str(e)}"
-
-
-class MaggieAI:
-    """
-    Main class for the Maggie AI Assistant implementing a Finite State Machine.
-    """
-    
-    def __init__(self, config_path: str = "config.yaml"):
-        """
-        Initialize the Maggie AI Assistant with configuration.
-        
-        Parameters
-        ----------
-        config_path : str, optional
-            Path to the configuration file
-        """
-        # Load configuration
-        self.config = Config(config_path).load()
-        self.config_validator = ConfigValidator(self.config)
-        
-        if not self.config_validator.validate():
-            logger.warning("Configuration validation failed, some features may not work correctly")
-        
-        # Set up thread pool for controlled concurrency
-        threading_config = self.config.get("threading", {})
-        self.thread_pool = ThreadPoolExecutor(
-            max_workers=threading_config.get("max_workers", 8),
-            thread_name_prefix="maggie_worker"
-        )
-        
-        # Use pool for tasks
-        self.thread_pool.submit(self._initialize_components)
-
-        # Set up logging
-        log_config = self.config.get("logging", {})
-        log_path = log_config.get("path", "logs")
-        os.makedirs(log_path, exist_ok=True)
-        logger.configure(
-            handlers=[
-                {"sink": os.path.join(log_path, "maggie.log"), "rotation": "10 MB", "retention": "1 week"},
-                {"sink": os.sys.stdout, "level": log_config.get("console_level", "INFO")}
-            ]
-        )
-        
-        # Initialize core components
-        self.event_bus = EventBus()
-        self.wake_word_detector = WakeWordDetector(self.config.get("wake_word", {}))
-        self.speech_processor = SpeechProcessor(self.config.get("speech", {}))
-        self.llm_processor = LLMProcessor(self.config.get("llm", {}))
-        
-        # Initialize FSM
-        self.machine = Machine(
-            model=self,
-            states=[state.name for state in MaggieState],
-            initial=MaggieState.IDLE.name,
-            transitions=[
-                {'trigger': 'wake_up', 'source': MaggieState.IDLE.name, 'dest': MaggieState.STARTUP.name},
-                {'trigger': 'initialized', 'source': MaggieState.STARTUP.name, 'dest': MaggieState.READY.name},
-                {'trigger': 'process_command', 'source': MaggieState.READY.name, 'dest': MaggieState.ACTIVE.name},
-                {'trigger': 'heavy_processing', 'source': MaggieState.ACTIVE.name, 'dest': MaggieState.BUSY.name},
-                {'trigger': 'finish_processing', 'source': MaggieState.BUSY.name, 'dest': MaggieState.ACTIVE.name},
-                {'trigger': 'task_complete', 'source': MaggieState.ACTIVE.name, 'dest': MaggieState.READY.name},
-                {'trigger': 'timeout', 'source': MaggieState.READY.name, 'dest': MaggieState.CLEANUP.name},
-                {'trigger': 'shutdown', 'source': '*', 'dest': MaggieState.CLEANUP.name},
-                {'trigger': 'cleaned_up', 'source': MaggieState.CLEANUP.name, 'dest': MaggieState.SHUTDOWN.name},
-                {'trigger': 'sleep', 'source': MaggieState.CLEANUP.name, 'dest': MaggieState.IDLE.name},
-            ],
-            send_event=True,
-            auto_transitions=False
-        )
-        
-        # Utilities
-        self.utilities = {}
-        self.command_mapping = {}
-        self.initialize_utilities()
-        
-        # Event handlers
-        self.inactivity_timer = None
-        self.inactivity_timeout = self.config.get("inactivity_timeout", 300)  # 5 minutes default
-        
-        # GUI
-        self.app = None
-        self.window = None
-        
-        # Connect wake word detection
-        self.wake_word_detector.detected.connect(self.on_wake_word_detected)
-        
-        # Set up event bus listeners
-        self.event_bus.subscribe("command_detected", self.handle_command)
-        self.event_bus.subscribe("state_changed", self.handle_state_change)
-        
-    def initialize_utilities(self):
-        """Initialize utility modules based on configuration."""
-        utility_configs = self.config.get("utilities", {})
-        
-        if "recipe_creator" in utility_configs:
-            recipe_creator = RecipeCreator(self.event_bus, utility_configs["recipe_creator"])
-            self.utilities["recipe_creator"] = recipe_creator
-            self.command_mapping["new recipe"] = recipe_creator
-        
-        # Add more utilities as needed
-        
-    def on_wake_word_detected(self):
-        """Handle wake word detection."""
-        if self.state == MaggieState.IDLE.name:
-            self.wake_up()
-        
-    def on_enter_STARTUP(self, event):
-        """
-        Handle actions when entering the STARTUP state.
-        
-        Parameters
-        ----------
-        event : EventData
-            Event data from the state machine
-        """
-        logger.info("Entering STARTUP state")
-        self.event_bus.publish("state_changed", StateTransitionEvent(
-            from_state=MaggieState.IDLE, 
-            to_state=MaggieState.STARTUP,
-            trigger="wake_up",
-            timestamp=time.time()
-        ))
-        
-        # Initialize components that should be ready in READY state
-        threading.Thread(target=self._initialize_components).start()
-        
-    def _initialize_components(self):
-        """Initialize components needed for READY state."""
-        try:
-            # Start TTS
-            success = self.speech_processor.speak("Initializing Maggie")
-            if not success:
-                logger.error("Failed to initialize TTS")
-                
-            # Start speech recognition
-            if not self.speech_processor.start_listening():
-                logger.error("Failed to initialize speech recognition")
-                
-            # Transition to READY state
-            self.initialized()
-        except Exception as e:
-            logger.error(f"Error initializing components: {e}")
-            # Fall back to IDLE state
-            self.cleanup()
-            self.sleep()
-            
-    def on_enter_READY(self, event):
-        """
-        Handle actions when entering the READY state.
-        
-        Parameters
-        ----------
-        event : EventData
-            Event data from the state machine
-        """
-        logger.info("Entering READY state")
-        self.event_bus.publish("state_changed", StateTransitionEvent(
-            from_state=MaggieState.STARTUP,
-            to_state=MaggieState.READY,
-            trigger="initialized",
-            timestamp=time.time()
-        ))
-        
-        # Speak ready message
-        self.speech_processor.speak("Ready for your command")
-        
-        # Start inactivity timer
-        self.start_inactivity_timer()
-        
-        # Start listening for commands
-        threading.Thread(target=self._listen_for_commands).start()
-        
-    def start_inactivity_timer(self):
-        """Start or reset the inactivity timer."""
-        if self.inactivity_timer:
-            self.inactivity_timer.cancel()
-            
-        self.inactivity_timer = threading.Timer(self.inactivity_timeout, self.handle_timeout)
-        self.inactivity_timer.daemon = True
-        self.inactivity_timer.start()
-        
-    def handle_timeout(self):
-        """Handle inactivity timeout."""
-        if self.state == MaggieState.READY.name:
-            logger.info("Inactivity timeout reached")
-            self.timeout()
-            
-    def _listen_for_commands(self):
-        """Listen for commands in the READY state."""
-        if self.state == MaggieState.READY.name:
-            try:
-                success, text = self.speech_processor.recognize_speech(timeout=10.0)
-                if success and text:
-                    logger.info(f"Recognized: {text}")
-                    self.event_bus.publish("command_detected", text)
-                    # Reset inactivity timer
-                    self.start_inactivity_timer()
-                else:
-                    # Continue listening
-                    threading.Thread(target=self._listen_for_commands).start()
-            except Exception as e:
-                logger.error(f"Error listening for commands: {e}")
-                # Continue listening
-                threading.Thread(target=self._listen_for_commands).start()
-                
-    def handle_command(self, command: str):
-        """
-        Handle a detected command.
-        
-        Parameters
-        ----------
-        command : str
-            The detected command
-        """
-        if self.state != MaggieState.READY.name:
-            logger.warning(f"Command received in non-READY state: {self.state}")
+        if new_state == self.state:
             return
             
-        command = command.lower().strip()
+        old_state = self.state
+        self.state = new_state
         
-        # Handle core commands
-        if command in ["sleep", "go to sleep"]:
-            self.speech_processor.speak("Going to sleep")
-            self.shutdown()
-            return
-        elif command in ["shutdown", "turn off"]:
-            self.speech_processor.speak("Shutting down")
-            self.shutdown()
-            return
-            
-        # Check for utility commands
-        for cmd_phrase, utility in self.command_mapping.items():
-            if cmd_phrase in command:
-                self.process_command(utility=utility)
-                return
-                
-        # Unknown command
-        self.speech_processor.speak("I didn't understand that command")
+        # Log the transition
+        logger.info(f"State transition: {old_state.name} -> {new_state.name} (trigger: {trigger})")
         
-    def on_enter_ACTIVE(self, event):
-        """
-        Handle actions when entering the ACTIVE state.
-        
-        Parameters
-        ----------
-        event : EventData
-            Event data from the state machine
-        """
-        logger.info("Entering ACTIVE state")
-        self.event_bus.publish("state_changed", StateTransitionEvent(
-            from_state=MaggieState.READY,
-            to_state=MaggieState.ACTIVE,
-            trigger="process_command",
-            timestamp=time.time()
-        ))
-        
-        # Process the utility command
-        utility = event.kwargs.get('utility')
-        if utility:
-            threading.Thread(target=self._process_utility, args=(utility,)).start()
-        else:
-            logger.error("No utility specified for ACTIVE state")
-            self.task_complete()
-            
-    def _process_utility(self, utility: UtilityBase):
-        """
-        Process a utility in the ACTIVE state.
-        
-        Parameters
-        ----------
-        utility : UtilityBase
-            The utility to process
-        """
-        try:
-            utility.start()
-            # The utility will handle its own completion and state transitions
-        except Exception as e:
-            logger.error(f"Error processing utility: {e}")
-            self.task_complete()
-            
-    def on_enter_BUSY(self, event):
-        """
-        Handle actions when entering the BUSY state.
-        
-        Parameters
-        ----------
-        event : EventData
-            Event data from the state machine
-        """
-        logger.info("Entering BUSY state")
-        self.event_bus.publish("state_changed", StateTransitionEvent(
-            from_state=MaggieState.ACTIVE,
-            to_state=MaggieState.BUSY,
-            trigger="heavy_processing",
-            timestamp=time.time()
-        ))
-        
-    def on_enter_CLEANUP(self, event):
-        """
-        Handle actions when entering the CLEANUP state.
-        
-        Parameters
-        ----------
-        event : EventData
-            Event data from the state machine
-        """
-        logger.info("Entering CLEANUP state")
-        from_state = MaggieState[self.state] if self.state != MaggieState.CLEANUP.name else None
-        trigger = event.event.name if hasattr(event, 'event') and hasattr(event.event, 'name') else "unknown"
-        
-        self.event_bus.publish("state_changed", StateTransitionEvent(
-            from_state=from_state,
-            to_state=MaggieState.CLEANUP,
+        # Create transition event
+        transition = StateTransition(
+            from_state=old_state,
+            to_state=new_state,
             trigger=trigger,
             timestamp=time.time()
-        ))
+        )
         
-        # Clean up resources
-        threading.Thread(target=self._cleanup_resources, args=(event,)).start()
+        # Publish state transition event
+        self.event_bus.publish("state_changed", transition)
         
-    def _cleanup_resources(self, event):
+        # Call state entry handler
+        if new_state in self.transition_handlers:
+            self.transition_handlers[new_state](transition)
+            
+    def _on_enter_idle(self, transition: StateTransition) -> None:
         """
-        Clean up resources before transitioning to IDLE or SHUTDOWN.
+        Handle entering IDLE state.
         
         Parameters
         ----------
-        event : EventData
-            Event data from the state machine
+        transition : StateTransition
+            State transition information
         """
-        try:
-            # Cancel inactivity timer
-            if self.inactivity_timer:
-                self.inactivity_timer.cancel()
-                self.inactivity_timer = None
-                
-            # Stop all utilities
-            for utility in self.utilities.values():
-                utility.stop()
-                
-            # Stop speech processor
+        # Cancel inactivity timer if active
+        if self.inactivity_timer:
+            self.inactivity_timer.cancel()
+            self.inactivity_timer = None
+            
+        # Stop speech processor
+        if self.speech_processor:
             self.speech_processor.stop_listening()
             
-            # Unload LLM model if loaded
+        # Unload LLM model to save memory
+        if self.llm_processor:
             self.llm_processor.unload_model()
             
-            # Determine next state
-            trigger = event.event.name if hasattr(event, 'event') and hasattr(event.event, 'name') else ""
-            if trigger == "shutdown":
-                self.cleaned_up()
-            else:
-                self.sleep()
-                
-        except Exception as e:
-            logger.error(f"Error cleaning up resources: {e}")
-            # Force transition to appropriate state
-            if trigger == "shutdown":
-                self.cleaned_up()
-            else:
-                self.sleep()
-                
-    def on_enter_SHUTDOWN(self, event):
-        """
-        Handle actions when entering the SHUTDOWN state.
-        
-        Parameters
-        ----------
-        event : EventData
-            Event data from the state machine
-        """
-        logger.info("Entering SHUTDOWN state")
-        self.event_bus.publish("state_changed", StateTransitionEvent(
-            from_state=MaggieState.CLEANUP,
-            to_state=MaggieState.SHUTDOWN,
-            trigger="cleaned_up",
-            timestamp=time.time()
-        ))
-        
-        # Stop the event bus
-        self.event_bus.stop()
-        
-        # Stop the application
-        if self.app:
-            self.app.quit()
-            
-    def on_enter_IDLE(self, event):
-        """
-        Handle actions when entering the IDLE state.
-        
-        Parameters
-        ----------
-        event : EventData
-            Event data from the state machine
-        """
-        logger.info("Entering IDLE state")
-        self.event_bus.publish("state_changed", StateTransitionEvent(
-            from_state=MaggieState.CLEANUP,
-            to_state=MaggieState.IDLE,
-            trigger="sleep",
-            timestamp=time.time()
-        ))
-        
         # Start wake word detector
-        self.wake_word_detector.start()
-        
-    def handle_state_change(self, event: StateTransitionEvent):
+        if self.wake_word_detector:
+            self.wake_word_detector.start()
+            
+        logger.info("Entered IDLE state - waiting for wake word")
+            
+    def _on_enter_ready(self, transition: StateTransition) -> None:
         """
-        Handle state change events.
+        Handle entering READY state.
         
         Parameters
         ----------
-        event : StateTransitionEvent
-            The state transition event
+        transition : StateTransition
+            State transition information
         """
-        if self.window:
-            self.window.update_state(event.to_state.name)
-            self.window.log_event(f"State change: {event.from_state.name} -> {event.to_state.name}")
+        # Stop wake word detector
+        if self.wake_word_detector:
+            self.wake_word_detector.stop()
             
-    def start(self):
-        """Start the Maggie AI Assistant."""
-        try:
-            # Start event bus
-            self.event_bus.start()
+        # Start speech processor
+        if self.speech_processor:
+            self.speech_processor.start_listening()
+            self.speech_processor.speak("Ready for your command")
             
-            # Create and show GUI
-            self.app = QApplication([])
-            self.window = MainWindow(self)
-            self.window.show()
+        # Start inactivity timer
+        self._start_inactivity_timer()
+        
+        # Start listening for commands
+        self.thread_pool.submit(self._listen_for_commands)
+        
+        logger.info("Entered READY state - listening for commands")
             
-            # Start in IDLE state
-            if self.state != MaggieState.IDLE.name:
-                self.to_IDLE()
-                
-            # Start application loop
-            logger.info("Maggie AI starting...")
-            return self.app.exec()
-            
-        except Exception as e:
-            logger.error(f"Error starting Maggie AI: {e}")
-            return 1
-        finally:
-            # Clean up any remaining resources
-            self.cleanup_all()
-            
-    def cleanup_all(self):
-        """Clean up all resources."""
-        try:
-            # Stop wake word detector
-            if hasattr(self, 'wake_word_detector'):
-                self.wake_word_detector.stop()
-            
-            # Stop speech processor
-            if hasattr(self, 'speech_processor'):
-                self.speech_processor.stop_listening()
-            
-            # Stop all utilities
-            if hasattr(self, 'utilities'):
-                for utility in self.utilities.values():
-                    utility.stop()
-            
-            # Stop event bus
-            if hasattr(self, 'event_bus'):
-                self.event_bus.stop()
-            
-            # Shut down thread pool
-            if hasattr(self, 'thread_pool'):
-                self.thread_pool.shutdown(wait=True)
-            
-        except Exception as e:
-            logger.error(f"Error cleaning up resources: {e}")
-
-    def to_IDLE(self):
+    def _on_enter_active(self, transition: StateTransition) -> None:
         """
-        Transition to IDLE state from any state.
+        Handle entering ACTIVE state.
         
         Parameters
         ----------
-        None
+        transition : StateTransition
+            State transition information
+        """
+        # Reset inactivity timer
+        self._start_inactivity_timer()
         
-        Returns
-        -------
-        None
+        logger.info("Entered ACTIVE state - executing command or utility")
+            
+    def _on_enter_cleanup(self, transition: StateTransition) -> None:
+        """
+        Handle entering CLEANUP state.
+        
+        Parameters
+        ----------
+        transition : StateTransition
+            State transition information
         """
         # Cancel inactivity timer
         if self.inactivity_timer:
             self.inactivity_timer.cancel()
             self.inactivity_timer = None
             
-        # Clean up resources
-        for utility in self.utilities.values():
-            utility.stop()
+        # Stop all utilities
+        self._stop_all_utilities()
             
         # Stop speech processor
-        self.speech_processor.stop_listening()
+        if self.speech_processor:
+            self.speech_processor.stop_listening()
+            
+        # Unload LLM model
+        if self.llm_processor:
+            self.llm_processor.unload_model()
+            
+        # Determine next state based on trigger
+        if transition.trigger == "shutdown_requested":
+            self._transition_to(State.SHUTDOWN, "cleanup_completed")
+        else:
+            self._transition_to(State.IDLE, "cleanup_completed")
+            
+        logger.info("Entered CLEANUP state - releasing resources")
+            
+    def _stop_all_utilities(self) -> None:
+        """
+        Stop all running utilities.
         
-        # Unload LLM model if loaded
-        self.llm_processor.unload_model()
+        Ensures all utilities are properly shut down during cleanup.
+        """
+        for utility_name, utility in self.utilities.items():
+            try:
+                if hasattr(utility, 'stop') and callable(utility.stop):
+                    utility.stop()
+                    logger.debug(f"Stopped utility: {utility_name}")
+            except Exception as e:
+                logger.error(f"Error stopping utility {utility_name}: {e}")
+            
+    def _on_enter_shutdown(self, transition: StateTransition) -> None:
+        """
+        Handle entering SHUTDOWN state.
         
-        # Set state to IDLE
-        self.state = MaggieState.IDLE.name
-        self.event_bus.publish("state_changed", StateTransitionEvent(
-            from_state=None,
-            to_state=MaggieState.IDLE,
-            trigger="direct_transition",
-            timestamp=time.time()
-        ))
+        Parameters
+        ----------
+        transition : StateTransition
+            State transition information
+        """
+        # Stop hardware monitoring
+        if self.hardware_manager:
+            self.hardware_manager.stop_monitoring()
+            
+        # Stop event bus
+        self.event_bus.stop()
         
-        # Start wake word detector
-        self.wake_word_detector.start()
-
-
-if __name__ == "__main__":
-    maggie = MaggieAI()
-    exit_code = maggie.start()
-    sys.exit(exit_code)
+        # Shutdown thread pool
+        self.thread_pool.shutdown(wait=True)
+        
+        logger.info("Entered SHUTDOWN state - application will exit")
+            
+    def _handle_wake_word(self, _: Any) -> None:
+        """
+        Handle wake word detection event.
+        
+        Parameters
+        ----------
+        _ : Any
+            Event data (unused)
+        """
+        if self.state == State.IDLE:
+            logger.info("Wake word detected")
+            self._transition_to(State.READY, "wake_word_detected")
+            
+    def _handle_command(self, command: str) -> None:
+        """
+        Handle detected command.
+        
+        Parameters
+        ----------
+        command : str
+            Detected command
+        """
+        # Only process commands in READY state
+        if self.state != State.READY:
+            return
+            
+        command = command.lower().strip()
+        logger.info(f"Command detected: {command}")
+        
+        # Handle system commands
+        if command in ["sleep", "go to sleep"]:
+            self.speech_processor.speak("Going to sleep")
+            self._transition_to(State.CLEANUP, "sleep_command")
+            return
+            
+        if command in ["shutdown", "turn off"]:
+            self.speech_processor.speak("Shutting down")
+            self._transition_to(State.CLEANUP, "shutdown_requested")
+            return
+            
+        # Check for utility commands
+        utility_triggered = self._check_utility_commands(command)
+        if utility_triggered:
+            return
+                
+        # Handle unknown command
+        self.speech_processor.speak("I didn't understand that command")
+        logger.warning(f"Unknown command: {command}")
+        
+    def _check_utility_commands(self, command: str) -> bool:
+        """
+        Check if command matches any utility triggers.
+        
+        Parameters
+        ----------
+        command : str
+            Command to check
+            
+        Returns
+        -------
+        bool
+            True if a utility was triggered, False otherwise
+        """
+        for utility_name, utility in self.utilities.items():
+            utility_trigger = utility.get_trigger()
+            if utility_trigger and utility_trigger in command:
+                logger.info(f"Triggered utility: {utility_name}")
+                self._transition_to(State.ACTIVE, f"utility_{utility_name}")
+                self.thread_pool.submit(self._run_utility, utility_name)
+                return True
+        return False
+        
+    def _handle_timeout(self, _: Any) -> None:
+        """
+        Handle inactivity timeout event.
+        
+        Parameters
+        ----------
+        _ : Any
+            Event data (unused)
+        """
+        if self.state == State.READY:
+            logger.info("Inactivity timeout reached")
+            self.speech_processor.speak("Going to sleep due to inactivity")
+            self._transition_to(State.CLEANUP, "inactivity_timeout")
+            
+    def _handle_utility_completed(self, utility_name: str) -> None:
+        """
+        Handle utility completion event.
+        
+        Parameters
+        ----------
+        utility_name : str
+            Name of the completed utility
+        """
+        if self.state == State.ACTIVE:
+            logger.info(f"Utility completed: {utility_name}")
+            self._transition_to(State.READY, f"utility_{utility_name}_completed")
+        
+    def _start_inactivity_timer(self) -> None:
+        """
+        Start or reset the inactivity timer.
+        
+        Creates a new timer that will trigger an inactivity timeout
+        event after the configured timeout period.
+        """
+        if self.inactivity_timer:
+            self.inactivity_timer.cancel()
+            
+        self.inactivity_timer = threading.Timer(
+            self.inactivity_timeout,
+            lambda: self.event_bus.publish("inactivity_timeout")
+        )
+        self.inactivity_timer.daemon = True
+        self.inactivity_timer.start()
+        
+        logger.debug(f"Started inactivity timer: {self.inactivity_timeout}s")
+        
+    def _listen_for_commands(self) -> None:
+        """
+        Listen for commands in the READY state.
+        
+        Uses speech recognition to listen for commands and processes them.
+        """
+        if self.state != State.READY:
+            return
+            
+        try:
+            logger.debug("Listening for commands...")
+            success, text = self.speech_processor.recognize_speech(timeout=10.0)
+            
+            if success and text:
+                logger.info(f"Recognized: {text}")
+                self.event_bus.publish("command_detected", text)
+            else:
+                # Continue listening in a new thread to avoid stack overflow
+                self.thread_pool.submit(self._listen_for_commands)
+                
+        except Exception as e:
+            logger.error(f"Error listening for commands: {e}")
+            # Continue listening in a new thread
+            self.thread_pool.submit(self._listen_for_commands)
+            
+    def _run_utility(self, utility_name: str) -> None:
+        """
+        Run a utility.
+        
+        Parameters
+        ----------
+        utility_name : str
+            Name of the utility to run
+        """
+        if utility_name not in self.utilities:
+            logger.error(f"Unknown utility: {utility_name}")
+            self._transition_to(State.READY, "unknown_utility")
+            return
+            
+        utility = self.utilities[utility_name]
+        
+        try:
+            logger.info(f"Starting utility: {utility_name}")
+            success = utility.start()
+            
+            if not success:
+                logger.error(f"Failed to start utility: {utility_name}")
+                self._transition_to(State.READY, f"utility_{utility_name}_failed")
+                
+        except Exception as e:
+            logger.error(f"Error running utility {utility_name}: {e}")
+            self._transition_to(State.READY, f"utility_{utility_name}_error")
+            
+    def shutdown(self) -> bool:
+        """
+        Shut down the Maggie AI Assistant.
+        
+        Returns
+        -------
+        bool
+            True if shutdown initiated successfully
+        """
+        return self.stop()
+        
+    def timeout(self) -> None:
+        """
+        Handle manual timeout/sleep request.
+        
+        Puts the assistant to sleep on manual request.
+        """
+        if self.state == State.READY or self.state == State.ACTIVE:
+            logger.info("Manual sleep requested")
+            self.speech_processor.speak("Going to sleep")
+            self._transition_to(State.CLEANUP, "manual_timeout")
+            
+    def process_command(self, utility: Any = None) -> bool:
+        """
+        Process a command or activate a utility directly.
+        
+        Parameters
+        ----------
+        utility : Any, optional
+            Utility to activate directly, by default None
+        
+        Returns
+        -------
+        bool
+            True if command processed successfully
+        """
+        if utility:
+            utility_name = None
+            for name, util in self.utilities.items():
+                if util == utility:
+                    utility_name = name
+                    break
+                    
+            if utility_name:
+                logger.info(f"Direct activation of utility: {utility_name}")
+                self._transition_to(State.ACTIVE, f"utility_{utility_name}")
+                self.thread_pool.submit(self._run_utility, utility_name)
+                return True
+                
+        return False

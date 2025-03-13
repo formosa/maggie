@@ -1,387 +1,412 @@
 """
 Maggie AI Assistant - Configuration Validator
-==========================================
-Validates configuration parameters for the Maggie AI Assistant.
+========================================
+Configuration validation utilities for Maggie AI Assistant.
 
-This module provides validation functionality for configuration parameters,
-ensuring all required parameters are present and values are within
-acceptable ranges. It includes specific validation for hardware
-compatibility with AMD Ryzen 9 5900X and NVIDIA RTX 3080.
+This module provides validation functionality for configuration files,
+ensuring that all required settings are present and have valid values.
+
+Examples
+--------
+>>> from utils.config_validator import ConfigValidator
+>>> validator = ConfigValidator("config.yaml")
+>>> valid = validator.validate()
+>>> if not valid:
+...     print("Configuration errors:", validator.errors)
+>>> is_valid, errors, warnings = validator.get_validation_result()
 """
 
+# Standard library imports
 import os
-import platform
-from typing import Dict, Any, List, Tuple, Set
+import yaml
+from typing import Dict, Any, List, Tuple, Optional
+
+# Third-party imports
 from loguru import logger
+
+__all__ = ['ConfigValidator']
 
 class ConfigValidator:
     """
     Configuration validator for Maggie AI Assistant.
     
-    This class validates configuration settings, ensuring required
-    parameters are present and have acceptable values, and checks
-    compatibility with system hardware, particularly for AMD Ryzen 9
-    and NVIDIA RTX 3080.
+    Validates configuration files to ensure they contain all required
+    settings with appropriate values.
     
+    Parameters
+    ----------
+    config_path : str
+        Path to the configuration file
+        
     Attributes
     ----------
+    config_path : str
+        Path to the configuration file
     config : Dict[str, Any]
-        Configuration dictionary to validate
-    validation_errors : List[str]
-        List of validation errors detected
-    validation_warnings : List[str]
-        List of validation warnings detected
-    
-    Methods
-    -------
-    validate()
-        Validate the configuration and return result
-    get_errors()
-        Get the list of validation errors
-    get_warnings()
-        Get the list of validation warnings
+        Loaded configuration dictionary
+    errors : List[str]
+        List of validation errors
+    warnings : List[str]
+        List of validation warnings
     """
     
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config_path: str):
         """
         Initialize the configuration validator.
         
         Parameters
         ----------
-        config : Dict[str, Any]
-            Configuration dictionary to validate
+        config_path : str
+            Path to the configuration file
         """
-        self.config = config
-        self.validation_errors = []
-        self.validation_warnings = []
+        self.config_path = config_path
+        self.config = {}
+        self.errors = []
+        self.warnings = []
         
+    def load_config(self) -> Dict[str, Any]:
+        """
+        Load configuration from file.
+        
+        Returns
+        -------
+        Dict[str, Any]
+            The loaded configuration dictionary
+            
+        Raises
+        ------
+        FileNotFoundError
+            If the configuration file doesn't exist
+        yaml.YAMLError
+            If the configuration file contains invalid YAML
+        """
+        if not os.path.exists(self.config_path):
+            raise FileNotFoundError(f"Configuration file not found: {self.config_path}")
+            
+        try:
+            with open(self.config_path, 'r') as f:
+                self.config = yaml.safe_load(f)
+                if self.config is None:
+                    self.config = {}
+                return self.config
+        except yaml.YAMLError as e:
+            raise yaml.YAMLError(f"Invalid YAML in configuration file: {e}")
+            
     def validate(self) -> bool:
         """
         Validate the configuration.
         
-        Performs comprehensive validation of the configuration,
-        checking required parameters, path existence, parameter values,
-        and hardware compatibility.
+        Performs comprehensive validation checks on the configuration.
         
         Returns
         -------
         bool
-            True if configuration is valid (no errors), False otherwise
-            
-        Notes
-        -----
-        Even if this method returns True, there may still be warnings.
-        Check get_warnings() for any non-critical issues.
+            True if the configuration is valid, False otherwise
         """
-        self.validation_errors = []
-        self.validation_warnings = []
+        # Reset error and warning lists
+        self.errors = []
+        self.warnings = []
         
-        # Validate required parameters
-        self._validate_required_params()
+        # Load the configuration if it hasn't been loaded already
+        if not self.config:
+            try:
+                self.load_config()
+            except Exception as e:
+                self.errors.append(str(e))
+                return False
+                
+        # Validate required sections
+        self._validate_required_sections()
         
-        # Validate paths
+        # Validate wake word settings
+        self._validate_wake_word()
+        
+        # Validate speech settings
+        self._validate_speech()
+        
+        # Validate LLM settings
+        self._validate_llm()
+        
+        # Validate path existence
         self._validate_paths()
         
-        # Validate parameter values
-        self._validate_parameter_values()
+        # Validate system settings
+        self._validate_system_settings()
         
-        # Validate hardware compatibility
-        self._validate_hardware_compatibility()
-        
-        # Log validation results
-        for error in self.validation_errors:
+        # Report errors and warnings
+        for error in self.errors:
             logger.error(f"Configuration error: {error}")
             
-        for warning in self.validation_warnings:
+        for warning in self.warnings:
             logger.warning(f"Configuration warning: {warning}")
             
-        return len(self.validation_errors) == 0
+        # Return True if no errors, False otherwise
+        return len(self.errors) == 0
         
-    def get_errors(self) -> List[str]:
+    def _validate_required_sections(self) -> None:
         """
-        Get the list of validation errors.
+        Validate that all required configuration sections are present.
         
-        Returns
-        -------
-        List[str]
-            List of validation error messages
+        Adds errors to self.errors if required sections are missing.
         """
-        return self.validation_errors
-        
-    def get_warnings(self) -> List[str]:
-        """
-        Get the list of validation warnings.
-        
-        Returns
-        -------
-        List[str]
-            List of validation warning messages
-        """
-        return self.validation_warnings
-        
-    def _validate_required_params(self) -> None:
-        """
-        Validate required configuration parameters.
-        
-        Checks for the presence of essential configuration parameters
-        and ensures they have valid values.
-        """
-        required_params = [
-            ("wake_word.porcupine_access_key", "Picovoice access key"),
-            ("llm.model_path", "LLM model path"),
-            ("speech.tts.voice_model", "TTS voice model")
+        required_sections = [
+            "wake_word", "speech", "llm", "logging"
         ]
         
-        for param_path, param_name in required_params:
-            parts = param_path.split(".")
-            config_part = self.config
-            
-            # Navigate through nested dictionaries
-            missing = False
-            for part in parts:
-                if part not in config_part:
-                    self.validation_errors.append(f"Missing required configuration: {param_name} ({param_path})")
-                    missing = True
-                    break
-                config_part = config_part[part]
+        for section in required_sections:
+            if section not in self.config:
+                self.errors.append(f"Missing required section: {section}")
                 
-            # If not missing but empty string
-            if not missing and isinstance(config_part, str) and not config_part:
-                self.validation_errors.append(f"Empty required configuration: {param_name} ({param_path})")
-    
+    def _validate_wake_word(self) -> None:
+        """
+        Validate wake word configuration.
+        
+        Checks that required wake word settings are present and valid.
+        Adds errors to self.errors for invalid settings.
+        """
+        if "wake_word" not in self.config:
+            return
+            
+        wake_word = self.config["wake_word"]
+        
+        # Check for required settings
+        if "porcupine_access_key" not in wake_word:
+            self.errors.append("Missing required setting: wake_word.porcupine_access_key")
+        elif not wake_word["porcupine_access_key"]:
+            self.errors.append("Empty wake_word.porcupine_access_key - you must obtain a key from Picovoice console")
+            
+        # Check sensitivity range
+        if "sensitivity" in wake_word:
+            sensitivity = wake_word["sensitivity"]
+            if not isinstance(sensitivity, (int, float)):
+                self.errors.append(f"wake_word.sensitivity must be a number, got {type(sensitivity).__name__}")
+            elif sensitivity < 0.0 or sensitivity > 1.0:
+                self.errors.append(f"wake_word.sensitivity must be between 0.0 and 1.0, got {sensitivity}")
+                
+    def _validate_speech(self) -> None:
+        """
+        Validate speech configuration.
+        
+        Checks that speech settings like whisper model and TTS settings are valid.
+        Adds errors to self.errors for invalid settings.
+        """
+        if "speech" not in self.config:
+            return
+            
+        speech = self.config["speech"]
+        
+        # Validate whisper settings
+        if "whisper" in speech:
+            whisper = speech["whisper"]
+            
+            # Check model size
+            if "model_size" in whisper:
+                model_size = whisper["model_size"]
+                valid_sizes = ["tiny", "base", "small", "medium", "large"]
+                if model_size not in valid_sizes:
+                    self.errors.append(f"Invalid speech.whisper.model_size: {model_size}. Valid values: {', '.join(valid_sizes)}")
+                    
+            # Check compute type
+            if "compute_type" in whisper:
+                compute_type = whisper["compute_type"]
+                valid_types = ["int8", "float16", "float32"]
+                if compute_type not in valid_types:
+                    self.errors.append(f"Invalid speech.whisper.compute_type: {compute_type}. Valid values: {', '.join(valid_types)}")
+                    
+        # Validate TTS settings
+        if "tts" in speech:
+            tts = speech["tts"]
+            
+            # Check voice model
+            if "voice_model" not in tts:
+                self.errors.append("Missing required setting: speech.tts.voice_model")
+                
+            # Check model path
+            if "model_path" in tts:
+                model_path = tts["model_path"]
+                if not os.path.exists(model_path):
+                    self.warnings.append(f"TTS model path does not exist: {model_path}")
+                    
+    def _validate_llm(self) -> None:
+        """
+        Validate LLM configuration.
+        
+        Checks that LLM settings like model path and type are valid.
+        Adds errors to self.errors for invalid settings.
+        """
+        if "llm" not in self.config:
+            return
+            
+        llm = self.config["llm"]
+        
+        # Check for required settings
+        if "model_path" not in llm:
+            self.errors.append("Missing required setting: llm.model_path")
+        elif not os.path.exists(llm["model_path"]):
+            self.warnings.append(f"LLM model path does not exist: {llm['model_path']}")
+            
+        # Check model type
+        if "model_type" in llm and llm["model_type"] not in ["mistral", "llama2", "phi"]:
+            self.warnings.append(f"Unusual llm.model_type: {llm['model_type']}. Common values: mistral, llama2, phi")
+            
+        # Check GPU layers
+        if "gpu_layers" in llm:
+            gpu_layers = llm["gpu_layers"]
+            if not isinstance(gpu_layers, int):
+                self.errors.append(f"llm.gpu_layers must be an integer, got {type(gpu_layers).__name__}")
+            elif gpu_layers < 0:
+                self.errors.append(f"llm.gpu_layers must be non-negative, got {gpu_layers}")
+                
+        # Check precision
+        if "precision" in llm and llm["precision"] not in ["float16", "float32", "int8", "int4"]:
+            self.errors.append(f"Invalid llm.precision: {llm['precision']}. Valid values: float16, float32, int8, int4")
+            
     def _validate_paths(self) -> None:
         """
-        Validate file and directory paths.
+        Validate that paths in the configuration exist or can be created.
         
-        Checks if specified file and directory paths exist,
-        and attempts to create missing directories when appropriate.
+        Checks paths for log directory and utility-specific directories.
+        Attempts to create missing directories.
         """
-        # Check model paths
-        model_paths = [
-            (self.config.get("llm", {}).get("model_path"), "LLM model directory", True),
-            (os.path.join(
-                self.config.get("speech", {}).get("tts", {}).get("model_path", "models/tts"),
-                self.config.get("speech", {}).get("tts", {}).get("voice_model", "")
-            ), "TTS voice model directory", True)
-        ]
-        
-        # Check if paths exist and are appropriate type (file/directory)
-        for path, name, is_dir in model_paths:
-            if not os.path.exists(path):
-                self.validation_warnings.append(f"{name} path does not exist: {path}")
-                # Try to create directory if it's a directory path
-                if is_dir:
-                    try:
-                        os.makedirs(path, exist_ok=True)
-                        logger.info(f"Created directory for {name}: {path}")
-                    except Exception as e:
-                        self.validation_warnings.append(f"Could not create directory for {name}: {e}")
-            elif is_dir and not os.path.isdir(path):
-                self.validation_errors.append(f"{name} path is not a directory: {path}")
-            elif not is_dir and os.path.isdir(path):
-                self.validation_errors.append(f"{name} path is a directory, not a file: {path}")
-        
+        # Check logging path
+        self._validate_logging_path()
+                    
         # Check utility paths
-        utilities = self.config.get("utilities", {})
+        self._validate_utility_paths()
+    
+    def _validate_logging_path(self) -> None:
+        """
+        Validate logging path configuration.
+        
+        Checks if logging path exists and tries to create it if missing.
+        """
+        if "logging" in self.config and "path" in self.config["logging"]:
+            log_path = self.config["logging"]["path"]
+            if not os.path.exists(log_path):
+                try:
+                    os.makedirs(log_path, exist_ok=True)
+                    logger.info(f"Created log directory: {log_path}")
+                except Exception as e:
+                    self.warnings.append(f"Could not create log directory {log_path}: {e}")
+    
+    def _validate_utility_paths(self) -> None:
+        """
+        Validate utility-specific path configuration.
+        
+        Checks if utility directories exist and tries to create them if missing.
+        """
+        if "utilities" not in self.config:
+            return
+            
+        utilities = self.config["utilities"]
+        
         for utility_name, utility_config in utilities.items():
+            # Check output directory
             if "output_dir" in utility_config:
                 output_dir = utility_config["output_dir"]
                 if not os.path.exists(output_dir):
-                    self.validation_warnings.append(f"{utility_name} output directory does not exist: {output_dir}")
-                    # Try to create the directory
                     try:
                         os.makedirs(output_dir, exist_ok=True)
                         logger.info(f"Created {utility_name} output directory: {output_dir}")
                     except Exception as e:
-                        self.validation_errors.append(f"Failed to create {utility_name} output directory: {e}")
-            
+                        self.warnings.append(f"Could not create {utility_name} output directory: {e}")
+                        
+            # Check template path
             if "template_path" in utility_config:
                 template_path = utility_config["template_path"]
-                if not os.path.exists(template_path):
-                    self.validation_warnings.append(f"{utility_name} template file does not exist: {template_path}")
-                    # Try to create the parent directory
+                template_dir = os.path.dirname(template_path)
+                if not os.path.exists(template_dir):
                     try:
-                        os.makedirs(os.path.dirname(template_path), exist_ok=True)
-                        logger.info(f"Created directory for {utility_name} template: {os.path.dirname(template_path)}")
+                        os.makedirs(template_dir, exist_ok=True)
+                        logger.info(f"Created {utility_name} template directory: {template_dir}")
                     except Exception as e:
-                        self.validation_warnings.append(f"Could not create directory for {utility_name} template: {e}")
-    
-    def _validate_parameter_values(self) -> None:
-        """
-        Validate parameter values are within acceptable ranges.
-        
-        Checks that configuration parameter values are appropriate
-        types and fall within acceptable ranges.
-        """
-        # Validate wake word sensitivity (must be between 0.0 and 1.0)
-        wake_word = self.config.get("wake_word", {})
-        sensitivity = wake_word.get("sensitivity")
-        if sensitivity is not None:
-            if not isinstance(sensitivity, (int, float)):
-                self.validation_errors.append(f"Wake word sensitivity must be a number, got {type(sensitivity).__name__}")
-            elif sensitivity < 0.0 or sensitivity > 1.0:
-                self.validation_errors.append(f"Wake word sensitivity must be between 0.0 and 1.0, got {sensitivity}")
-        
-        # Validate whisper model size (must be one of the valid sizes)
-        whisper_config = self.config.get("speech", {}).get("whisper", {})
-        model_size = whisper_config.get("model_size")
-        valid_sizes = ["tiny", "base", "small", "medium", "large"]
-        if model_size and model_size not in valid_sizes:
-            self.validation_errors.append(f"Invalid whisper model size: {model_size}. Valid values: {valid_sizes}")
-        
-        # Validate compute type (must be one of the valid types)
-        compute_type = whisper_config.get("compute_type")
-        valid_types = ["int8", "float16", "float32"]
-        if compute_type and compute_type not in valid_types:
-            self.validation_errors.append(f"Invalid compute type: {compute_type}. Valid values: {valid_types}")
-        
-        # Validate threading configuration
-        threading = self.config.get("threading", {})
-        max_workers = threading.get("max_workers")
-        if max_workers is not None:
-            if not isinstance(max_workers, int):
-                self.validation_errors.append(f"max_workers must be an integer, got {type(max_workers).__name__}")
-            elif max_workers < 1:
-                self.validation_errors.append(f"max_workers must be at least 1, got {max_workers}")
-            elif max_workers > os.cpu_count() * 2:
-                self.validation_warnings.append(
-                    f"max_workers ({max_workers}) is more than twice the number of CPU cores ({os.cpu_count()}). "
-                    f"This may cause performance issues."
-                )
-        
-        # Validate memory configuration
-        memory = self.config.get("memory", {})
-        max_percent = memory.get("max_percent")
-        if max_percent is not None:
-            if not isinstance(max_percent, (int, float)):
-                self.validation_errors.append(f"memory.max_percent must be a number, got {type(max_percent).__name__}")
-            elif max_percent < 10:
-                self.validation_errors.append(f"memory.max_percent must be at least 10, got {max_percent}")
-            elif max_percent > 95:
-                self.validation_errors.append(f"memory.max_percent must be at most 95, got {max_percent}")
-                
-        # Validate model unload threshold
-        unload_threshold = memory.get("model_unload_threshold")
-        if unload_threshold is not None:
-            if not isinstance(unload_threshold, (int, float)):
-                self.validation_errors.append(
-                    f"memory.model_unload_threshold must be a number, got {type(unload_threshold).__name__}"
-                )
-            elif unload_threshold <= max_percent:
-                self.validation_errors.append(
-                    f"memory.model_unload_threshold ({unload_threshold}) must be greater than "
-                    f"memory.max_percent ({max_percent})"
-                )
-    
-    def _validate_hardware_compatibility(self) -> None:
-        """
-        Validate configuration compatibility with the system hardware.
-        
-        Checks if the configuration is appropriate for the detected
-        hardware, particularly focusing on AMD Ryzen 9 5900X CPU
-        and NVIDIA RTX 3080 GPU compatibility.
-        """
-        # Check GPU layers setting
-        try:
-            import torch
-            
-            llm_config = self.config.get("llm", {})
-            gpu_layers = llm_config.get("gpu_layers", 0)
-            
-            if torch.cuda.is_available():
-                # Get GPU memory information
-                gpu_memory_mb = torch.cuda.get_device_properties(0).total_memory / (1024 * 1024)
-                gpu_name = torch.cuda.get_device_name(0)
-                
-                # RTX 3080 has 10GB VRAM
-                rtx_3080_vram_mb = 10 * 1024
-                is_rtx_3080 = "3080" in gpu_name
-                
-                # If using RTX 3080, validate optimal settings
-                if is_rtx_3080:
-                    # Check if using optimal settings for RTX 3080
-                    if gpu_layers != 32:
-                        self.validation_warnings.append(
-                            f"For RTX 3080, the optimal gpu_layers setting is 32, but found {gpu_layers}. "
-                            f"Consider changing this for best performance."
-                        )
-                    
-                    # Check whisper settings
-                    whisper_config = self.config.get("speech", {}).get("whisper", {})
-                    compute_type = whisper_config.get("compute_type")
-                    if compute_type != "float16":
-                        self.validation_warnings.append(
-                            f"For RTX 3080, the optimal whisper compute_type is float16, but found {compute_type}. "
-                            f"Consider changing this for best performance."
-                        )
+                        self.warnings.append(f"Could not create {utility_name} template directory: {e}")
                         
-                    # Check precision
-                    precision = llm_config.get("precision")
-                    if precision != "float16":
-                        self.validation_warnings.append(
-                            f"For RTX 3080, the optimal precision is float16, but found {precision}. "
-                            f"Consider changing this for best performance with Tensor Cores."
-                        )
+    def _validate_system_settings(self) -> None:
+        """
+        Validate system settings.
+        
+        Checks threading, memory, and timeout settings.
+        Adds errors to self.errors for invalid settings.
+        """
+        # Check threading settings
+        self._validate_threading_settings()
+                    
+        # Check memory settings
+        self._validate_memory_settings()
+                    
+        # Check inactivity timeout
+        self._validate_timeout_settings()
+    
+    def _validate_threading_settings(self) -> None:
+        """
+        Validate threading configuration.
+        
+        Checks max_workers setting is valid.
+        """
+        if "threading" in self.config and "max_workers" in self.config["threading"]:
+            max_workers = self.config["threading"]["max_workers"]
+            if not isinstance(max_workers, int):
+                self.errors.append(f"threading.max_workers must be an integer, got {type(max_workers).__name__}")
+            elif max_workers < 1:
+                self.errors.append(f"threading.max_workers must be at least 1, got {max_workers}")
                 
-                # If GPU has less memory than RTX 3080, reduce the layers proportionally
-                elif gpu_memory_mb < rtx_3080_vram_mb and gpu_layers > 0:
-                    ratio = gpu_memory_mb / rtx_3080_vram_mb
-                    recommended_layers = max(1, int(gpu_layers * ratio))
-                    
-                    if llm_config.get("gpu_layer_auto_adjust", False):
-                        self.validation_warnings.append(
-                            f"GPU has less memory than RTX 3080. "
-                            f"Auto-adjusting GPU layers from {gpu_layers} to {recommended_layers}"
-                        )
-                        # Update the config
-                        llm_config["gpu_layers"] = recommended_layers
-                    else:
-                        self.validation_warnings.append(
-                            f"GPU has less memory than RTX 3080. "
-                            f"Consider reducing gpu_layers from {gpu_layers} to {recommended_layers} "
-                            f"or enable gpu_layer_auto_adjust"
-                        )
-                            
-                # If GPU has more memory than RTX 3080, could potentially increase layers
-                elif gpu_memory_mb > rtx_3080_vram_mb * 1.5 and gpu_layers <= 32:
-                    ratio = gpu_memory_mb / rtx_3080_vram_mb
-                    recommended_layers = min(40, int(gpu_layers * ratio * 0.8))  # Conservative estimate
-                    
-                    if recommended_layers > gpu_layers:
-                        self.validation_warnings.append(
-                            f"GPU has more memory than RTX 3080. "
-                            f"Consider increasing gpu_layers from {gpu_layers} to {recommended_layers} "
-                            f"for better performance."
-                        )
-            else:
-                if gpu_layers > 0:
-                    self.validation_warnings.append(
-                        "No CUDA-capable GPU detected but gpu_layers > 0. "
-                        "LLM will fall back to CPU execution which may be slow."
-                    )
-        except ImportError:
-            self.validation_warnings.append("PyTorch not available, hardware compatibility check skipped")
+            try:
+                import os
+                cpu_count = os.cpu_count() or 4
+                if max_workers > cpu_count * 2:
+                    self.warnings.append(f"max_workers ({max_workers}) exceeds twice the number of CPU cores ({cpu_count})")
+            except ImportError:
+                pass
+    
+    def _validate_memory_settings(self) -> None:
+        """
+        Validate memory configuration.
+        
+        Checks max_percent and model_unload_threshold settings are valid.
+        """
+        if "memory" not in self.config:
+            return
             
-        # Check CPU compatibility (Ryzen 9 5900X has 12 cores, 24 threads)
-        try:
-            cpu_model = platform.processor().lower()
-            is_ryzen_9 = "ryzen 9" in cpu_model or "5900x" in cpu_model
-            physical_cores = os.cpu_count() // 2 if hasattr(os, 'sched_getaffinity') else os.cpu_count() // 2
+        memory = self.config["memory"]
+        
+        if "max_percent" in memory:
+            max_percent = memory["max_percent"]
+            if not isinstance(max_percent, (int, float)):
+                self.errors.append(f"memory.max_percent must be a number, got {type(max_percent).__name__}")
+            elif max_percent < 10 or max_percent > 95:
+                self.errors.append(f"memory.max_percent should be between 10 and 95, got {max_percent}")
+                
+        if "model_unload_threshold" in memory and "max_percent" in memory:
+            unload_threshold = memory["model_unload_threshold"]
+            max_percent = memory["max_percent"]
             
-            threading = self.config.get("threading", {})
-            max_workers = threading.get("max_workers", 0)
-            
-            if is_ryzen_9 or physical_cores >= 12:  # Likely Ryzen 9 or similar high-core CPU
-                if max_workers < 6 or max_workers > 10:
-                    self.validation_warnings.append(
-                        f"For Ryzen 9 5900X or similar CPU, the recommended max_workers setting is 8, "
-                        f"but found {max_workers}. Consider adjusting for optimal performance."
-                    )
-            elif physical_cores >= 6:  # Mid-range CPU
-                if max_workers > physical_cores * 0.75:
-                    self.validation_warnings.append(
-                        f"For your CPU with {physical_cores} cores, max_workers of {max_workers} may be too high. "
-                        f"Consider reducing to {int(physical_cores * 0.75)} for system responsiveness."
-                    )
-        except Exception:
-            self.validation_warnings.append("CPU compatibility check skipped due to error")
+            if not isinstance(unload_threshold, (int, float)):
+                self.errors.append(f"memory.model_unload_threshold must be a number, got {type(unload_threshold).__name__}")
+            elif unload_threshold <= max_percent:
+                self.errors.append(f"memory.model_unload_threshold ({unload_threshold}) must be greater than memory.max_percent ({max_percent})")
+    
+    def _validate_timeout_settings(self) -> None:
+        """
+        Validate timeout configuration.
+        
+        Checks inactivity_timeout setting is valid.
+        """
+        if "inactivity_timeout" in self.config:
+            timeout = self.config["inactivity_timeout"]
+            if not isinstance(timeout, (int, float)):
+                self.errors.append(f"inactivity_timeout must be a number, got {type(timeout).__name__}")
+            elif timeout < 10:
+                self.warnings.append(f"inactivity_timeout is very short ({timeout} seconds), which may cause unwanted sleep transitions")
+                
+    def get_validation_result(self) -> Tuple[bool, List[str], List[str]]:
+        """
+        Get the validation result.
+        
+        Returns
+        -------
+        Tuple[bool, List[str], List[str]]
+            A tuple containing (is_valid, errors, warnings)
+        """
+        is_valid = len(self.errors) == 0
+        return (is_valid, self.errors, self.warnings)
