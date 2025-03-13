@@ -26,7 +26,7 @@ dependencies = [
     "PyAudio == 0.2.13",
     "whisper_streaming == 0.2.1",
     "faster-whisper == 0.9.0",
-    "piper-tts == 1.2.0",
+    "kokoro == 0.8.4",
     "ctransformers == 0.2.27",
     "llama-cpp-python == 0.2.11",
     "PyQt6 == 6.5.0",
@@ -46,6 +46,7 @@ dependencies = [
 gpu = [
     "torch >= 2.0.1",  # Base requirement without CUDA specificity
     "onnxruntime-gpu == 1.15.1",
+    "kokoro @ git+https://github.com/hexgrad/kokoro",
 ]
 cuda118 = [
     "torch == 2.0.1+cu118",  # Specific CUDA 11.8 build
