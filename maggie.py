@@ -36,7 +36,7 @@ from transitions import Machine
 from loguru import logger
 
 # Import utility modules
-from utils.tts import PiperTTS
+from utils.kokoro_tts import KokoroTTS
 from utils.gui import MainWindow
 from utils.config import Config
 from utils.recipe_creator import RecipeCreator  # Fixed import path
@@ -319,7 +319,7 @@ class SpeechProcessor:
         """
         self.config = config
         self.whisper_model = None
-        self.tts = PiperTTS(config.get("tts", {}))
+        self.tts = KokoroTTS(config.get("tts", {}))
         self.sr_recognizer = sr.Recognizer()
         self.sr_mic = None
         
