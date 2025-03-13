@@ -379,10 +379,8 @@ This utility demonstrates how the system combines speech recognition, natural la
         - Check desired options and close the installer
         - Restart your computer when prompted
      
-     2. **Install cuDNN for CUDA 11.8:**
-        - Visit the [NVIDIA cuDNN Downloads](https://developer.nvidia.com/cudnn)
-        - You'll need to create a free NVIDIA Developer account if you don't have one
-        - After logging in, accept the terms and conditions
+     2. **Install cuDNN 8.9.7, for CUDA 11.8:**
+        - Visit the [NVIDIA cuDNN-Archive](https://developer.nvidia.com/rdp/cudnn-archive)
         - Look for "Download cuDNN v8.x.x (CUDA 11.x)" that's compatible with CUDA 11.8
         - Download "Local Installer for Windows (zip)"
         - Extract the downloaded zip file
