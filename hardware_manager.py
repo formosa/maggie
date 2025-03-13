@@ -76,6 +76,12 @@ class HardwareManager:
         # Performance monitoring
         self._monitoring_enabled = False
         self._monitoring_thread = None
+        
+        # For tracking resource trends
+        self._cpu_history = []
+        self._memory_history = []
+        self._gpu_memory_history = []
+        self._resource_history_max_samples = 60  # 5 minutes at 5-second intervals
 
     def _detect_system(self) -> Dict[str, Any]:
         """
@@ -99,7 +105,8 @@ class HardwareManager:
             },
             "cpu": self._detect_cpu(),
             "memory": self._detect_memory(),
-            "gpu": self._detect_gpu()
+            "gpu": self._detect_gpu(),
+            "disk": self._detect_disk()  # Added disk detection
         }
         
         # Log detected hardware
@@ -132,7 +139,12 @@ class HardwareManager:
             "physical_cores": psutil.cpu_count(logical=False),
             "logical_cores": psutil.cpu_count(logical=True),
             "model": platform.processor(),
-            "is_ryzen_9_5900x": False
+            "is_ryzen_9_5900x": False,
+            "frequency_mhz": {
+                "current": 0,
+                "min": 0,
+                "max": 0
+            }
         }
         
         # Check if CPU is Ryzen 9 5900X
@@ -140,6 +152,18 @@ class HardwareManager:
         if "ryzen 9" in model_lower and "5900x" in model_lower:
             cpu_info["is_ryzen_9_5900x"] = True
         
+        # Get CPU frequency if available
+        try:
+            cpu_freq = psutil.cpu_freq()
+            if cpu_freq:
+                cpu_info["frequency_mhz"] = {
+                    "current": cpu_freq.current,
+                    "min": cpu_freq.min,
+                    "max": cpu_freq.max
+                }
+        except:
+            pass
+            
         # Additional Ryzen 9 5900X identification approaches
         if platform.system() == "Windows":
             try:
@@ -149,6 +173,7 @@ class HardwareManager:
                     if "Ryzen 9 5900X" in processor.Name:
                         cpu_info["is_ryzen_9_5900x"] = True
                         cpu_info["model"] = processor.Name
+                        cpu_info["frequency_mhz"]["max"] = processor.MaxClockSpeed
                         break
             except ImportError:
                 logger.debug("WMI module not available for detailed CPU detection")
@@ -180,9 +205,13 @@ class HardwareManager:
                 import wmi
                 c = wmi.WMI()
                 for physical_memory in c.Win32_PhysicalMemory():
-                    if "DDR4" in physical_memory.PartNumber:
-                        memory_info["type"] = "DDR4"
-                        break
+                    if hasattr(physical_memory, 'PartNumber') and physical_memory.PartNumber:
+                        if "DDR4" in physical_memory.PartNumber:
+                            memory_info["type"] = "DDR4"
+                            # If 3200 MHz is in the part number, tag it
+                            if "3200" in physical_memory.PartNumber:
+                                memory_info["speed"] = "3200MHz"
+                            break
             except ImportError:
                 logger.debug("WMI module not available for detailed memory detection")
                 
@@ -202,7 +231,9 @@ class HardwareManager:
             "name": None,
             "memory_gb": None,
             "cuda_version": None,
-            "is_rtx_3080": False
+            "is_rtx_3080": False,
+            "driver_version": None,
+            "architectures": []
         }
         
         try:
@@ -220,11 +251,78 @@ class HardwareManager:
                     gpu_info["compute_capability"] = torch.cuda.get_device_capability(0)
                     gpu_info["tensor_cores"] = True
                     gpu_info["optimal_precision"] = "float16"
+                    gpu_info["architectures"] = ["Ampere"]
+                    
+                    # Get more detailed information on Windows
+                    if platform.system() == "Windows":
+                        try:
+                            import pynvml
+                            pynvml.nvmlInit()
+                            handle = pynvml.nvmlDeviceGetHandleByIndex(0)
+                            info = pynvml.nvmlDeviceGetMemoryInfo(handle)
+                            gpu_info["memory_gb"] = info.total / 1024**3
+                            gpu_info["driver_version"] = pynvml.nvmlSystemGetDriverVersion()
+                            pynvml.nvmlShutdown()
+                        except ImportError:
+                            pass
+                            
+                # Get VRAM usage
+                gpu_info["memory_free_gb"] = (torch.cuda.get_device_properties(0).total_memory - 
+                                              torch.cuda.memory_allocated(0) - 
+                                              torch.cuda.memory_reserved(0)) / (1024**3)
                 
         except ImportError:
             logger.debug("PyTorch not available for GPU detection")
             
         return gpu_info
+        
+    def _detect_disk(self) -> Dict[str, Any]:
+        """
+        Detect disk information.
+        
+        Returns
+        -------
+        Dict[str, Any]
+            Disk information including available space for model storage
+        """
+        disk_info = {
+            "root_free_gb": 0,
+            "models_free_gb": 0,
+            "is_ssd": False
+        }
+        
+        # Check root directory space
+        try:
+            root_usage = psutil.disk_usage('/')
+            disk_info["root_free_gb"] = root_usage.free / (1024**3)
+        except:
+            pass
+            
+        # Check models directory space
+        try:
+            models_dir = os.path.abspath("models")
+            if os.path.exists(models_dir):
+                models_usage = psutil.disk_usage(models_dir)
+                disk_info["models_free_gb"] = models_usage.free / (1024**3)
+        except:
+            pass
+            
+        # Try to detect if SSD on Windows
+        if platform.system() == "Windows":
+            try:
+                import wmi
+                c = wmi.WMI()
+                for disk in c.Win32_DiskDrive():
+                    # Most SSDs will report this in the model name
+                    model = disk.Model.lower() if disk.Model else ""
+                    if any(x in model for x in ["ssd", "nvme", "m.2"]):
+                        disk_info["is_ssd"] = True
+                        disk_info["model"] = disk.Model
+                        break
+            except ImportError:
+                logger.debug("WMI module not available for SSD detection")
+                
+        return disk_info
     
     def _create_optimization_profile(self) -> Dict[str, Any]:
         """
@@ -259,15 +357,20 @@ class HardwareManager:
         # Ryzen 9 5900X optimized threading
         if cpu_info["is_ryzen_9_5900x"]:
             return {
-                "max_workers": 8,  # Optimal for Ryzen 9 5900X (12 cores)
+                "max_workers": 10,  # Increased from 8 to 10 for better Ryzen 9 5900X utilization
                 "thread_timeout": 30,
-                "worker_affinity": [0, 2, 4, 6, 8, 10, 12, 14]  # Use first 8 performance cores
+                # Improved thread affinity for Ryzen 9 5900X's CCX architecture
+                # Use performance cores in both CCXs (Ryzen 9 5900X has 2x6 cores)
+                "worker_affinity": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+                "priority_boost": True  # Enable priority boost for workloads
             }
         # General threading optimization based on core count
         else:
             physical_cores = cpu_info["physical_cores"]
+            # Leave at least 2 cores for system processes
+            max_workers = max(2, min(physical_cores - 2, physical_cores * 4 // 5))
             return {
-                "max_workers": max(2, min(8, int(physical_cores * 0.75))),
+                "max_workers": max_workers,
                 "thread_timeout": 30
             }
     
@@ -282,12 +385,23 @@ class HardwareManager:
         """
         memory_info = self.hardware_info["memory"]
         
-        # 32GB RAM optimization
-        if memory_info["is_32gb"]:
+        # 32GB RAM optimization (DDR4-3200) for Ryzen 9 5900X
+        if memory_info["is_32gb"] and memory_info.get("type") == "DDR4" and memory_info.get("speed") == "3200MHz":
             return {
-                "max_percent": 75,  # Use up to 75% of RAM for 32GB systems
+                "max_percent": 80,  # Increased from 75% to 80% for 32GB systems
                 "unload_threshold": 85,
-                "cache_size_mb": 4096  # 4GB cache for 32GB systems
+                "cache_size_mb": 6144,  # Increased from 4GB to 6GB cache for 32GB systems
+                "preloading": True,  # Enable model preloading
+                "large_pages": True,  # Try to use large pages for better performance (if available)
+                "numa_aware": True    # Optimize for NUMA architecture in Ryzen
+            }
+        # 32GB RAM optimization (generic)
+        elif memory_info["is_32gb"]:
+            return {
+                "max_percent": 75,
+                "unload_threshold": 85,
+                "cache_size_mb": 4096,
+                "preloading": True
             }
         # Optimization for lower memory systems
         else:
@@ -314,15 +428,23 @@ class HardwareManager:
                 "enabled": False
             }
         
-        # RTX 3080 specific optimizations
+        # RTX 3080 specific optimizations (enhanced for 10GB VRAM)
         if gpu_info["is_rtx_3080"]:
             return {
                 "enabled": True,
                 "compute_type": "float16",  # Use mixed precision for RTX 3080
                 "tensor_cores": True,
-                "cuda_streams": 2,
-                "reserved_memory_mb": 512,
-                "max_batch_size": 16
+                "cuda_streams": 3,        # Increased from 2 to 3 for better parallelism
+                "reserved_memory_mb": 256, # Reduced from 512MB to 256MB to leave more for models
+                "max_batch_size": 16,
+                "memory_fraction": 0.95,  # Use 95% of VRAM for ML tasks
+                "cudnn_benchmark": True,  # Enable cuDNN benchmarking for optimal kernels
+                "trt_optimization": True, # Enable TensorRT optimizations if available
+                "bfloat16_supported": False, # RTX 3080 doesn't support BF16 natively
+                "dynamic_mem_mgmt": True,  # Enable dynamic memory management
+                "vram_gb": gpu_info.get("memory_gb", 10), # Typically 10GB for RTX 3080
+                "vram_efficient_loading": True,
+                "amp_optimization_level": "O2"  # Automatic Mixed Precision optimization level
             }
         # General GPU optimizations
         else:
@@ -347,13 +469,25 @@ class HardwareManager:
         """
         gpu_info = self.hardware_info["gpu"]
         
-        # RTX 3080 optimizations for LLM
+        # RTX 3080 optimizations for LLM (enhanced for 10GB VRAM)
         if gpu_info["is_rtx_3080"]:
             return {
                 "gpu_layers": 32,  # Optimal for 10GB VRAM
                 "precision": "float16",
+                "kv_cache_optimization": True,  # Enable KV cache optimization
                 "context_length": 8192,
-                "auto_adjust": True
+                "attention_sinks": True,      # Enable attention sinks for longer contexts
+                "auto_adjust": True,
+                "tensor_parallel": 1,         # Single GPU
+                "draft_model": "small",       # Use small draft model for speculative decoding
+                "speculative_decoding": True, # Enable speculative decoding for faster generations
+                "llm_rope_scaling": "dynamic", # Use dynamic rope scaling for long contexts
+                "batch_inference": True,      # Enable batch inference
+                "offload_layers": {
+                    "enabled": True,
+                    "threshold_gb": 9.0,      # Offload when less than 9GB VRAM available
+                    "cpu_layers": [0, 1]      # Offload first two layers if needed
+                }
             }
         # General GPU optimizations
         elif gpu_info["available"]:
@@ -396,10 +530,14 @@ class HardwareManager:
         # Adjust settings based on hardware
         if cpu_info["is_ryzen_9_5900x"]:
             audio_opt["chunk_size"] = 512  # Lower latency for high-performance CPU
+            audio_opt["audio_threads"] = 2  # Dedicate 2 threads for audio processing
             
         if gpu_info["is_rtx_3080"]:
             audio_opt["whisper_model"] = "small"  # Better model for RTX 3080
             audio_opt["whisper_compute"] = "float16"
+            audio_opt["cache_models"] = True
+            audio_opt["vad_sensitivity"] = 0.6  # Optimized VAD sensitivity
+            audio_opt["cuda_audio_processing"] = True  # Use CUDA for audio when possible
         elif gpu_info["available"]:
             audio_opt["whisper_model"] = "base"
             audio_opt["whisper_compute"] = "float16" if gpu_info.get("memory_gb", 0) >= 6 else "int8"
@@ -500,7 +638,8 @@ class HardwareManager:
         self._monitoring_thread = threading.Thread(
             target=self._monitor_resources,
             args=(interval,),
-            daemon=True
+            daemon=True,
+            name="ResourceMonitorThread"
         )
         self._monitoring_thread.start()
         
@@ -538,14 +677,34 @@ class HardwareManager:
         """
         while self._monitoring_enabled:
             try:
-                cpu_percent = psutil.cpu_percent(interval=0.1)
+                cpu_percent = psutil.cpu_count(percpu=True)
+                cpu_avg = sum(cpu_percent) / len(cpu_percent) if cpu_percent else 0
                 memory = psutil.virtual_memory()
+                
+                # Store historical data for trend analysis
+                self._cpu_history.append(cpu_avg)
+                self._memory_history.append(memory.percent)
+                
+                # Limit history size
+                if len(self._cpu_history) > self._resource_history_max_samples:
+                    self._cpu_history.pop(0)
+                if len(self._memory_history) > self._resource_history_max_samples:
+                    self._memory_history.pop(0)
                 
                 # Get GPU utilization if available
                 gpu_util = self._get_gpu_utilization()
                 
+                # If GPU is available, store history
+                if gpu_util and "memory_percent" in gpu_util:
+                    self._gpu_memory_history.append(gpu_util["memory_percent"])
+                    if len(self._gpu_memory_history) > self._resource_history_max_samples:
+                        self._gpu_memory_history.pop(0)
+                
                 # Log resource usage if exceeding thresholds
-                self._check_resource_thresholds(cpu_percent, memory, gpu_util)
+                self._check_resource_thresholds(cpu_avg, memory, gpu_util)
+                
+                # Check for trends that might indicate issues
+                self._check_resource_trends()
                     
                 # Sleep for specified interval
                 time.sleep(interval)
@@ -571,14 +730,27 @@ class HardwareManager:
             
             if torch.cuda.is_available():
                 # Calculate memory usage percentage
-                allocated = torch.cuda.memory_allocated()
+                allocated = torch.cuda.memory_allocated(0)
+                reserved = torch.cuda.memory_reserved(0)
                 total = torch.cuda.get_device_properties(0).total_memory
+                
                 memory_percent = allocated / total * 100
+                reserved_percent = reserved / total * 100
+                
+                # Get active CUDA memory allocations
+                active_allocations = 0
+                if hasattr(torch.cuda, 'memory_stats'):
+                    stats = torch.cuda.memory_stats(0)
+                    active_allocations = stats.get("num_alloc_retries", 0)
                 
                 return {
                     "memory_allocated": allocated,
+                    "memory_reserved": reserved,
                     "memory_total": total,
-                    "memory_percent": memory_percent
+                    "memory_percent": memory_percent,
+                    "reserved_percent": reserved_percent,
+                    "active_allocations": active_allocations,
+                    "fragmentation": (reserved - allocated) / total * 100 if reserved > allocated else 0
                 }
         except ImportError:
             pass
@@ -605,14 +777,66 @@ class HardwareManager:
         """
         memory_threshold = self.optimization_profile["memory"]["unload_threshold"]
         
-        if cpu_percent > 90:
-            logger.warning(f"High CPU usage: {cpu_percent:.1f}%")
+        # Check CPU core utilization for Ryzen 9 5900X optimization
+        if self.hardware_info["cpu"].get("is_ryzen_9_5900x", False):
+            # Check if any core is maxing out 
+            per_core = psutil.cpu_percent(percpu=True)
+            max_core = max(per_core) if per_core else 0
+            cores_above_95 = sum(1 for core in per_core if core > 95)
+            
+            if cores_above_95 >= 4:  # 4+ cores maxed out indicates high load
+                logger.warning(f"High load on {cores_above_95} CPU cores (>95% usage)")
+            
+            if cpu_percent > 85:  # Overall CPU usage high
+                logger.warning(f"High overall CPU usage: {cpu_percent:.1f}%")
+        else:
+            # Generic CPU monitoring
+            if cpu_percent > 90:
+                logger.warning(f"High CPU usage: {cpu_percent:.1f}%")
             
         if memory.percent > memory_threshold:
             logger.warning(f"High memory usage: {memory.percent:.1f}% " +
                          f"(threshold: {memory_threshold}%) - " +
                          f"available: {memory.available / (1024**3):.1f} GB")
             
-        if gpu_util and gpu_util["memory_percent"] > 90:
-            logger.warning(f"High GPU memory usage: {gpu_util['memory_percent']:.1f}% - " +
-                         f"allocated: {gpu_util['memory_allocated'] / (1024**3):.1f} GB")
+        if gpu_util:
+            # More detailed GPU monitoring for RTX 3080
+            if self.hardware_info["gpu"].get("is_rtx_3080", False):
+                # Check memory usage
+                if gpu_util["memory_percent"] > 90:
+                    logger.warning(f"High GPU memory usage: {gpu_util['memory_percent']:.1f}% - " +
+                                 f"allocated: {gpu_util['memory_allocated'] / (1024**3):.1f} GB")
+                    
+                # Check for memory fragmentation issues
+                if gpu_util.get("fragmentation", 0) > 15:  # More than 15% fragmentation
+                    logger.warning(f"High GPU memory fragmentation: {gpu_util['fragmentation']:.1f}% - " +
+                                 f"consider clearing cache")
+            else:
+                # Basic GPU monitoring for other GPUs
+                if gpu_util["memory_percent"] > 90:
+                    logger.warning(f"High GPU memory usage: {gpu_util['memory_percent']:.1f}% - " +
+                                 f"allocated: {gpu_util['memory_allocated'] / (1024**3):.1f} GB")
+    
+    def _check_resource_trends(self) -> None:
+        """
+        Analyze resource usage trends to detect potential issues.
+        
+        Detects steadily increasing resource usage that might indicate 
+        memory leaks or other resource management issues.
+        """
+        # Need at least 10 samples for trend analysis
+        if len(self._memory_history) < 10:
+            return
+            
+        # Check for steadily increasing memory usage
+        if all(self._memory_history[i] <= self._memory_history[i+1] for i in range(len(self._memory_history)-10, len(self._memory_history)-1)):
+            # Memory usage has been steadily increasing for 10 samples
+            if self._memory_history[-1] - self._memory_history[-10] > 10:  # >10% increase
+                logger.warning("Memory usage steadily increasing - possible memory leak")
+        
+        # Check for GPU memory growth if available
+        if len(self._gpu_memory_history) >= 10:
+            if all(self._gpu_memory_history[i] <= self._gpu_memory_history[i+1] for i in range(len(self._gpu_memory_history)-10, len(self._gpu_memory_history)-1)):
+                # GPU memory has been steadily increasing for 10 samples
+                if self._gpu_memory_history[-1] - self._gpu_memory_history[-10] > 15:  # >15% increase
+                    logger.warning("GPU memory usage steadily increasing - possible CUDA memory leak")
