@@ -577,7 +577,7 @@ class MaggieInstaller:
             returncode, stdout, _ = self._run_command([
                 sys.executable, 
                 "-c", 
-                "import torch; print(f'CUDA available: {torch.cuda.is_available()}'); print(f'GPU: {torch.cuda.get_device_name(0)}') if torch.cuda.is_available() else print('No CUDA-capable GPU detected')"
+                "import torch; print(f'CUDA available: {torch.cuda.is_available()}'); print(f'GPU: {torch.cuda.get_device_name(0)}' if torch.cuda.is_available() else 'No CUDA-capable GPU detected')"
             ], check=False)
             
             if returncode != 0:
@@ -946,6 +946,7 @@ class MaggieInstaller:
                 f"https://github.com/rhasspy/piper-phonemize/releases/download/v1.2.0/piper_phonemize-1.2.0-{py_version}-{py_version}-win_amd64.whl",
                 f"https://github.com/rhasspy/piper-phonemize/releases/download/v1.2.0/piper_phonemize-1.2.0-{py_version}-{py_version}m-win_amd64.whl",
                 # Fixed fallbacks for Python 3.10 on Windows 11
+                "https://github.com/Marc56K/piper-phonemize-win32/releases/download/v1.2.0/piper_phonemize-1.2.0-cp311-cp311-win_amd64.whl",
                 "https://github.com/rhasspy/piper-phonemize/releases/download/v1.2.0/piper_phonemize-1.2.0-cp310-cp310-win_amd64.whl",
                 # Alternative mirror URLs
                 "https://github.com/MycroftAI/piper-phonemize-wheels/raw/main/piper_phonemize-1.2.0-cp310-cp310-win_amd64.whl",
