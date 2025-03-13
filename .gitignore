@@ -9,18 +9,6 @@ __pycache__/
 assets/
 .assets/
 
-# Installation downloads
-downloads/
-.downloads/
-
-# Installation assets
-templates/
-.templates/
-
-# Installation cache
-cache/
-.cache/
-
 # Virtual environment
 venv/
 .env/
