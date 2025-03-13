@@ -20,8 +20,6 @@ Examples
 
 # Standard library imports
 import sys
-sys.path.append(r"c:\ai\claude\maggie\venv\lib\site-packages")
-
 import threading
 import queue
 import time
