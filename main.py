@@ -30,6 +30,9 @@ $ python main.py --optimize
 # Standard library imports
 import os
 import sys
+
+sys.path.append(r"c:\ai\claude\maggie\venv\lib\site-packages")
+
 import argparse
 import platform
 import multiprocessing

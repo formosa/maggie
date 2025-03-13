@@ -41,6 +41,9 @@ Notes
 # Standard library imports
 import os
 import sys
+sys.path.append(r"c:\ai\claude\maggie\venv\lib\site-packages")
+
+
 import platform
 import subprocess
 import argparse
