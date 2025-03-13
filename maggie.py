@@ -10,7 +10,7 @@ Specifically tuned for AMD Ryzen 9 5900X and NVIDIA RTX 3080 hardware.
 Examples
 --------
 >>> from maggie import MaggieAI
->>> config = {"threading": {"max_workers": 8}, "inactivity_timeout": 300}
+>>> config = {"threading": {"max_workers": 10}, "inactivity_timeout": 300}
 >>> maggie = MaggieAI(config)
 >>> maggie.initialize_components()
 >>> maggie.start()
@@ -214,10 +214,14 @@ class EventBus:
     def _process_events(self) -> None:
         """
         Process events from the queue and dispatch to subscribers.
+        
+        Optimized for efficient event processing with better queue handling
+        for Ryzen 9 5900X.
         """
         while self.running:
             try:
-                priority, event = self.queue.get(timeout=0.1)
+                # Use shorter timeout for more responsive event handling
+                priority, event = self.queue.get(timeout=0.05)
                 
                 if event is None:  # Stop signal
                     break
@@ -234,7 +238,8 @@ class EventBus:
                 self.queue.task_done()
                 
             except queue.Empty:
-                continue
+                # More efficient CPU usage during idle periods
+                time.sleep(0.001)
             except Exception as e:
                 logger.error(f"Error processing events: {e}")
 
@@ -300,9 +305,10 @@ class MaggieAI:
         self.llm_processor = None
         self.gui = None
         
-        # Worker thread pool - optimized for Ryzen 9 5900X
+        # Worker thread pool - optimized for Ryzen 9 5900X with 12 cores
+        # Using 10 worker threads to leave 2 cores for system and background tasks
         self.thread_pool = ThreadPoolExecutor(
-            max_workers=config.get("threading", {}).get("max_workers", 8),
+            max_workers=config.get("threading", {}).get("max_workers", 10),
             thread_name_prefix="maggie_worker"
         )
         
@@ -321,6 +327,42 @@ class MaggieAI:
         
         # Register event handlers
         self._register_event_handlers()
+        
+        # Create GPU resource management
+        self._setup_gpu_resource_management()
+        
+    def _setup_gpu_resource_management(self) -> None:
+        """
+        Set up GPU resource management for the RTX 3080.
+        
+        Configures PyTorch for optimal GPU memory management with the 
+        RTX 3080's 10GB VRAM, enabling efficient memory allocation and
+        garbage collection.
+        """
+        try:
+            import torch
+            
+            if torch.cuda.is_available():
+                # Enable CUDA caching allocator for better memory efficiency
+                torch.cuda.empty_cache()
+                
+                # Enable anomaly detection in debug mode only
+                if self.config.get("logging", {}).get("console_level", "INFO") == "DEBUG":
+                    torch.autograd.set_detect_anomaly(True)
+                else:
+                    torch.autograd.set_detect_anomaly(False)
+                    
+                # Set optimal memory management for RTX 3080 (10GB VRAM)
+                if hasattr(torch.cuda, 'memory_reserved'):
+                    max_memory = int(torch.cuda.get_device_properties(0).total_memory * 0.9)
+                    torch.cuda.set_per_process_memory_fraction(0.9)  # Use 90% of available VRAM
+                    logger.info(f"GPU memory management configured: {max_memory/1024**3:.2f}GB reserved")
+                    
+                logger.info(f"GPU resource management set up for {torch.cuda.get_device_name(0)}")
+        except ImportError:
+            logger.debug("PyTorch not available for GPU resource management")
+        except Exception as e:
+            logger.error(f"Error setting up GPU resource management: {e}")
         
     def _register_event_handlers(self) -> None:
         """
@@ -523,6 +565,15 @@ class MaggieAI:
         if self.wake_word_detector:
             self.wake_word_detector.start()
             
+        # Free GPU resources when idle
+        try:
+            import torch
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                logger.debug("GPU memory cache cleared in IDLE state")
+        except ImportError:
+            pass
+            
         logger.info("Entered IDLE state - waiting for wake word")
             
     def _on_enter_ready(self, transition: StateTransition) -> None:
@@ -590,6 +641,15 @@ class MaggieAI:
         if self.llm_processor:
             self.llm_processor.unload_model()
             
+        # Free GPU resources
+        try:
+            import torch
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                logger.debug("GPU memory cache cleared in CLEANUP state")
+        except ImportError:
+            pass
+            
         # Determine next state based on trigger
         if transition.trigger == "shutdown_requested":
             self._transition_to(State.SHUTDOWN, "cleanup_completed")
@@ -628,8 +688,17 @@ class MaggieAI:
         # Stop event bus
         self.event_bus.stop()
         
-        # Shutdown thread pool
-        self.thread_pool.shutdown(wait=True)
+        # Clean up GPU resources
+        try:
+            import torch
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                logger.debug("GPU memory freed during shutdown")
+        except ImportError:
+            pass
+        
+        # Shutdown thread pool with timeout for clean termination
+        self.thread_pool.shutdown(wait=True, timeout=5)
         
         logger.info("Entered SHUTDOWN state - application will exit")
             
