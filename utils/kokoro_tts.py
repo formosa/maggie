@@ -1,18 +1,24 @@
 """
-Maggie AI Assistant - TTS Utility
-================================
-Text-to-Speech module using Piper TTS for local, high-quality speech synthesis.
+Maggie AI Assistant - TTS Utility using Kokoro
+==============================================
+Text-to-Speech module using Kokoro for local, high-quality speech synthesis.
 
 This module provides Text-to-Speech functionality for the Maggie AI Assistant
-using the Piper TTS library. It includes optimizations for AMD Ryzen 9 5900X
+using the Kokoro library. It includes optimizations for AMD Ryzen 9 5900X
 and NVIDIA RTX 3080 hardware, offering low-latency speech synthesis with
 high-quality voice output.
 
 Examples
 --------
+<<<<<<< HEAD:utils/kokoro_tts.py
+>>> from utils.kokoro_tts import KokoroTTS
+>>> config = {"voice_model": "af_heart", "model_path": "models/tts"}
+>>> tts = KokoroTTS(config)
+=======
 >>> from utils.tts import PiperTTS
 >>> config = {"voice_model": "en_US-kathleen-medium", "model_path": "models/tts"}
 >>> tts = PiperTTS(config)
+>>>>>>> 9c050c2ef726d229607f4518139e12a1de59e7a8:utils/tts.py
 >>> tts.speak("Hello, I am Maggie AI Assistant")
 >>> # Save to file
 >>> tts.save_to_file("This is a test", "test_output.wav")
@@ -32,15 +38,21 @@ import numpy as np
 import soundfile as sf
 from loguru import logger
 
+<<<<<<< HEAD:utils/kokoro_tts.py
+__all__ = ['KokoroTTS']
+
+class KokoroTTS:
+=======
 __all__ = ['PiperTTS']
 
 class PiperTTS:
+>>>>>>> 9c050c2ef726d229607f4518139e12a1de59e7a8:utils/tts.py
     """
-    Text-to-Speech implementation using Piper TTS.
+    Text-to-Speech implementation using Kokoro.
     
-    This class provides a simple interface to Piper TTS for high-quality
-    speech synthesis. It supports hardware acceleration through ONNX runtime
-    when available, particularly optimized for RTX 3080 GPUs.
+    This class provides a simple interface to Kokoro for high-quality
+    speech synthesis. It supports optional CUDA acceleration when available,
+    particularly optimized for RTX 3080 GPUs.
     
     Parameters
     ----------
@@ -55,8 +67,13 @@ class PiperTTS:
         Path to the directory containing TTS models
     sample_rate : int
         Sample rate for audio output (Hz)
+<<<<<<< HEAD:utils/kokoro_tts.py
+    kokoro_instance : Optional[Any]
+        Loaded Kokoro TTS model instance
+=======
     piper_instance : Optional[Any]
         Loaded Piper TTS model instance
+>>>>>>> 9c050c2ef726d229607f4518139e12a1de59e7a8:utils/tts.py
     lock : threading.Lock
         Lock for thread-safe operations
     cache_dir : str
@@ -77,17 +94,17 @@ class PiperTTS:
         ----------
         config : Dict[str, Any]
             Configuration dictionary for TTS containing:
-            - voice_model: Name of voice to use (default: "en_US-kathleen-medium")
+            - voice_model: Name of voice to use (default: "af_heart")
             - model_path: Path to TTS models (default: "models/tts")
             - sample_rate: Sample rate in Hz (default: 22050)
             - use_cache: Whether to cache TTS results (default: True)
             - cache_size: Maximum number of cached utterances (default: 100)
         """
         self.config = config
-        self.voice_model = config.get("voice_model", "en_US-kathleen-medium")
+        self.voice_model = config.get("voice_model", "af_heart")
         self.model_path = config.get("model_path", "models/tts")
         self.sample_rate = config.get("sample_rate", 22050)
-        self.piper_instance = None
+        self.kokoro_instance = None
         self.lock = threading.Lock()
         
         # Audio caching for repeated phrases (optimizes performance)
@@ -108,12 +125,12 @@ class PiperTTS:
         # Lazy initialization - will load when first needed
         # This speeds up startup time and reduces memory usage when TTS is not used
         
-    def _init_piper(self) -> bool:
+    def _init_kokoro(self) -> bool:
         """
-        Initialize the Piper TTS model.
+        Initialize the Kokoro TTS model.
         
-        Loads the Piper TTS voice model using ONNX runtime with GPU
-        acceleration when available, particularly optimized for RTX 3080.
+        Loads the Kokoro TTS voice model with optional CUDA acceleration
+        for RTX 3080 if available.
         
         Returns
         -------
@@ -125,36 +142,32 @@ class PiperTTS:
         This method is called automatically when needed. It's thread-safe
         and will only initialize the model once.
         """
-        if self.piper_instance is not None:
+        if self.kokoro_instance is not None:
             return True
             
         try:
-            # Using GPU acceleration through ONNX runtime (optimized for RTX 3080)
-            from piper import PiperVoice
+            # Import Kokoro library
+            import kokoro
             
-            voice_dir = os.path.join(self.model_path, self.voice_model)
-            onnx_path = os.path.join(voice_dir, f"{self.voice_model}.onnx")
-            config_path = os.path.join(voice_dir, f"{self.voice_model}.json")
+            voice_path = os.path.join(self.model_path, self.voice_model)
             
-            # Check if model files exist
-            if not os.path.exists(onnx_path):
-                logger.error(f"TTS ONNX model file not found: {onnx_path}")
-                return False
-                
-            if not os.path.exists(config_path):
-                logger.error(f"TTS config file not found: {config_path}")
+            # Check if model exists
+            if not os.path.exists(voice_path):
+                logger.error(f"TTS voice model not found: {voice_path}")
                 return False
             
-            # Load the model with CUDA acceleration if available
-            # This is optimized for RTX 3080 using ONNX runtime
+            # Initialize Kokoro with CUDA support for RTX 3080
             start_time = time.time()
-            self.piper_instance = PiperVoice.load(
-                onnx_path, 
-                config_path,
-                use_cuda=True  # Will use GPU if available, fallback to CPU
+            
+            # Configure Kokoro to use CUDA if available
+            self.kokoro_instance = kokoro.load_tts_model(
+                voice_path,
+                use_cuda=True,  # Will fall back to CPU if CUDA is not available
+                sample_rate=self.sample_rate
             )
+            
             load_time = time.time() - start_time
-            logger.info(f"Initialized Piper TTS with voice {self.voice_model} in {load_time:.2f}s")
+            logger.info(f"Initialized Kokoro TTS with voice {self.voice_model} in {load_time:.2f}s")
             
             # Check CUDA availability for logging
             self._log_cuda_status()
@@ -162,12 +175,21 @@ class PiperTTS:
             return True
             
         except ImportError as import_error:
+<<<<<<< HEAD:utils/kokoro_tts.py
+            logger.error(f"Failed to import Kokoro TTS module: {import_error}")
+            logger.error("Please install kokoro with: pip install git+https://github.com/hexgrad/kokoro")
+            return False
+        except Exception as e:
+            logger.error(f"Failed to initialize Kokoro TTS: {e}")
+            return False
+=======
             logger.error(f"Failed to import Piper TTS module: {import_error}")
             logger.error("Please install piper-tts with: pip install piper-tts==1.2.0")
             return False
         except Exception as e:
             logger.error(f"Failed to initialize Piper TTS: {e}")
             return False
+>>>>>>> 9c050c2ef726d229607f4518139e12a1de59e7a8:utils/tts.py
     
     def _log_cuda_status(self) -> None:
         """
@@ -305,7 +327,7 @@ class PiperTTS:
                     return True
                 
                 # Initialize if needed
-                if not self._init_piper():
+                if not self._init_kokoro():
                     return False
                     
                 # Generate audio data
@@ -346,8 +368,8 @@ class PiperTTS:
             Audio data as numpy array or None if error
         """
         try:
-            # Use piper for synthesis
-            audio_data = self.piper_instance.synthesize_stream(text)
+            # Use Kokoro for synthesis
+            audio_data = self.kokoro_instance.synthesize(text)
             return np.array(audio_data)
         except Exception as e:
             logger.error(f"Error synthesizing speech: {e}")
@@ -437,7 +459,7 @@ class PiperTTS:
         with self.lock:
             try:
                 # Initialize if needed
-                if not self._init_piper():
+                if not self._init_kokoro():
                     return False
                     
                 # Check cache first
@@ -495,8 +517,8 @@ class PiperTTS:
         including unloading the model from memory.
         """
         with self.lock:
-            # Free the Piper instance
-            self.piper_instance = None
+            # Free the Kokoro instance
+            self.kokoro_instance = None
             
             # Clear cache
             self.cache.clear()
