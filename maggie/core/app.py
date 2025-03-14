@@ -449,7 +449,7 @@ class MaggieAI:
         Loads and initializes utility modules specified in the configuration
         using the utility registry for dynamic discovery.
         """
-        from from maggie.extensions.registry import ExtensionRegistry
+        from maggie.extensions.registry import ExtensionRegistry
         
         utilities_config = self.config.get("utilities", {})
         
