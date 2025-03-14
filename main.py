@@ -610,7 +610,7 @@ def create_recipe_template() -> bool:
     Notes
     -----
     This function creates a Microsoft Word document template for recipes,
-    which is used by the recipe creator utility.
+    which is used by the recipe creator extension.
     """
     template_path = "templates/recipe_template.docx"
     

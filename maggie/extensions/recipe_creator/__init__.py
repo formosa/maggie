@@ -2,7 +2,7 @@
 Maggie AI Extension - Recipe Creator
 ===================================
 
-Speech-to-document recipe creation utility for Maggie AI Assistant.
+Speech-to-document recipe creation extension for Maggie AI Assistant.
 
 This extension provides a streamlined workflow for creating recipe documents
 from speech input, enabling users to dictate recipes and have them

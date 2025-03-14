@@ -134,7 +134,7 @@ class ConfigManager:
                 "max_size": "10MB",
                 "retention": "1 week"
             },
-            "utilities": {
+            "extensions": {
                 "recipe_creator": {
                     "output_dir": "recipes",
                     "template_path": "templates/recipe_template.docx"
@@ -523,43 +523,43 @@ class ConfigManager:
             elif not is_dir and os.path.isdir(path):
                 self.validation_errors.append(f"{name} path is a directory, not a file: {path}")
                 
-        # Check utility paths
-        self._validate_utility_paths()
+        # Check extension paths
+        self._validate_extension_paths()
                 
-    def _validate_utility_paths(self) -> None:
+    def _validate_extension_paths(self) -> None:
         """
-        Validate utility-specific paths.
+        Validate extension-specific paths.
         
         Checks output directories and template paths for extension modules.
         """
-        utilities = self.config.get("utilities", {})
-        for utility_name, utility_config in utilities.items():
-            if "output_dir" in utility_config:
-                output_dir = utility_config["output_dir"]
+        extensions = self.config.get("extensions", {})
+        for extension_name, extension_config in extensions.items():
+            if "output_dir" in extension_config:
+                output_dir = extension_config["output_dir"]
                 if not os.path.exists(output_dir):
-                    self.validation_warnings.append(f"{utility_name} output directory does not exist: {output_dir}")
+                    self.validation_warnings.append(f"{extension_name} output directory does not exist: {output_dir}")
                     # Try to create the directory
                     try:
                         os.makedirs(output_dir, exist_ok=True)
-                        logger.info(f"Created {utility_name} output directory: {output_dir}")
+                        logger.info(f"Created {extension_name} output directory: {output_dir}")
                     except IOError as io_error:
-                        self.validation_errors.append(f"Failed to create {utility_name} output directory: {io_error}")
+                        self.validation_errors.append(f"Failed to create {extension_name} output directory: {io_error}")
                     except Exception as general_error:
-                        self.validation_errors.append(f"Failed to create {utility_name} output directory: {general_error}")
+                        self.validation_errors.append(f"Failed to create {extension_name} output directory: {general_error}")
             
-            if "template_path" in utility_config:
-                template_path = utility_config["template_path"]
+            if "template_path" in extension_config:
+                template_path = extension_config["template_path"]
                 template_dir = os.path.dirname(template_path)
                 if not os.path.exists(template_dir):
-                    self.validation_warnings.append(f"{utility_name} template directory does not exist: {template_dir}")
+                    self.validation_warnings.append(f"{extension_name} template directory does not exist: {template_dir}")
                     # Try to create the directory
                     try:
                         os.makedirs(template_dir, exist_ok=True)
-                        logger.info(f"Created {utility_name} template directory: {template_dir}")
+                        logger.info(f"Created {extension_name} template directory: {template_dir}")
                     except IOError as io_error:
-                        self.validation_errors.append(f"Failed to create {utility_name} template directory: {io_error}")
+                        self.validation_errors.append(f"Failed to create {extension_name} template directory: {io_error}")
                     except Exception as general_error:
-                        self.validation_errors.append(f"Failed to create {utility_name} template directory: {general_error}")
+                        self.validation_errors.append(f"Failed to create {extension_name} template directory: {general_error}")
                         
     def _validate_value_ranges(self) -> None:
         """

@@ -1,7 +1,7 @@
 """
-Maggie AI Assistant - Recipe Creator Utility
+Maggie AI Assistant - Recipe Creator Extension
 =========================================
-Speech-to-document recipe creation utility.
+Speech-to-document recipe creation extension.
 
 This module provides a streamlined workflow for creating recipe documents
 from speech input, with specific optimizations for AMD Ryzen 9 5900X
@@ -95,9 +95,9 @@ class RecipeData:
 
 class RecipeCreator(ExtensionBase):
     """
-    Recipe Creator utility for creating and formatting recipes from speech.
+    Recipe Creator extension for creating and formatting recipes from speech.
     
-    A streamlined utility for creating recipe documents from speech input,
+    A streamlined extension for creating recipe documents from speech input,
     with specific optimizations for processing speed and document formatting.
     
     Parameters
@@ -127,7 +127,7 @@ class RecipeCreator(ExtensionBase):
     
     def __init__(self, event_bus, config: Dict[str, Any]):
         """
-        Initialize the Recipe Creator utility.
+        Initialize the Recipe Creator extension.
         
         Parameters
         ----------
@@ -175,12 +175,12 @@ class RecipeCreator(ExtensionBase):
     
     def get_trigger(self) -> str:
         """
-        Get the trigger phrase for this utility.
+        Get the trigger phrase for this extension.
         
         Returns
         -------
         str
-            Trigger phrase that activates this utility
+            Trigger phrase that activates this extension
         """
         return "new recipe"
     
@@ -306,7 +306,7 @@ class RecipeCreator(ExtensionBase):
     
     def process_command(self, command: str) -> bool:
         """
-        Process a command directed to this utility.
+        Process a command directed to this extension.
         
         Handles user commands during the recipe creation workflow,
         particularly for confirmation and cancellation.
@@ -370,7 +370,7 @@ class RecipeCreator(ExtensionBase):
         except Exception as e:
             logger.error(f"Error in recipe workflow: {e}")
             self.speech_processor.speak("An error occurred while creating the recipe.")
-            self.event_bus.publish("utility_error", "recipe_creator")
+            self.event_bus.publish("extension_error", "recipe_creator")
             
         finally:
             self.running = False
@@ -457,7 +457,7 @@ class RecipeCreator(ExtensionBase):
             self.speech_processor.speak("Recipe creation cancelled.")
             
         # Publish completion event
-        self.event_bus.publish("utility_completed", "recipe_creator")
+        self.event_bus.publish("extension_completed", "recipe_creator")
     
     def _process_with_llm(self) -> bool:
         """

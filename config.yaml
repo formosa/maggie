@@ -36,8 +36,8 @@ logging:
   console_level: "INFO"  # Options: DEBUG, INFO, WARNING, ERROR
   file_level: "DEBUG"    # NEW: Separate level for file logging
 
-# Utility modules configuration
-utilities:
+# extension modules configuration
+extensions:
   recipe_creator:
     output_dir: "recipes"
     template_path: "templates/recipe_template.docx"

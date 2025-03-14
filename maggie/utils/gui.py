@@ -40,7 +40,7 @@ class MainWindow(QMainWindow):
     Main window for the Maggie AI Assistant GUI.
     
     Provides a graphical interface for interacting with Maggie AI, including
-    status indicators, log displays, and utility controls.
+    status indicators, log displays, and extension controls.
     
     Parameters
     ----------
@@ -61,8 +61,8 @@ class MainWindow(QMainWindow):
         Text display for error messages
     state_display : QLabel
         Visual indicator of current system state
-    utility_buttons : Dict[str, QPushButton]
-        Dictionary of utility activation buttons
+    extension_buttons : Dict[str, QPushButton]
+        Dictionary of extension activation buttons
     """
     
     def __init__(self, maggie_ai):
@@ -121,7 +121,7 @@ class MainWindow(QMainWindow):
         self.left_layout = QVBoxLayout(self.left_panel)
         self.content_splitter.addWidget(self.left_panel)
         
-        # Create right panel (controls and utilities)
+        # Create right panel (controls and extensions)
         self.right_panel = QWidget()
         self.right_layout = QVBoxLayout(self.right_panel)
         self.content_splitter.addWidget(self.right_panel)
@@ -216,7 +216,7 @@ class MainWindow(QMainWindow):
         """
         Create the contents of the right panel.
         
-        Sets up the state display and utility buttons in the right panel.
+        Sets up the state display and extension buttons in the right panel.
         """
         # Current state display
         self.state_group = QGroupBox("Current State")
@@ -228,40 +228,40 @@ class MainWindow(QMainWindow):
         self.right_layout.addWidget(self.state_group)
         
         # Utilities group
-        self.utilities_group = QGroupBox("Utilities")
-        self.utilities_layout = QVBoxLayout(self.utilities_group)
+        self.extensions_group = QGroupBox("Utilities")
+        self.extensions_layout = QVBoxLayout(self.extensions_group)
         
-        # Add utility buttons based on loaded utilities
-        self._create_utility_buttons()
+        # Add extension buttons based on loaded extensions
+        self._create_extension_buttons()
         
-        self.right_layout.addWidget(self.utilities_group)
+        self.right_layout.addWidget(self.extensions_group)
         
         # Add spacer
         self.right_layout.addStretch()
         
-    def _create_utility_buttons(self) -> None:
+    def _create_extension_buttons(self) -> None:
         """
-        Create buttons for each available utility.
+        Create buttons for each available extension.
         
-        Creates a button for each utility in the Maggie AI system,
+        Creates a button for each extension in the Maggie AI system,
         with appropriate handlers and shortcuts.
         """
-        self.utility_buttons = {}
-        for utility_name in self.maggie_ai.utilities:
-            display_name = utility_name.replace("_", " ").title()
-            utility_button = QPushButton(display_name)
-            utility_button.clicked.connect(
-                lambda checked, name=utility_name: self.on_utility_clicked(name)
+        self.extension_buttons = {}
+        for extension_name in self.maggie_ai.extensions:
+            display_name = extension_name.replace("_", " ").title()
+            extension_button = QPushButton(display_name)
+            extension_button.clicked.connect(
+                lambda checked, name=extension_name: self.on_extension_clicked(name)
             )
-            self.utilities_layout.addWidget(utility_button)
-            self.utility_buttons[utility_name] = utility_button
+            self.extensions_layout.addWidget(extension_button)
+            self.extension_buttons[extension_name] = extension_button
             
             # Set shortcut if it's the recipe creator
-            if utility_name == "recipe_creator":
+            if extension_name == "recipe_creator":
                 try:
                     recipe_shortcut = QShortcut(QKeySequence("Alt+R"), self)
                     recipe_shortcut.activated.connect(
-                        lambda: self.on_utility_clicked("recipe_creator")
+                        lambda: self.on_extension_clicked("recipe_creator")
                     )
                 except Exception as e:
                     logger.error(f"Error setting up recipe shortcut: {e}")
@@ -372,23 +372,23 @@ class MainWindow(QMainWindow):
         
         logger.info("Sleep initiated from GUI")
         
-    def on_utility_clicked(self, utility_name: str) -> None:
+    def on_extension_clicked(self, extension_name: str) -> None:
         """
-        Handle utility button click.
+        Handle extension button click.
         
-        Activates the specified utility.
+        Activates the specified extension.
         
         Parameters
         ----------
-        utility_name : str
-            Name of the utility to activate
+        extension_name : str
+            Name of the extension to activate
         """
-        self.log_event(f"Utility requested: {utility_name}")
-        if utility_name in self.maggie_ai.utilities:
-            utility = self.maggie_ai.utilities[utility_name]
-            self.maggie_ai.process_command(utility=utility)
+        self.log_event(f"Extension requested: {extension_name}")
+        if extension_name in self.maggie_ai.extensions:
+            extension = self.maggie_ai.extensions[extension_name]
+            self.maggie_ai.process_command(extension=extension)
             
-            logger.info(f"Utility '{utility_name}' activated from GUI")
+            logger.info(f"Extension '{extension_name}' activated from GUI")
             
     def closeEvent(self, event) -> None:
         """

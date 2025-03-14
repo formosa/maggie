@@ -1,5 +1,5 @@
 """
-Maggie AI Assistant - Utility Base Class
+Maggie AI Assistant - Extension Base Class
 ======================================
 
 Abstract base class for all Maggie AI Assistant extension modules.
@@ -10,15 +10,15 @@ Maggie AI Assistant architecture.
 
 Examples
 --------
->>> from utils.utility_base import ExtensionBase
->>> class MyUtility(ExtensionBase):
+>>> from utils.extension_base import ExtensionBase
+>>> class MyExtension(ExtensionBase):
 ...     def get_trigger(self):
 ...         return "my command"
 ...     def start(self):
-...         print("Starting utility")
+...         print("Starting extension")
 ...         return True
 ...     def stop(self):
-...         print("Stopping utility")
+...         print("Stopping extension")
 ...         return True
 ...     def process_command(self, command):
 ...         print(f"Processing command: {command}")
@@ -40,14 +40,14 @@ class ExtensionBase(ABC):
     
     Defines the standard interface that all extension modules must implement
     to properly integrate with the Maggie AI core system. Handles lifecycle
-    management, state tracking, and provides common utility functionality.
+    management, state tracking, and provides common extension functionality.
     
     Parameters
     ----------
     event_bus : object
         Reference to the central event bus for event-driven communication
     config : Dict[str, Any]
-        Configuration parameters for the utility
+        Configuration parameters for the extension
         
     Attributes
     ----------
@@ -56,21 +56,21 @@ class ExtensionBase(ABC):
     config : Dict[str, Any]
         Configuration parameters
     running : bool
-        Whether the utility is currently running
+        Whether the extension is currently running
     _initialized : bool
-        Whether the utility has been initialized
+        Whether the extension has been initialized
     """
     
     def __init__(self, event_bus, config: Dict[str, Any]):
         """
-        Initialize the utility module.
+        Initialize the extension module.
         
         Parameters
         ----------
         event_bus : object
             Reference to the central event bus
         config : Dict[str, Any]
-            Configuration parameters for the utility
+            Configuration parameters for the extension
         """
         self.event_bus = event_bus
         self.config = config
@@ -80,21 +80,21 @@ class ExtensionBase(ABC):
     @property
     def initialized(self) -> bool:
         """
-        Check if the utility is initialized.
+        Check if the extension is initialized.
         
         Returns
         -------
         bool
-            True if the utility is initialized, False otherwise
+            True if the extension is initialized, False otherwise
         """
         return self._initialized
         
     def initialize(self) -> bool:
         """
-        Initialize the utility module.
+        Initialize the extension module.
         
         Perform one-time initialization tasks that should happen before
-        the utility is started for the first time.
+        the extension is started for the first time.
         
         Returns
         -------
@@ -104,7 +104,7 @@ class ExtensionBase(ABC):
         Notes
         -----
         This method is called before start() and can be used for resource initialization
-        that should happen only once, not every time the utility is started.
+        that should happen only once, not every time the extension is started.
         """
         if self._initialized:
             return True
@@ -119,7 +119,7 @@ class ExtensionBase(ABC):
     
     def _initialize_resources(self) -> bool:
         """
-        Initialize resources needed by this utility.
+        Initialize resources needed by this extension.
         
         Returns
         -------
@@ -136,27 +136,27 @@ class ExtensionBase(ABC):
     @abstractmethod
     def get_trigger(self) -> str:
         """
-        Get the trigger phrase for this utility.
+        Get the trigger phrase for this extension.
         
         Returns
         -------
         str
-            Trigger phrase that activates this utility
+            Trigger phrase that activates this extension
             
         Notes
         -----
-        This is the phrase that the user can say to activate this utility.
-        For example, "new recipe" for a recipe creator utility.
+        This is the phrase that the user can say to activate this extension.
+        For example, "new recipe" for a recipe creator extension.
         """
         pass
         
     @abstractmethod
     def start(self) -> bool:
         """
-        Start the utility module.
+        Start the extension module.
         
-        Begins the primary functionality of the utility. This is called
-        when the utility is activated by a trigger phrase or direct request.
+        Begins the primary functionality of the extension. This is called
+        when the extension is activated by a trigger phrase or direct request.
         
         Returns
         -------
@@ -168,10 +168,10 @@ class ExtensionBase(ABC):
     @abstractmethod
     def stop(self) -> bool:
         """
-        Stop the utility module.
+        Stop the extension module.
         
-        Stops the utility's operations and performs any necessary cleanup.
-        This is called when the utility needs to be deactivated.
+        Stops the extension's operations and performs any necessary cleanup.
+        This is called when the extension needs to be deactivated.
         
         Returns
         -------
@@ -183,9 +183,9 @@ class ExtensionBase(ABC):
     @abstractmethod
     def process_command(self, command: str) -> bool:
         """
-        Process a command directed to this utility.
+        Process a command directed to this extension.
         
-        Handles user input that is directed to this utility while it's active.
+        Handles user input that is directed to this extension while it's active.
         
         Parameters
         ----------
@@ -201,9 +201,9 @@ class ExtensionBase(ABC):
     
     def pause(self) -> bool:
         """
-        Pause the utility if it supports pausing.
+        Pause the extension if it supports pausing.
         
-        Temporarily suspends the utility's operations without fully stopping.
+        Temporarily suspends the extension's operations without fully stopping.
         
         Returns
         -------
@@ -218,7 +218,7 @@ class ExtensionBase(ABC):
     
     def resume(self) -> bool:
         """
-        Resume the utility if it was paused.
+        Resume the extension if it was paused.
         
         Resumes operations after a pause.
         
@@ -235,15 +235,15 @@ class ExtensionBase(ABC):
     
     def get_status(self) -> Dict[str, Any]:
         """
-        Get the current status of the utility.
+        Get the current status of the extension.
         
-        Provides detailed status information about the utility's current state.
+        Provides detailed status information about the extension's current state.
         
         Returns
         -------
         Dict[str, Any]
             Dictionary with status information including running state,
-            initialization status, and utility name
+            initialization status, and extension name
         
         Notes
         -----
