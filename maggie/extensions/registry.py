@@ -1,4 +1,4 @@
-# maggie/utils/utility_registry.py
+#  maggie/extensions/registry.py
 """
 Maggie AI Assistant - Utility Registry
 ======================================
