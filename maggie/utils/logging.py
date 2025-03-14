@@ -26,6 +26,11 @@ class MaggieTelemetryManager:
     Manages system logging, performance tracking, and optional 
     anonymized usage statistics with robust privacy controls.
 
+    Parameters
+    ----------
+    config_path : Optional[str], optional
+        Path to the telemetry configuration file
+
     Attributes
     ----------
     _instance_id : str
