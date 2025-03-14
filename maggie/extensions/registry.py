@@ -27,7 +27,7 @@ import pkgutil
 from typing import Dict, Type, Any, Optional, List
 
 from loguru import logger
-from maggie.utils.utility_base import UtilityBase
+from .base import UtilityBase
 
 class UtilityRegistry:
     """
