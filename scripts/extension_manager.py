@@ -44,7 +44,7 @@ def create_extension(name: str) -> bool:
     
     # Get the package directory
     package_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    extensions_dir = os.path.join(package_dir, "extensions")
+    extensions_dir = os.path.join(package_dir, "maggie", "extensions")
     extension_dir = os.path.join(extensions_dir, name)
     
     # Check if extension already exists
@@ -100,7 +100,7 @@ from typing import Dict, Any, Optional, List
 from loguru import logger
 
 # Local imports
-from maggie.utils.utility_base import UtilityBase
+from from maggie.extensions.base import UtilityBase
 
 class {class_name}(UtilityBase):
     """
@@ -302,7 +302,8 @@ def list_extensions() -> List[str]:
     """
     # Get the package directory
     package_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    extensions_dir = os.path.join(package_dir, "extensions")
+    extensions_dir = os.path.join(package_dir, "maggie", "extensions")
+    extension_templates_dir = os.path.join(package_dir, "templates", "extension")
     
     if not os.path.exists(extensions_dir):
         print("Extensions directory not found")
