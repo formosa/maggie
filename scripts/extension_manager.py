@@ -24,6 +24,7 @@ import yaml
 from typing import List, Dict, Any
 from pathlib import Path
 
+
 def create_extension(name: str) -> bool:
     """
     Create a new extension with the given name.
