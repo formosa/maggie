@@ -7,11 +7,15 @@ name = "maggie"
 version = "0.1.0"
 description = "Maggie AI Assistant - Finite State Machine AI Assistant with modular utilities"
 readme = "README.md"
-requires-python = ">=3.10, <3.11"  # Changed from ">=3.10" to explicitly require Python 3.10.x
+requires-python = ">=3.10, <3.11"
 license = {text = "MIT"}
 authors = [
     {name = "Anthony Formosa", email = "emailformosa@gmail.com"}
 ]
+
+[tool.setuptools]
+packages = ["maggie", "maggie.core", "maggie.extensions", "maggie.utils"]
+
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: End Users/Desktop",
