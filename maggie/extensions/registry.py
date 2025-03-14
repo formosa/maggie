@@ -11,7 +11,7 @@ Maggie's functionality.
 
 Examples
 --------
->>> from from maggie.extensions.registry import ExtensionRegistry
+>>> from maggie.extensions.registry import ExtensionRegistry
 >>> registry = ExtensionRegistry()
 >>> available_extensions = registry.discover_extensions()
 >>> for name, cls in available_extensions.items():
