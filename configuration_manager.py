@@ -1,6 +1,7 @@
 """
 Maggie AI Assistant - Configuration Manager
 ==========================================
+
 Unified configuration management for Maggie AI.
 
 This module provides comprehensive configuration management including
@@ -623,9 +624,9 @@ class ConfigManager:
             cpu_count = os.cpu_count() or 4
             
             if not isinstance(max_workers, int):
-                self.validation_errors.append(f"max_workers must be an integer, got {type(max_workers).__name__}")
+                self.validation_errors.append(f"threading.max_workers must be an integer, got {type(max_workers).__name__}")
             elif max_workers < 1:
-                self.validation_errors.append(f"max_workers must be at least 1, got {max_workers}")
+                self.validation_errors.append(f"threading.max_workers must be at least 1, got {max_workers}")
             elif max_workers > cpu_count * 2:
                 self.validation_warnings.append(f"max_workers ({max_workers}) exceeds twice the number of CPU cores ({cpu_count})")
     

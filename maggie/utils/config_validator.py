@@ -1,6 +1,7 @@
 """
 Maggie AI Assistant - Configuration Validator
 ========================================
+
 Configuration validation utilities for Maggie AI Assistant.
 
 This module provides validation functionality for configuration files,

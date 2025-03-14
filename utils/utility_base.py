@@ -1,6 +1,7 @@
 """
 Maggie AI Assistant - Utility Base Class
 ======================================
+
 Abstract base class for all Maggie AI Assistant utility modules.
 
 This module defines the common interface and baseline functionality 
@@ -152,7 +153,7 @@ class UtilityBase(ABC):
     @abstractmethod
     def start(self) -> bool:
         """
-        Start the utility module and return success status.
+        Start the utility module.
         
         Begins the primary functionality of the utility. This is called
         when the utility is activated by a trigger phrase or direct request.
@@ -167,7 +168,7 @@ class UtilityBase(ABC):
     @abstractmethod
     def stop(self) -> bool:
         """
-        Stop the utility module and return success status.
+        Stop the utility module.
         
         Stops the utility's operations and performs any necessary cleanup.
         This is called when the utility needs to be deactivated.
@@ -241,7 +242,8 @@ class UtilityBase(ABC):
         Returns
         -------
         Dict[str, Any]
-            Dictionary with status information
+            Dictionary with status information including running state,
+            initialization status, and utility name
         
         Notes
         -----
