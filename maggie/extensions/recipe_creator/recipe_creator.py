@@ -33,7 +33,7 @@ import docx
 from loguru import logger
 
 # Local imports
-from ..base import UtilityBase
+from ..base import ExtensionBase
 
 __all__ = ['RecipeState', 'RecipeData', 'RecipeCreator']
 
@@ -93,7 +93,7 @@ class RecipeData:
     steps: List[str] = field(default_factory=list)
     notes: str = ""
 
-class RecipeCreator(UtilityBase):
+class RecipeCreator(ExtensionBase):
     """
     Recipe Creator utility for creating and formatting recipes from speech.
     

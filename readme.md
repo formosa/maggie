@@ -155,7 +155,7 @@ This implementation balances model quality with performance constraints, making 
 
 The system is designed with a plugin architecture for easy expansion:
 
-- **Implementation**: Abstract base class (`UtilityBase`) with standardized interface
+- **Implementation**: Abstract base class (`ExtensionBase`) with standardized interface
 - **Core Design Principles**:
   - Event-driven communication via centralized event bus
   - Standardized lifecycle methods (initialize, start, stop)
@@ -1027,7 +1027,7 @@ Maggie employs a sophisticated event-driven architecture with these key componen
    * Implements efficient text generation
    * Manages GPU memory utilization
 
-7. **UtilityBase** (`utils/utility_base.py`):
+7. **ExtensionBase** (`utils/utility_base.py`):
    * Abstract base class for all utilities
    * Defines standard utility interface
    * Implements common utility behaviors
@@ -1039,9 +1039,9 @@ To extend Maggie with custom utilities, follow these steps:
 
 1. **Create Utility Class**:
    ```python
-   from utils.utility_base import UtilityBase
+   from utils.utility_base import ExtensionBase
    
-   class MyCustomUtility(UtilityBase):
+   class MyCustomUtility(ExtensionBase):
        """
        Custom utility implementation.
        

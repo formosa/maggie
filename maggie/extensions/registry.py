@@ -1,22 +1,22 @@
 #  maggie/extensions/registry.py
 """
-Maggie AI Assistant - Utility Registry
+Maggie AI Assistant - Extension Registry
 ======================================
 
-Dynamic registration and discovery system for Maggie AI utilities.
+Dynamic registration and discovery system for Maggie AI extensions.
 
 This module provides mechanisms for registering, discovering, and loading
-utility modules at runtime, enabling a plugin architecture for extending
+extension modules at runtime, enabling a plugin architecture for extending
 Maggie's functionality.
 
 Examples
 --------
->>> from maggie.utils.utility_registry import UtilityRegistry
->>> registry = UtilityRegistry()
->>> available_utilities = registry.discover_utilities()
->>> for name, cls in available_utilities.items():
-...     print(f"Found utility: {name}")
->>> recipe_creator = registry.get_utility_class("recipe_creator")
+>>> from from maggie.extensions.registry import ExtensionRegistry
+>>> registry = ExtensionRegistry()
+>>> available_extensions = registry.discover_extensions()
+>>> for name, cls in available_extensions.items():
+...     print(f"Found extension: {name}")
+>>> recipe_creator = registry.get_extension_class("recipe_creator")
 """
 
 import os
@@ -27,26 +27,26 @@ import pkgutil
 from typing import Dict, Type, Any, Optional, List
 
 from loguru import logger
-from .base import UtilityBase
+from .base import ExtensionBase
 
-class UtilityRegistry:
+class ExtensionRegistry:
     """
-    Registry for dynamically discovering and loading utility modules.
+    Registry for dynamically discovering and loading extension modules.
     
     Provides methods for scanning the extensions directory, importing
-    utility modules, and instantiating utility classes.
+    extension modules, and instantiating extension classes.
     
     Attributes
     ----------
-    _registry : Dict[str, Type[UtilityBase]]
-        Dictionary mapping utility names to their classes
+    _registry : Dict[str, Type[ExtensionBase]]
+        Dictionary mapping extension names to their classes
     _extensions_path : str
         Path to the extensions directory
     """
     
     def __init__(self, extensions_path: Optional[str] = None):
         """
-        Initialize the utility registry.
+        Initialize the extension registry.
         
         Parameters
         ----------
@@ -67,17 +67,17 @@ class UtilityRegistry:
         # Ensure extensions directory exists
         os.makedirs(self._extensions_path, exist_ok=True)
     
-    def discover_utilities(self) -> Dict[str, Type[UtilityBase]]:
+    def discover_extensions(self) -> Dict[str, Type[ExtensionBase]]:
         """
-        Discover available utility modules in the extensions directory.
+        Discover available extension modules in the extensions directory.
         
-        Scans the extensions directory for packages that contain utility
-        classes extending the UtilityBase abstract class.
+        Scans the extensions directory for packages that contain extension
+        classes extending the ExtensionBase abstract class.
         
         Returns
         -------
-        Dict[str, Type[UtilityBase]]
-            Dictionary mapping utility names to their classes
+        Dict[str, Type[ExtensionBase]]
+            Dictionary mapping extension names to their classes
         """
         self._registry = {}
         
@@ -85,7 +85,7 @@ class UtilityRegistry:
         if self._extensions_path not in sys.path:
             sys.path.append(self._extensions_path)
         
-        # Scan for utility modules in extensions directory
+        # Scan for extension modules in extensions directory
         for _, module_name, is_pkg in pkgutil.iter_modules([self._extensions_path]):
             if is_pkg:
                 try:
@@ -97,20 +97,20 @@ class UtilityRegistry:
                     
                     try:
                         # Try importing the main module
-                        utility_module = importlib.import_module(main_module_name)
+                        extension_module = importlib.import_module(main_module_name)
                         
-                        # Find all classes that inherit from UtilityBase
-                        for attr_name in dir(utility_module):
-                            attr = getattr(utility_module, attr_name)
+                        # Find all classes that inherit from ExtensionBase
+                        for attr_name in dir(extension_module):
+                            attr = getattr(extension_module, attr_name)
                             
-                            # Check if it's a class that inherits from UtilityBase
+                            # Check if it's a class that inherits from ExtensionBase
                             if (isinstance(attr, type) and 
-                                issubclass(attr, UtilityBase) and 
-                                attr is not UtilityBase):
+                                issubclass(attr, ExtensionBase) and 
+                                attr is not ExtensionBase):
                                 
-                                # Register the utility
+                                # Register the extension
                                 self._registry[module_name] = attr
-                                logger.info(f"Discovered utility: {module_name}")
+                                logger.info(f"Discovered extension: {module_name}")
                                 break
                                 
                     except ImportError:
@@ -123,60 +123,60 @@ class UtilityRegistry:
         
         return self._registry
     
-    def get_utility_class(self, utility_name: str) -> Optional[Type[UtilityBase]]:
+    def get_extension_class(self, extension_name: str) -> Optional[Type[ExtensionBase]]:
         """
-        Get the class for a specific utility by name.
+        Get the class for a specific extension by name.
         
         Parameters
         ----------
-        utility_name : str
-            Name of the utility to get
+        extension_name : str
+            Name of the extension to get
             
         Returns
         -------
-        Optional[Type[UtilityBase]]
-            The utility class if found, None otherwise
+        Optional[Type[ExtensionBase]]
+            The extension class if found, None otherwise
         """
-        return self._registry.get(utility_name)
+        return self._registry.get(extension_name)
     
-    def instantiate_utility(self, utility_name: str, event_bus: Any, config: Dict[str, Any]) -> Optional[UtilityBase]:
+    def instantiate_extension(self, extension_name: str, event_bus: Any, config: Dict[str, Any]) -> Optional[ExtensionBase]:
         """
-        Instantiate a utility by name with provided event bus and configuration.
+        Instantiate a extension by name with provided event bus and configuration.
         
         Parameters
         ----------
-        utility_name : str
-            Name of the utility to instantiate
+        extension_name : str
+            Name of the extension to instantiate
         event_bus : Any
-            Event bus instance to pass to the utility
+            Event bus instance to pass to the extension
         config : Dict[str, Any]
-            Configuration dictionary for the utility
+            Configuration dictionary for the extension
             
         Returns
         -------
-        Optional[UtilityBase]
-            Instantiated utility if successful, None otherwise
+        Optional[ExtensionBase]
+            Instantiated extension if successful, None otherwise
         """
-        utility_class = self.get_utility_class(utility_name)
+        extension_class = self.get_extension_class(extension_name)
         
-        if utility_class is None:
-            logger.error(f"Utility not found: {utility_name}")
+        if extension_class is None:
+            logger.error(f"extension not found: {extension_name}")
             return None
             
         try:
-            utility_instance = utility_class(event_bus, config)
-            return utility_instance
+            extension_instance = extension_class(event_bus, config)
+            return extension_instance
         except Exception as e:
-            logger.error(f"Error instantiating utility {utility_name}: {e}")
+            logger.error(f"Error instantiating extension {extension_name}: {e}")
             return None
     
     def get_available_utilities(self) -> List[str]:
         """
-        Get a list of available utility names.
+        Get a list of available extension names.
         
         Returns
         -------
         List[str]
-            List of available utility names
+            List of available extension names
         """
         return list(self._registry.keys())

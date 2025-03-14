@@ -100,9 +100,9 @@ from typing import Dict, Any, Optional, List
 from loguru import logger
 
 # Local imports
-from from maggie.extensions.base import UtilityBase
+from from maggie.extensions.base import ExtensionBase
 
-class {class_name}(UtilityBase):
+class {class_name}(ExtensionBase):
     """
     {name.title().replace('_', ' ')} implementation for Maggie AI Assistant.
     

@@ -26,9 +26,9 @@ from typing import Dict, Any, Optional, List
 from loguru import logger
 
 # Local imports
-from maggie.utils.utility_base import UtilityBase
+from maggie.utils.utility_base import ExtensionBase
 
-class [MainClass](UtilityBase):
+class [MainClass](ExtensionBase):
     """
     [Extension name] implementation for Maggie AI Assistant.
     

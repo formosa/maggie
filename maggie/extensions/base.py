@@ -10,8 +10,8 @@ Maggie AI Assistant architecture.
 
 Examples
 --------
->>> from utils.utility_base import UtilityBase
->>> class MyUtility(UtilityBase):
+>>> from utils.utility_base import ExtensionBase
+>>> class MyUtility(ExtensionBase):
 ...     def get_trigger(self):
 ...         return "my command"
 ...     def start(self):
@@ -32,9 +32,9 @@ from typing import Dict, Any, Optional, Union, Callable
 # Third-party imports
 from loguru import logger
 
-__all__ = ['UtilityBase']
+__all__ = ['ExtensionBase']
 
-class UtilityBase(ABC):
+class ExtensionBase(ABC):
     """
     Abstract base class for all utility modules.
     

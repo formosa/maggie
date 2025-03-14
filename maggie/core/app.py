@@ -449,16 +449,16 @@ class MaggieAI:
         Loads and initializes utility modules specified in the configuration
         using the utility registry for dynamic discovery.
         """
-        from maggie.utils.utility_registry import UtilityRegistry
+        from from maggie.extensions.registry import ExtensionRegistry
         
         utilities_config = self.config.get("utilities", {})
         
         # Create utility registry
-        registry = UtilityRegistry()
+        registry = ExtensionRegistry()
         
         # Discover available utilities
-        available_utilities = registry.discover_utilities()
-        logger.info(f"Discovered {len(available_utilities)} utilities: {', '.join(available_utilities.keys())}")
+        available_extensions = registry.discover_extensions()
+        logger.info(f"Discovered {len(available_extensions)} utilities: {', '.join(available_extensions.keys())}")
         
         # Initialize enabled utilities from configuration
         for utility_name, utility_config in utilities_config.items():
