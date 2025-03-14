@@ -879,8 +879,9 @@ def start_maggie(args: argparse.Namespace) -> int:
     """
     try:
         # Import here to avoid circular imports
-        from maggie import MaggieAI
-        
+        sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+        from maggie.maggie import MaggieAI
+
         # Load config from file
         config = {}
         if os.path.exists(args.config):
