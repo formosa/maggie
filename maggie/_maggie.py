@@ -402,7 +402,7 @@ class MaggieAI:
             from maggie.utils.service_locator import ServiceLocator
             
             # Initialize hardware manager
-            from utils.hardware_manager import HardwareManager
+            from maggie.utils.hardware.manager import HardwareManager
             self.hardware_manager = HardwareManager(self.config)
             ServiceLocator.register("hardware_manager", self.hardware_manager)
             
