@@ -254,3 +254,24 @@ class UtilityBase(ABC):
             "initialized": self._initialized,
             "name": self.__class__.__name__
         }
+    
+    def get_service(self, name: str) -> Optional[Any]:
+        """
+        Get a service from the service locator.
+        
+        Parameters
+        ----------
+        name : str
+            Name of the service
+            
+        Returns
+        -------
+        Optional[Any]
+            Service instance if found, None otherwise
+        """
+        try:
+            from maggie.utils.service_locator import ServiceLocator
+            return ServiceLocator.get(name)
+        except ImportError:
+            logger.error("Service locator not available")
+            return None

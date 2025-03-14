@@ -1,0 +1,197 @@
+# Template for extension main module
+"""
+Maggie AI Extension - [Extension Name] Implementation
+==================================================
+
+[Detailed description of the extension]
+
+Examples
+--------
+>>> from maggie.extensions.[extension_name] import [MainClass]
+>>> from maggie import EventBus
+>>> event_bus = EventBus()
+>>> config = {"param1": "value1"}
+>>> extension = [MainClass](event_bus, config)
+>>> extension.initialize()
+>>> extension.start()
+"""
+
+# Standard library imports
+import os
+import time
+import threading
+from typing import Dict, Any, Optional, List
+
+# Third-party imports
+from loguru import logger
+
+# Local imports
+from maggie.utils.utility_base import UtilityBase
+
+class [MainClass](UtilityBase):
+    """
+    [Extension name] implementation for Maggie AI Assistant.
+    
+    [Detailed class description]
+    
+    Parameters
+    ----------
+    event_bus : EventBus
+        Reference to the central event bus
+    config : Dict[str, Any]
+        Configuration dictionary with [extension name] settings
+        
+    Attributes
+    ----------
+    [List of important attributes with descriptions]
+    """
+    
+    def __init__(self, event_bus, config: Dict[str, Any]):
+        """
+        Initialize the [extension name] utility.
+        
+        Parameters
+        ----------
+        event_bus : EventBus
+            Reference to the central event bus
+        config : Dict[str, Any]
+            Configuration dictionary with [extension name] settings
+        """
+        super().__init__(event_bus, config)
+        
+        # Initialize attributes
+        self.state = None
+        
+        # Parse configuration
+        self.param1 = config.get("param1", "default_value")
+        
+    def get_trigger(self) -> str:
+        """
+        Get the trigger phrase for this utility.
+        
+        Returns
+        -------
+        str
+            Trigger phrase that activates this utility
+        """
+        return "trigger phrase"
+        
+    def initialize(self) -> bool:
+        """
+        Initialize the utility.
+        
+        Returns
+        -------
+        bool
+            True if initialization successful, False otherwise
+        """
+        if self._initialized:
+            return True
+            
+        try:
+            # Acquire component references
+            success = self._acquire_component_references()
+            
+            if not success:
+                logger.error("Failed to acquire required component references")
+                return False
+            
+            # Initialize resources
+            # ...
+            
+            self._initialized = True
+            logger.info("[Extension name] initialized successfully")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error initializing [extension name]: {e}")
+            return False
+    
+    def _acquire_component_references(self) -> bool:
+        """
+        Acquire references to required components.
+        
+        Returns
+        -------
+        bool
+            True if all required references were acquired
+        """
+        # Find components through the event bus or service locator
+        return True
+        
+    def start(self) -> bool:
+        """
+        Start the utility.
+        
+        Returns
+        -------
+        bool
+            True if started successfully, False otherwise
+        """
+        try:
+            # Check if already running
+            if self.running:
+                logger.warning("[Extension name] already running")
+                return False
+            
+            # Initialize if needed
+            if not self._initialized and not self.initialize():
+                logger.error("Failed to initialize [extension name]")
+                return False
+            
+            # Start workflow
+            # ...
+            
+            self.running = True
+            logger.info("[Extension name] started")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error starting [extension name]: {e}")
+            return False
+    
+    def stop(self) -> bool:
+        """
+        Stop the utility.
+        
+        Returns
+        -------
+        bool
+            True if stopped successfully, False otherwise
+        """
+        if not self.running:
+            return True
+            
+        try:
+            # Stop workflow
+            # ...
+            
+            self.running = False
+            logger.info("[Extension name] stopped")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error stopping [extension name]: {e}")
+            return False
+    
+    def process_command(self, command: str) -> bool:
+        """
+        Process a command directed to this utility.
+        
+        Parameters
+        ----------
+        command : str
+            Command string to process
+            
+        Returns
+        -------
+        bool
+            True if command was processed, False otherwise
+        """
+        if not self.running:
+            return False
+            
+        # Process command
+        # ...
+        
+        return False

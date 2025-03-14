@@ -1,0 +1,12 @@
+# Template for extension __init__.py
+"""
+Maggie AI Extension - [Extension Name]
+=====================================
+
+[Description of the extension]
+
+This extension provides [functionality description] for the Maggie AI Assistant.
+"""
+
+from .[extension_name] import [MainClass]
+__all__ = ['[MainClass]']

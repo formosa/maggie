@@ -381,6 +381,8 @@ class MaggieAI:
         self.event_bus.subscribe("inactivity_timeout", self._handle_timeout)
         self.event_bus.subscribe("utility_completed", self._handle_utility_completed)
         
+    # In maggie/maggie.py, update the initialize_components method
+
     def initialize_components(self) -> bool:
         """
         Initialize all required components.
@@ -396,9 +398,13 @@ class MaggieAI:
             If required modules cannot be imported
         """
         try:
+            # Import service locator
+            from maggie.utils.service_locator import ServiceLocator
+            
             # Initialize hardware manager
             from hardware_manager import HardwareManager
             self.hardware_manager = HardwareManager(self.config)
+            ServiceLocator.register("hardware_manager", self.hardware_manager)
             
             # Apply hardware optimizations to config
             self.config = self.hardware_manager.optimize_config(self.config)
@@ -407,14 +413,20 @@ class MaggieAI:
             from wake_word import WakeWordDetector
             self.wake_word_detector = WakeWordDetector(self.config.get("wake_word", {}))
             self.wake_word_detector.on_detected = lambda: self.event_bus.publish("wake_word_detected")
+            ServiceLocator.register("wake_word_detector", self.wake_word_detector)
             
             # Initialize speech processor
             from speech_processor import SpeechProcessor
             self.speech_processor = SpeechProcessor(self.config.get("speech", {}))
+            ServiceLocator.register("speech_processor", self.speech_processor)
             
             # Initialize LLM processor
             from llm_processor import LLMProcessor
             self.llm_processor = LLMProcessor(self.config.get("llm", {}))
+            ServiceLocator.register("llm_processor", self.llm_processor)
+            
+            # Register event bus
+            ServiceLocator.register("event_bus", self.event_bus)
             
             # Initialize utilities
             self._initialize_utilities()
@@ -431,29 +443,41 @@ class MaggieAI:
         except Exception as e:
             logger.error(f"Error initializing components: {e}")
             return False
-            
+
     def _initialize_utilities(self) -> None:
         """
         Initialize utility modules based on configuration.
         
-        Loads and initializes utility modules specified in the configuration.
+        Loads and initializes utility modules specified in the configuration
+        using the utility registry for dynamic discovery.
         """
+        from maggie.utils.utility_registry import UtilityRegistry
+        
         utilities_config = self.config.get("utilities", {})
         
-        # Load recipe creator if configured
-        if "recipe_creator" in utilities_config:
-            try:
-                from utils.recipe_creator.recipe_creator import RecipeCreator
-                self.utilities["recipe_creator"] = RecipeCreator(
-                    self.event_bus, 
-                    utilities_config["recipe_creator"]
-                )
-                logger.info("Recipe Creator utility initialized")
-            except ImportError:
-                logger.warning("Recipe Creator utility module not found")
-            except Exception as e:
-                logger.error(f"Error initializing Recipe Creator: {e}")
+        # Create utility registry
+        registry = UtilityRegistry()
+        
+        # Discover available utilities
+        available_utilities = registry.discover_utilities()
+        logger.info(f"Discovered {len(available_utilities)} utilities: {', '.join(available_utilities.keys())}")
+        
+        # Initialize enabled utilities from configuration
+        for utility_name, utility_config in utilities_config.items():
+            # Skip disabled utilities
+            if utility_config.get("enabled", True) is False:
+                logger.info(f"Utility {utility_name} is disabled in configuration")
+                continue
             
+            # Try to instantiate the utility
+            utility = registry.instantiate_utility(utility_name, self.event_bus, utility_config)
+            
+            if utility is not None:
+                self.utilities[utility_name] = utility
+                logger.info(f"Initialized utility: {utility_name}")
+            else:
+                logger.warning(f"Failed to initialize utility: {utility_name}")
+        
         # Log number of initialized utilities
         logger.info(f"Initialized {len(self.utilities)} utility modules")
             
