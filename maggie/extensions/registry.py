@@ -170,7 +170,7 @@ class ExtensionRegistry:
             logger.error(f"Error instantiating extension {extension_name}: {e}")
             return None
     
-    def get_available_utilities(self) -> List[str]:
+    def get_available_extensions(self) -> List[str]:
         """
         Get a list of available extension names.
         
