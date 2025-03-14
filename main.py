@@ -878,10 +878,7 @@ def start_maggie(args: argparse.Namespace) -> int:
     """
     try:
         # Import here to avoid circular imports
-        sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-        from maggie.core import MaggieAI  # Updated import
-
-        # Rest of the function unchanged
+        from maggie.core import MaggieAI
     except ImportError as e:
         logger.error(f"Failed to import required module: {e}")
         return 1
@@ -904,16 +901,16 @@ def start_maggie(args: argparse.Namespace) -> int:
     else:
         logger.warning(f"Config file not found: {args.config}, using defaults")
     
-        # Initialize and start Maggie AI
-        maggie = MaggieAI(config)
-        
-        # Register signal handlers for graceful shutdown
-        register_signal_handlers(maggie)
-        
-        # Start Maggie
-        success = maggie.start()
-        
-        return 0 if success else 1
+    # Initialize and start Maggie AI
+    maggie = MaggieAI(config)
+    
+    # Register signal handlers for graceful shutdown
+    register_signal_handlers(maggie)
+    
+    # Start Maggie
+    success = maggie.start()
+    
+    return 0 if success else 1
 
 
 def register_signal_handlers(maggie) -> None:
