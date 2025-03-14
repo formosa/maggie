@@ -464,7 +464,7 @@ class MaggieAI:
         for extension_name, extension_config in extensions_config.items():
             # Skip disabled extensions
             if extension_config.get("enabled", True) is False:
-                logger.info(f"Extension {extension_name} is disabled in configuration")
+                logger.info(f"extension {extension_name} is disabled in configuration")
                 continue
             
             # Try to instantiate the extension
