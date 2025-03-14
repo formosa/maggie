@@ -2,10 +2,10 @@
 Maggie AI Assistant - Utility Base Class
 ======================================
 
-Abstract base class for all Maggie AI Assistant utility modules.
+Abstract base class for all Maggie AI Assistant extension modules.
 
 This module defines the common interface and baseline functionality 
-that all utility modules must implement to work properly with the
+that all extension modules must implement to work properly with the
 Maggie AI Assistant architecture.
 
 Examples
@@ -36,9 +36,9 @@ __all__ = ['ExtensionBase']
 
 class ExtensionBase(ABC):
     """
-    Abstract base class for all utility modules.
+    Abstract base class for all extension modules.
     
-    Defines the standard interface that all utility modules must implement
+    Defines the standard interface that all extension modules must implement
     to properly integrate with the Maggie AI core system. Handles lifecycle
     management, state tracking, and provides common utility functionality.
     

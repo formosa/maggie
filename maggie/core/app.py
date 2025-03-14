@@ -49,7 +49,7 @@ class State(Enum):
     READY : enum
         Listening for commands, resources initialized
     ACTIVE : enum
-        Processing commands and running utilities
+        Processing commands and running extensions
     CLEANUP : enum
         Cleaning up resources
     SHUTDOWN : enum
@@ -57,7 +57,7 @@ class State(Enum):
     """
     IDLE = auto()      # Waiting for wake word, minimal resource usage
     READY = auto()     # Listening for commands, resources initialized
-    ACTIVE = auto()    # Processing commands and running utilities
+    ACTIVE = auto()    # Processing commands and running extensions
     CLEANUP = auto()   # Cleaning up resources
     SHUTDOWN = auto()  # Final state before application exit
 
@@ -267,8 +267,8 @@ class MaggieAI:
         Central event bus for component communication
     config : Dict[str, Any]
         Configuration dictionary
-    utilities : Dict[str, Any]
-        Loaded utility modules
+    extensions : Dict[str, Any]
+        Loaded extension modules
     hardware_manager : Optional[Any]
         Hardware management component
     wake_word_detector : Optional[Any]
@@ -299,7 +299,7 @@ class MaggieAI:
         self.config = config
         self.state = State.IDLE
         self.event_bus = EventBus()
-        self.utilities = {}
+        self.extensions = {}
         
         # Component references - will be initialized during startup
         self.hardware_manager = None
@@ -372,12 +372,12 @@ class MaggieAI:
         Register event handlers for the event bus.
         
         Sets up handlers for wake word detection, commands, inactivity timeout,
-        and utility completion events.
+        and extension completion events.
         """
         self.event_bus.subscribe("wake_word_detected", self._handle_wake_word)
         self.event_bus.subscribe("command_detected", self._handle_command)
         self.event_bus.subscribe("inactivity_timeout", self._handle_timeout)
-        self.event_bus.subscribe("utility_completed", self._handle_utility_completed)
+        self.event_bus.subscribe("extension_completed", self._handle_extension_completed)
         
     # In maggie/maggie.py, update the initialize_components method
 
@@ -426,8 +426,8 @@ class MaggieAI:
             # Register event bus
             ServiceLocator.register("event_bus", self.event_bus)
             
-            # Initialize utilities
-            self._initialize_utilities()
+            # Initialize extensions
+            self._initialize_extensions()
             
             # Start event bus
             self.event_bus.start()
@@ -442,42 +442,42 @@ class MaggieAI:
             logger.error(f"Error initializing components: {e}")
             return False
 
-    def _initialize_utilities(self) -> None:
+    def _initialize_extensions(self) -> None:
         """
-        Initialize utility modules based on configuration.
+        Initialize extension modules based on configuration.
         
-        Loads and initializes utility modules specified in the configuration
-        using the utility registry for dynamic discovery.
+        Loads and initializes extension modules specified in the configuration
+        using the extension registry for dynamic discovery.
         """
         from maggie.extensions.registry import ExtensionRegistry
         
-        utilities_config = self.config.get("utilities", {})
+        extensions_config = self.config.get("extensions", {})
         
-        # Create utility registry
+        # Create extension registry
         registry = ExtensionRegistry()
         
-        # Discover available utilities
+        # Discover available extensions
         available_extensions = registry.discover_extensions()
-        logger.info(f"Discovered {len(available_extensions)} utilities: {', '.join(available_extensions.keys())}")
+        logger.info(f"Discovered {len(available_extensions)} extensions: {', '.join(available_extensions.keys())}")
         
-        # Initialize enabled utilities from configuration
-        for utility_name, utility_config in utilities_config.items():
-            # Skip disabled utilities
-            if utility_config.get("enabled", True) is False:
-                logger.info(f"Utility {utility_name} is disabled in configuration")
+        # Initialize enabled extensions from configuration
+        for extension_name, extension_config in extensions_config.items():
+            # Skip disabled extensions
+            if extension_config.get("enabled", True) is False:
+                logger.info(f"Extension {extension_name} is disabled in configuration")
                 continue
             
-            # Try to instantiate the utility
-            utility = registry.instantiate_utility(utility_name, self.event_bus, utility_config)
+            # Try to instantiate the extension
+            extension = registry.instantiate_extension(extension_name, self.event_bus, extension_config)
             
-            if utility is not None:
-                self.utilities[utility_name] = utility
-                logger.info(f"Initialized utility: {utility_name}")
+            if extension is not None:
+                self.extensions[extension_name] = extension
+                logger.info(f"Initialized extension: {extension_name}")
             else:
-                logger.warning(f"Failed to initialize utility: {utility_name}")
+                logger.warning(f"Failed to initialize extension: {extension_name}")
         
-        # Log number of initialized utilities
-        logger.info(f"Initialized {len(self.utilities)} utility modules")
+        # Log number of initialized extensions
+        logger.info(f"Initialized {len(self.extensions)} extension modules")
             
     def start(self) -> bool:
         """
@@ -641,7 +641,7 @@ class MaggieAI:
         # Reset inactivity timer
         self._start_inactivity_timer()
         
-        logger.info("Entered ACTIVE state - executing command or utility")
+        logger.info("Entered ACTIVE state - executing command or extension")
             
     def _on_enter_cleanup(self, transition: StateTransition) -> None:
         """
@@ -657,8 +657,8 @@ class MaggieAI:
             self.inactivity_timer.cancel()
             self.inactivity_timer = None
             
-        # Stop all utilities
-        self._stop_all_utilities()
+        # Stop all extensions
+        self._stop_all_extensions()
             
         # Stop speech processor
         if self.speech_processor:
@@ -685,19 +685,19 @@ class MaggieAI:
             
         logger.info("Entered CLEANUP state - releasing resources")
             
-    def _stop_all_utilities(self) -> None:
+    def _stop_all_extensions(self) -> None:
         """
-        Stop all running utilities.
+        Stop all running extensions.
         
-        Ensures all utilities are properly shut down during cleanup.
+        Ensures all extensions are properly shut down during cleanup.
         """
-        for utility_name, utility in self.utilities.items():
+        for extension_name, extension in self.extensions.items():
             try:
-                if hasattr(utility, 'stop') and callable(utility.stop):
-                    utility.stop()
-                    logger.debug(f"Stopped utility: {utility_name}")
+                if hasattr(extension, 'stop') and callable(extension.stop):
+                    extension.stop()
+                    logger.debug(f"Stopped extension: {extension_name}")
             except Exception as e:
-                logger.error(f"Error stopping utility {utility_name}: {e}")
+                logger.error(f"Error stopping extension {extension_name}: {e}")
             
     def _on_enter_shutdown(self, transition: StateTransition) -> None:
         """
@@ -769,18 +769,18 @@ class MaggieAI:
             self._transition_to(State.CLEANUP, "shutdown_requested")
             return
             
-        # Check for utility commands
-        utility_triggered = self._check_utility_commands(command)
-        if utility_triggered:
+        # Check for extension commands
+        extension_triggered = self._check_extension_commands(command)
+        if extension_triggered:
             return
                 
         # Handle unknown command
         self.speech_processor.speak("I didn't understand that command")
         logger.warning(f"Unknown command: {command}")
         
-    def _check_utility_commands(self, command: str) -> bool:
+    def _check_extension_commands(self, command: str) -> bool:
         """
-        Check if command matches any utility triggers.
+        Check if command matches any extension triggers.
         
         Parameters
         ----------
@@ -790,14 +790,14 @@ class MaggieAI:
         Returns
         -------
         bool
-            True if a utility was triggered, False otherwise
+            True if a extension was triggered, False otherwise
         """
-        for utility_name, utility in self.utilities.items():
-            utility_trigger = utility.get_trigger()
-            if utility_trigger and utility_trigger in command:
-                logger.info(f"Triggered utility: {utility_name}")
-                self._transition_to(State.ACTIVE, f"utility_{utility_name}")
-                self.thread_pool.submit(self._run_utility, utility_name)
+        for extension_name, extension in self.extensions.items():
+            extension_trigger = extension.get_trigger()
+            if extension_trigger and extension_trigger in command:
+                logger.info(f"Triggered extension: {extension_name}")
+                self._transition_to(State.ACTIVE, f"extension_{extension_name}")
+                self.thread_pool.submit(self._run_extension, extension_name)
                 return True
         return False
         
@@ -815,18 +815,18 @@ class MaggieAI:
             self.speech_processor.speak("Going to sleep due to inactivity")
             self._transition_to(State.CLEANUP, "inactivity_timeout")
             
-    def _handle_utility_completed(self, utility_name: str) -> None:
+    def _handle_extension_completed(self, extension_name: str) -> None:
         """
-        Handle utility completion event.
+        Handle extension completion event.
         
         Parameters
         ----------
-        utility_name : str
-            Name of the completed utility
+        extension_name : str
+            Name of the completed extension
         """
         if self.state == State.ACTIVE:
-            logger.info(f"Utility completed: {utility_name}")
-            self._transition_to(State.READY, f"utility_{utility_name}_completed")
+            logger.info(f"extension completed: {extension_name}")
+            self._transition_to(State.READY, f"extension_{extension_name}_completed")
         
     def _start_inactivity_timer(self) -> None:
         """
@@ -872,33 +872,33 @@ class MaggieAI:
             # Continue listening in a new thread
             self.thread_pool.submit(self._listen_for_commands)
             
-    def _run_utility(self, utility_name: str) -> None:
+    def _run_extension(self, extension_name: str) -> None:
         """
-        Run a utility.
+        Run a extension.
         
         Parameters
         ----------
-        utility_name : str
-            Name of the utility to run
+        extension_name : str
+            Name of the extension to run
         """
-        if utility_name not in self.utilities:
-            logger.error(f"Unknown utility: {utility_name}")
-            self._transition_to(State.READY, "unknown_utility")
+        if extension_name not in self.extensions:
+            logger.error(f"Unknown extension: {extension_name}")
+            self._transition_to(State.READY, "unknown_extension")
             return
             
-        utility = self.utilities[utility_name]
+        extension = self.extensions[extension_name]
         
         try:
-            logger.info(f"Starting utility: {utility_name}")
-            success = utility.start()
+            logger.info(f"Starting extension: {extension_name}")
+            success = extension.start()
             
             if not success:
-                logger.error(f"Failed to start utility: {utility_name}")
-                self._transition_to(State.READY, f"utility_{utility_name}_failed")
+                logger.error(f"Failed to start extension: {extension_name}")
+                self._transition_to(State.READY, f"extension_{extension_name}_failed")
                 
         except Exception as e:
-            logger.error(f"Error running utility {utility_name}: {e}")
-            self._transition_to(State.READY, f"utility_{utility_name}_error")
+            logger.error(f"Error running extension {extension_name}: {e}")
+            self._transition_to(State.READY, f"extension_{extension_name}_error")
             
     def shutdown(self) -> bool:
         """
@@ -922,31 +922,31 @@ class MaggieAI:
             self.speech_processor.speak("Going to sleep")
             self._transition_to(State.CLEANUP, "manual_timeout")
             
-    def process_command(self, utility: Any = None) -> bool:
+    def process_command(self, extension: Any = None) -> bool:
         """
-        Process a command or activate a utility directly.
+        Process a command or activate a extension directly.
         
         Parameters
         ----------
-        utility : Any, optional
-            Utility to activate directly, by default None
+        extension : Any, optional
+            extension to activate directly, by default None
         
         Returns
         -------
         bool
             True if command processed successfully
         """
-        if utility:
-            utility_name = None
-            for name, util in self.utilities.items():
-                if util == utility:
-                    utility_name = name
+        if extension:
+            extension_name = None
+            for name, ext in self.extensions.items():
+                if ext == extension:
+                    extension_name = name
                     break
                     
-            if utility_name:
-                logger.info(f"Direct activation of utility: {utility_name}")
-                self._transition_to(State.ACTIVE, f"utility_{utility_name}")
-                self.thread_pool.submit(self._run_utility, utility_name)
+            if extension_name:
+                logger.info(f"Direct activation of extension: {extension_name}")
+                self._transition_to(State.ACTIVE, f"extension_{extension_name}")
+                self.thread_pool.submit(self._run_extension, extension_name)
                 return True
                 
         return False

@@ -530,7 +530,7 @@ class ConfigManager:
         """
         Validate utility-specific paths.
         
-        Checks output directories and template paths for utility modules.
+        Checks output directories and template paths for extension modules.
         """
         utilities = self.config.get("utilities", {})
         for utility_name, utility_config in utilities.items():

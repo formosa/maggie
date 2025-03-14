@@ -1189,23 +1189,23 @@ To extend Maggie with custom utilities, follow these steps:
 3. **Register Utility in MaggieCore**:
    ```python
    def _initialize_utilities(self):
-       """Initialize utility modules based on configuration."""
-       utilities_config = self.config.get("utilities", {})
+       """Initialize extension modules based on configuration."""
+       extensions_config = self.config.get("utilities", {})
        
        # Load recipe creator if configured
-       if "recipe_creator" in utilities_config:
+       if "recipe_creator" in extensions_config:
            from utils.recipe_creator import RecipeCreator
            self.utilities["recipe_creator"] = RecipeCreator(
                self.event_bus, 
-               utilities_config["recipe_creator"]
+               extensions_config["recipe_creator"]
            )
            
        # Load custom utility if configured
-       if "my_custom_utility" in utilities_config:
+       if "my_custom_utility" in extensions_config:
            from utils.my_custom_utility import MyCustomUtility
            self.utilities["my_custom_utility"] = MyCustomUtility(
                self.event_bus, 
-               utilities_config["my_custom_utility"]
+               extensions_config["my_custom_utility"]
            )
    ```
 
