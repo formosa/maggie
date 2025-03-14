@@ -31,18 +31,17 @@ $ python main.py --optimize
 import os
 import argparse
 import sys
-sys.path.append(r"c:\ai\claude\maggie\venv\lib\site-packages")
 import platform
 import multiprocessing
-import yaml  # Added missing import
+import yaml
 from typing import Dict, Any, Optional, List, Tuple
 
 # Third-party imports
 from loguru import logger
 
-# Local imports (imported where needed to avoid circular imports)
-# from maggie import MaggieAI
-# from utils.config_validator import ConfigValidator
+# Local imports (updated paths)
+from maggie.core import MaggieAI
+# from maggie.utils.config.validator import ConfigValidator
 
 __all__ = ['main', 'parse_arguments', 'setup_logging', 'verify_system']
 
@@ -880,26 +879,31 @@ def start_maggie(args: argparse.Namespace) -> int:
     try:
         # Import here to avoid circular imports
         sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-        from maggie._maggie import MaggieAI
+        from maggie.core import MaggieAI  # Updated import
 
-        # Load config from file
-        config = {}
-        if os.path.exists(args.config):
-            try:
-                with open(args.config, 'r') as f:
-                    config = yaml.safe_load(f)
-                    if config is None:
-                        logger.warning(f"Empty config file: {args.config}, using defaults")
-                        config = {}
-            except yaml.YAMLError as e:
-                logger.error(f"Error parsing config file: {e}")
-                return 1
-            except Exception as e:
-                logger.error(f"Error reading config file: {e}")
-                return 1
-        else:
-            logger.warning(f"Config file not found: {args.config}, using defaults")
-        
+        # Rest of the function unchanged
+    except ImportError as e:
+        logger.error(f"Failed to import required module: {e}")
+        return 1
+
+    # Load config from file
+    config = {}
+    if os.path.exists(args.config):
+        try:
+            with open(args.config, 'r') as f:
+                config = yaml.safe_load(f)
+                if config is None:
+                    logger.warning(f"Empty config file: {args.config}, using defaults")
+                    config = {}
+        except yaml.YAMLError as e:
+            logger.error(f"Error parsing config file: {e}")
+            return 1
+        except Exception as e:
+            logger.error(f"Error reading config file: {e}")
+            return 1
+    else:
+        logger.warning(f"Config file not found: {args.config}, using defaults")
+    
         # Initialize and start Maggie AI
         maggie = MaggieAI(config)
         
@@ -910,12 +914,6 @@ def start_maggie(args: argparse.Namespace) -> int:
         success = maggie.start()
         
         return 0 if success else 1
-    except ImportError as e:
-        logger.error(f"Failed to import required module: {e}")
-        return 1
-    except Exception as e:
-        logger.exception(f"Error starting Maggie AI: {e}")
-        return 1
 
 
 def register_signal_handlers(maggie) -> None:
