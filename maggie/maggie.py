@@ -443,7 +443,7 @@ class MaggieAI:
         # Load recipe creator if configured
         if "recipe_creator" in utilities_config:
             try:
-                from utils.recipe_creator import RecipeCreator
+                from utils.recipe_creator.recipe_creator import RecipeCreator
                 self.utilities["recipe_creator"] = RecipeCreator(
                     self.event_bus, 
                     utilities_config["recipe_creator"]
