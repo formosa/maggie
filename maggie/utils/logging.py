@@ -56,12 +56,13 @@ class MaggieTelemetryManager:
         Parameters
         ----------
         config_path : Optional[str], optional
-            Path to the configuration file
+            Path to the configuration file, by default None
 
         Returns
         -------
         Dict[str, Any]
-            Telemetry configuration dictionary
+            Telemetry configuration dictionary with default values overridden by
+            user configuration when available
         """
         default_config = {
             "logging": {
@@ -135,7 +136,7 @@ class MaggieTelemetryManager:
                     "physical_cores": os.cpu_count()
                 },
                 "memory": {
-                    "total_gb": round(os.sys.getwindowsversion().major / 1024**3, 2)
+                    "total_gb": round(psutil.virtual_memory().total / (1024**3), 2)
                 }
             }
         }
