@@ -41,7 +41,6 @@ from loguru import logger
 
 # Local imports (updated paths)
 from maggie.core import MaggieAI
-# from maggie.utils.config.validator import ConfigValidator
 
 __all__ = ['main', 'parse_arguments', 'setup_logging', 'verify_system']
 
