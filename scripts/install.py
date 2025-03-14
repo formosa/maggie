@@ -567,6 +567,22 @@ class MaggieInstaller:
         bool
             True if all directories created successfully, False otherwise
         """
+        # Update directory paths to reflect new structure
+        self.required_dirs = [
+            "logs",
+            "models",
+            "models/tts",
+            "models/tts/af_heart",
+            "recipes",
+            "templates",
+            "cache",
+            "cache/tts",
+            "downloads",
+            "downloads/wheels",
+            "downloads/models",
+            "maggie/site-packages"
+        ]
+        # Rest of the method unchanged
         self._print("\nCreating required directories...", "cyan", bold=True)
         
         success = True

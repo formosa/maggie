@@ -33,7 +33,7 @@ import docx
 from loguru import logger
 
 # Local imports
-from maggie.extensions.base import UtilityBase
+from ..base import UtilityBase
 
 __all__ = ['RecipeState', 'RecipeData', 'RecipeCreator']
 
