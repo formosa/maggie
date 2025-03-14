@@ -269,9 +269,8 @@ class UtilityBase(ABC):
         Optional[Any]
             Service instance if found, None otherwise
         """
-        from ..utils.service_locator import ServiceLocator
         try:
-            from maggie.utils.service_locator import ServiceLocator
+            from ..utils.service_locator import ServiceLocator
             return ServiceLocator.get(name)
         except ImportError:
             logger.error("Service locator not available")
