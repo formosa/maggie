@@ -9,5 +9,5 @@ from speech input, enabling users to dictate recipes and have them
 automatically formatted and saved as Word documents.
 """
 
-from .recipe_creator import RecipeCreator, RecipeState, RecipeData
+from maggie.extensions.recipe_creator import RecipeCreator, RecipeState, RecipeData
 __all__ = ['RecipeCreator', 'RecipeState', 'RecipeData']

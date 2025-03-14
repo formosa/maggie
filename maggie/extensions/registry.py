@@ -27,7 +27,7 @@ import pkgutil
 from typing import Dict, Type, Any, Optional, List
 
 from loguru import logger
-from .base import ExtensionBase
+from maggie.extensions.base import ExtensionBase
 
 class ExtensionRegistry:
     """
