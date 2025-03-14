@@ -211,32 +211,6 @@ class MainWindow(QMainWindow):
         except Exception as e:
             logger.error(f"Error setting up shortcuts: {e}")
         
-    def create_right_panel(self) -> None:
-        """
-        Create the contents of the right panel.
-        
-        Sets up the state display and utility buttons in the right panel.
-        """
-        # Current state display
-        self.state_group = QGroupBox("Current State")
-        self.state_layout = QVBoxLayout(self.state_group)
-        self.state_display = QLabel("IDLE")
-        self.state_display.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.state_display.setStyleSheet("font-size: 18px; font-weight: bold;")
-        self.state_layout.addWidget(self.state_display)
-        self.right_layout.addWidget(self.state_group)
-        
-        # Utilities group
-        self.utilities_group = QGroupBox("Utilities")
-        self.utilities_layout = QVBoxLayout(self.utilities_group)
-        
-        # Add utility buttons based on loaded utilities
-        self._create_utility_buttons()
-        
-        self.right_layout.addWidget(self.utilities_group)
-        
-        # Add spacer
-        self.right_layout.addStretch()
     
     def _create_right_panel(self) -> None:
         """
