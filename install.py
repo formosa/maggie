@@ -414,20 +414,24 @@ class MaggieInstaller:
         self.platform_system = platform.system()
         self.platform_machine = platform.machine()
         
-        # Required directories for installation
+        # Required directories for installation matching the ASCII tree
         self.required_dirs = [
-            "logs",
-            "models",
-            "models/tts",
-            "models/tts/af_heart",
-            "recipes",
-            "templates",
-            "cache",
-            "cache/tts",
             "downloads",
-            "downloads/wheels",
-            "downloads/models",
-            "maggie/site-packages"
+            "logs",
+            "maggie",
+            "maggie/cache",
+            "maggie/cache/tts",
+            "maggie/core",
+            "maggie/extensions",
+            "maggie/models",
+            "maggie/models/LLM",
+            "maggie/models/TTS",
+            "maggie/templates",
+            "maggie/templates/extension",
+            "maggie/utils",
+            "maggie/utils/config",
+            "maggie/utils/hardware",
+            "maggie/utils/speech",
         ]
         
         # Utilities
@@ -929,31 +933,34 @@ class MaggieInstaller:
         Creates the following directory structure for Maggie AI Assistant:
 
         .
-        ├── cache/
-        │   └── tts/                  # Text-to-speech cache
-        ├── downloads/
-        │   ├── models/               # Downloaded model files
-        │   └── wheels/               # Downloaded wheel packages
+        ├── downloads/                # Downloaded files
         ├── logs/                     # Application logs
-        ├── maggie/                   # Main package directory
-        │   ├── __init__.py           # Package initialization file
-        │   ├── site-packages/        # Custom site packages
-        │   └── utils/
-        │       └── __init__.py       # Utils subpackage initialization
-        ├── models/
-        │   └── tts/                  # Text-to-speech models
-        │       └── af_heart/         # Primary voice model
-        ├── recipes/                  # Recipe creator output directory
-        └── templates/                # Document templates for extensions
+        └── maggie/                   # Main package directory
+            ├── cache/                # Cache directory
+            │   └── tts/              # Text-to-speech cache
+            ├── core/                 # Core functionality
+            ├── extensions/           # Extension modules
+            ├── models/               # Downloaded model files
+            │   └── LLM/              # Large Language Models
+            │   └── TTS/              # Voice Models
+            ├── templates/            # Template files
+            │   └── extension         # Extension templates       
+            └── utils/                # Utility modules
+                └── config/           # Configuration utilities
+                └── hardware/         # Hardware detection utilities
+                └── speech/           # Speech processing utilities
 
         All paths are created relative to the base installation directory.
-        Missing parent directories are created automatically.
+        Missing parent directories are created automatically. Package directories
+        (maggie/, maggie/core/, maggie/extensions/, maggie/utils/, and its submodules)
+        include an __init__.py file to make them importable Python modules.
 
         Returns
         -------
         bool
             True if all directories created successfully, False otherwise
         """
+        # Create all required directories
         for directory in self.required_dirs:
             try:
                 dir_path = os.path.join(self.base_dir, directory)
@@ -965,31 +972,27 @@ class MaggieInstaller:
                 self.color.print(f"Error creating directory {directory}: {e}", "red")
                 return False
         
-        # Create package structure
-        maggie_dir = os.path.join(self.base_dir, "maggie")
-        if not os.path.exists(maggie_dir):
-            try:
-                os.makedirs(maggie_dir, exist_ok=True)
-                with open(os.path.join(maggie_dir, "__init__.py"), "w") as f:
-                    f.write("# Maggie AI Assistant package\n")
-                if self.verbose:
-                    self.color.print("Created maggie package directory", "green")
-            except Exception as e:
-                self.color.print(f"Error creating package directory: {e}", "red")
-                return False
-        
-        # Create utilities subdirectory
-        utils_dir = os.path.join(maggie_dir, "utils")
-        if not os.path.exists(utils_dir):
-            try:
-                os.makedirs(utils_dir, exist_ok=True)
-                with open(os.path.join(utils_dir, "__init__.py"), "w") as f:
-                    f.write("# Maggie AI Assistant utilities package\n")
-                if self.verbose:
-                    self.color.print("Created utils subdirectory", "green")
-            except Exception as e:
-                self.color.print(f"Error creating utils subdirectory: {e}", "red")
-                return False
+        # Create __init__.py files for package directories
+        package_dirs = [
+            "maggie",
+            "maggie/core",
+            "maggie/extensions",
+            "maggie/utils",
+            "maggie/utils/config",
+            "maggie/utils/hardware",
+            "maggie/utils/speech",
+        ]
+        for pkg_dir in package_dirs:
+            init_path = os.path.join(self.base_dir, pkg_dir, "__init__.py")
+            if not os.path.exists(init_path):
+                try:
+                    with open(init_path, "w") as f:
+                        f.write("# Maggie AI Assistant package\n")
+                    if self.verbose:
+                        self.color.print(f"Created __init__.py in {pkg_dir}", "green")
+                except Exception as e:
+                    self.color.print(f"Error creating __init__.py in {pkg_dir}: {e}", "red")
+                    return False
         
         self.color.print("All required directories created successfully", "green")
         return True
@@ -1541,60 +1544,55 @@ class MaggieInstaller:
     
     def _download_af_heart_model(self) -> bool:
         """
-        Download the af_heart TTS voice model.
-        
+        Download the af_heart TTS voice model into maggie/models/TTS/.
+
+        Downloads the af_heart.pt file from Hugging Face and places it in the
+        maggie/models/TTS/ directory as specified in the directory structure.
+
         Returns
         -------
         bool
             True if download successful, False otherwise
         """
-        model_dir = os.path.join(self.base_dir, "models", "tts", "af_heart")
-        onnx_file = os.path.join(model_dir, "af_heart.onnx")
-        json_file = os.path.join(model_dir, "af_heart.json")
+        model_dir = os.path.join(self.base_dir, "maggie", "models", "TTS")
+        model_path = os.path.join(model_dir, "af_heart.pt")
         
-        # Check if model files already exist
-        if os.path.exists(onnx_file) and os.path.exists(json_file):
-            self.color.print("af_heart voice model files already exist", "green")
+        # Check if model file already exists
+        if os.path.exists(model_path):
+            self.color.print("af_heart voice model file already exists", "green")
             return True
         
-        # URLs for af_heart model files
-        onnx_url = "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/aflight/medium/af_heart.onnx"
-        json_url = "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/aflight/medium/af_heart.json"
+        # URL for af_heart model file
+        model_url = "https://huggingface.co/hexgrad/Kokoro-82M/resolve/main/voices/af_heart.pt"
         
-        # Create model directory
-        os.makedirs(model_dir, exist_ok=True)
-        
-        # Download ONNX model file
-        self.color.print("Downloading af_heart ONNX model file...", "cyan")
-        if not self._download_file(onnx_url, onnx_file):
-            self.color.print("Failed to download af_heart ONNX model", "red")
+        # Download model file (directory is created by _download_file)
+        self.color.print("Downloading af_heart voice model...", "cyan")
+        if not self._download_file(model_url, model_path):
+            self.color.print("Failed to download af_heart voice model", "red")
             return False
-        
-        # Download JSON model file
-        self.color.print("Downloading af_heart JSON model file...", "cyan")
-        if not self._download_file(json_url, json_file):
-            self.color.print("Failed to download af_heart JSON model", "red")
-            return False
-        
+                
         self.color.print("af_heart voice model downloaded successfully", "green")
         return True
     
     def _download_mistral_model(self) -> bool:
         """
-        Download Mistral 7B LLM model.
-        
+        Download Mistral 7B LLM model into maggie/models/LLM/mistral-7b-instruct-v0.3-GPTQ-4bit/.
+
+        Clones the Mistral 7B Instruct v0.3 GPTQ model repository from Hugging Face into the
+        maggie/models/LLM/mistral-7b-instruct-v0.3-GPTQ-4bit/ directory using Git, if available.
+
         Returns
         -------
         bool
-            True if download successful, False otherwise
+            True if download successful or user opts to continue, False otherwise
         """
         if self.skip_models:
             self.color.print("Skipping Mistral model download (--skip-models)", "yellow")
             return True
         
-        mistral_dir = os.path.join(self.base_dir, "models", "mistral-7b-instruct-v0.3-GPTQ-4bit")
+        mistral_dir = os.path.join(self.base_dir, "maggie", "models", "LLM", "mistral-7b-instruct-v0.3-GPTQ-4bit")
         
-        # Check if model directory already exists
+        # Check if model directory already exists and is not empty
         if os.path.exists(mistral_dir) and os.listdir(mistral_dir):
             self.color.print("Mistral model directory already exists", "green")
             return True
@@ -1612,7 +1610,7 @@ class MaggieInstaller:
                 self.color.print("Skipping Mistral model download", "yellow")
                 return True
         
-        # Download model 
+        # Download model using Git if available
         if self.has_git:
             self.color.print("Downloading Mistral 7B model using Git (this may take a while)...", "cyan")
             returncode, _, _ = self._run_command([
@@ -1647,23 +1645,23 @@ class MaggieInstaller:
     
     def _create_recipe_template(self) -> bool:
         """
-        Create recipe template file for the recipe_creator extension.
-        
+        Create recipe template file for the recipe_creator extension in maggie/templates/.
+
+        Generates a recipe_template.docx file using python-docx and places it in the
+        maggie/templates/ directory as specified in the directory structure.
+
         Returns
         -------
         bool
             True if template created successfully, False otherwise
         """
-        template_dir = os.path.join(self.base_dir, "templates")
+        template_dir = os.path.join(self.base_dir, "maggie", "templates")
         template_path = os.path.join(template_dir, "recipe_template.docx")
         
         # Check if template already exists
         if os.path.exists(template_path):
             self.color.print("Recipe template already exists", "green")
             return True
-        
-        # Create template directory
-        os.makedirs(template_dir, exist_ok=True)
         
         # Try to create template using docx
         try:
@@ -1738,6 +1736,9 @@ doc.save("{}")
         """
         Set up configuration file.
         
+        Creates or updates config.yaml at the base directory level, configuring it
+        to use the af_heart TTS model located in maggie/models/TTS/.
+
         Returns
         -------
         bool
@@ -1866,6 +1867,9 @@ doc.save("{}")
         """
         Install available Maggie extensions.
         
+        Installs dependencies for the recipe_creator extension, ensuring the template
+        in maggie/templates/ is usable.
+
         Returns
         -------
         bool
@@ -1920,6 +1924,9 @@ doc.save("{}")
         """
         Run the complete installation process.
         
+        Executes all installation steps, creating the directory structure, installing
+        dependencies, downloading models into maggie/models/, and setting up extensions.
+
         Returns
         -------
         bool
