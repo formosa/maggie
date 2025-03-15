@@ -547,9 +547,10 @@ cd maggie
     | `--skip-models` | Skip downloading large LLM models (~5GB) |
     | `--skip-problematic` | Skip dependencies that may cause installation issues |
     | `--force-reinstall` | Force reinstallation of already installed packages |
-      
+
     **Example commands:**
     Verbose installation with all details displayed:
+
 ```bash
 # Run installation script
 python3.10 install.py --verbose
@@ -589,7 +590,7 @@ python3.10 install.py --verbose
            - `PyYAML` parses YAML configuration files, essential for the flexible configuration system that adapts to different hardware profiles
            - `loguru` provides advanced logging capabilities with better formatting, level management, and file rotation than standard logging
            - `requests` handles HTTP requests for downloading models and resources securely
-           - `torch`/ `pytorch` powers neural network operations for LLM inference and audio processing with GPU acceleration support
+           - `torch` / `pytorch` powers neural network operations for LLM inference and audio processing with GPU acceleration support
         2. Installs PyTorch with CUDA support (if GPU available)
         3. Installs specialized dependencies:
           - `PyAudio` for microphone input
@@ -626,15 +627,15 @@ python3.10 install.py --verbose
 ## Post-Installation
 
 ### 1. Obtain Picovoice Access Key
-1. Register at [Picovoice Console](https://console.picovoice.ai/)
-2. Create a free access key (Console → Access Keys → Create Access Key)
-3. Edit `config.yaml` and add your key in the `wake_word.porcupine_access_key` field:
-   ```yaml
-   wake_word:
-     sensitivity: 0.5
-     keyword_path: null
-     porcupine_access_key: "YOUR_ACCESS_KEY_HERE"  # Replace with your key
-   ```
+  1. Register at [Picovoice Console](https://console.picovoice.ai/)
+  2. Create a free access key (Console → Access Keys → Create Access Key)
+  3. Edit `config.yaml` and add your key in the `wake_word.porcupine_access_key` field:
+```yaml
+wake_word:
+  sensitivity: 0.5
+  keyword_path: null
+  porcupine_access_key: "YOUR_ACCESS_KEY_HERE"  # Replace with your key
+```
 
 ### 2. Verify Installation
 ```bash
