@@ -403,7 +403,7 @@ This utility demonstrates how the system combines speech recognition, natural la
       ```
 
    4. Installation Process Steps:
-    **The install.py script performs the following actions in sequence:**
+      **The install.py script performs the following actions in sequence:**
 
       1.  **System Verification (Step 1/8)**
         Checks Python version (requires exactly 3.10.x)
@@ -532,11 +532,12 @@ sudo chmod a+r /usr/local/cuda-11.8/include/cudnn*.h /usr/local/cuda-11.8/lib64/
 
 #### 4. Clone and Install Maggie
    1. Clone the repository:
-     ```bash
-     # Clone repository
-     git clone https://github.com/formosa/maggie.git
-     cd maggie
-     ```
+```bash
+# Clone repository
+git clone https://github.com/formosa/maggie.git
+cd maggie
+```
+
    2. Run the installation script:
 
     **Available installation options:**
