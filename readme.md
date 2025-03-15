@@ -259,9 +259,9 @@ This utility demonstrates how the system combines speech recognition, natural la
    - Set the installation path (default is C:\Program Files\Python310)
 6. Wait for the installation to complete
 7. Verify installation by opening Command Prompt and running:
-   ```
-   python --version
-   ```
+```shell
+python --version
+```
    It should display "Python 3.10.11"
 
 #### 2. Install Visual C++ Build Tools
@@ -278,12 +278,12 @@ This utility demonstrates how the system combines speech recognition, natural la
    2. Open this special command prompt (it sets up the necessary environment variables)
    3. Run `cl` and press Enter
    4. You should see output similar to:
-     ```
-     Microsoft (R) C/C++ Optimizing Compiler Version 19.xx.xxxxx for x64
-     Copyright (C) Microsoft Corporation. All rights reserved.
+```shell
+Microsoft (R) C/C++ Optimizing Compiler Version 19.xx.xxxxx for x64
+Copyright (C) Microsoft Corporation. All rights reserved.
 
-     usage: cl [ option... ] filename... [ /link linkoption... ]
-     ```
+usage: cl [ option... ] filename... [ /link linkoption... ]
+```
    5. Alternative verification method:
      - Check if the directory exists: `C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC`
      - Or newer path: `C:\Program Files\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC`
@@ -323,10 +323,10 @@ This utility demonstrates how the system combines speech recognition, natural la
 4. Click "Install" and wait for installation to complete
 5. Finish the installation
 6. Verify installation by opening Command Prompt and running:
-   ```
-   git --version
-   git lfs --version
-   ```
+```shell
+git --version
+git lfs --version
+```
    Both commands should return version information
 
 #### 4. Install CUDA Toolkit 11.8 and cuDNN
@@ -366,24 +366,24 @@ This utility demonstrates how the system combines speech recognition, natural la
 3. **Verify installation:**
    - Open Command Prompt
    - Check CUDA version:
-     ```
-     nvcc --version
-     ```
+```shell
+nvcc --version
+```
      Look for "Cuda compilation tools, release 11.8"
    - Verify CUDA samples:
-     ```
-     cd "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v11.8\extras\demo_suite"
-     deviceQuery.exe
-     ```
+```shell
+cd "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v11.8\extras\demo_suite"
+deviceQuery.exe
+```
      You should see your GPU information and "Result = PASS"
 
 #### 5. Clone and Install Maggie
    1. Open Command Prompt with administrative privileges
    2. Clone the repository:
-      ```
-      git clone https://github.com/formosa/maggie.git
-      cd maggie
-      ```
+```shell
+git clone https://github.com/formosa/maggie.git
+cd maggie
+```
    3. Run the installation script:
 
       **Available installation options:**
@@ -398,9 +398,9 @@ This utility demonstrates how the system combines speech recognition, natural la
       
       **Example commands:**
       Verbose installation with all details displayed:
-      ```
-      python install.py --verbose
-      ```
+```shell
+python install.py --verbose
+```
 
    4. Installation Process Steps:
       **The install.py script performs the following actions in sequence:**
@@ -531,15 +531,14 @@ sudo chmod a+r /usr/local/cuda-11.8/include/cudnn*.h /usr/local/cuda-11.8/lib64/
 ```
 
 #### 4. Clone and Install Maggie
-   1. Clone the repository:
+  1. Clone the repository:
 ```bash
 # Clone repository
 git clone https://github.com/formosa/maggie.git
 cd maggie
 ```
 
-   2. Run the installation script:
-
+  2. Run the installation script:
     **Available installation options:**
 
     | Option | Description |
@@ -550,23 +549,24 @@ cd maggie
     | `--skip-problematic` | Skip dependencies that may cause installation issues |
     | `--force-reinstall` | Force reinstallation of already installed packages |
       
-      **Example commands:**
-      Verbose installation with all details displayed:
-      ```bash
-      # Run installation script
-      python3.10 install.py --verbose
-      ```
-    3. Installation Process Steps:
-      **The install.py script performs the following actions in sequence:**
+    **Example commands:**
+    Verbose installation with all details displayed:
+```bash
+# Run installation script
+python3.10 install.py --verbose
+```
 
-      1.  **System Verification (Step 1/8)**
+  3. Installation Process Steps:
+    **The install.py script performs the following actions in sequence:**
+
+     1.  **System Verification (Step 1/8)**
         Checks Python version (requires exactly 3.10.x)
         Detects CPU, GPU, and memory specifications
         Identifies specific hardware (Ryzen 9 5900X, RTX 3080)
         Verifies required tools (Git, C++ compiler)
         Reports compatibility status and optimization potential
 
-      2. **Directory Structure Creation (Step 2/8)**
+     2. **Directory Structure Creation (Step 2/8)**
         Creates all required directories for the application:
         - logs/ - For application logs
         - models/ - For AI models
@@ -576,53 +576,53 @@ cd maggie
         - templates/ - For document templates
         And other necessary directories
 
-      3. **Virtual Environment Setup (Step 3/8)**
+     1. **Virtual Environment Setup (Step 3/8)**
         Creates a Python virtual environment in venv/
         Isolates dependencies from system Python
         Ensures consistent package versions
 
-      4. Dependency Installation (Step 4/8)
-         1. Installs core dependencies:
-          - `urllib3`  ensures that the Maggie AI system has reliable network capabilities
-          - `tqdm` creates progress bars for long-running operations like model downloads and audio processing
-          - `numpy` enables efficient numerical operations for audio processing, speech analysis, and tensor manipulations
-          - `psutil` monitors system resources (CPU, memory, disk) to optimize resource allocation and prevent overloading
-          - `PyYAML` parses YAML configuration files, essential for the flexible configuration system that adapts to different hardware profiles
-          - `loguru` provides advanced logging capabilities with better formatting, level management, and file rotation than standard logging
-          - `requests` handles HTTP requests for downloading models and resources securely
-          - `torch`/ `pytorch` powers neural network operations for LLM inference and audio processing with GPU acceleration support
-         2. Installs PyTorch with CUDA support (if GPU available)
-         3. Installs specialized dependencies:
-           - `PyAudio` for microphone input
-           - `Kokoro` for text-to-speech
-           - `faster-whisper` for speech recognition
-           - `ctransformers` for LLM inference
-           - `PyQt6 for GUI` interface
-           - `python-docx` for document generation
-         4. Handles platform-specific installation requirements
+     2. Dependency Installation (Step 4/8)
+        1. Installs core dependencies:
+         - `urllib3`  ensures that the Maggie AI system has reliable network capabilities
+         - `tqdm` creates progress bars for long-running operations like model downloads and audio processing
+         - `numpy` enables efficient numerical operations for audio processing, speech analysis, and tensor manipulations
+         - `psutil` monitors system resources (CPU, memory, disk) to optimize resource allocation and prevent overloading
+         - `PyYAML` parses YAML configuration files, essential for the flexible configuration system that adapts to different hardware profiles
+         - `loguru` provides advanced logging capabilities with better formatting, level management, and file rotation than standard logging
+         - `requests` handles HTTP requests for downloading models and resources securely
+         - `torch`/ `pytorch` powers neural network operations for LLM inference and audio processing with GPU acceleration support
+     3. Installs PyTorch with CUDA support (if GPU available)
+     4. Installs specialized dependencies:
+       - `PyAudio` for microphone input
+       - `Kokoro` for text-to-speech
+       - `faster-whisper` for speech recognition
+       - `ctransformers` for LLM inference
+       - `PyQt6 for GUI` interface
+       - `python-docx` for document generation
+     5. Handles platform-specific installation requirements
 
-      5. Configuration Setup (Step 5/8)
-         - Creates or updates config.yaml
-         - Applies hardware-specific optimizations
-         - Configures TTS voice model to use af_heart
-         - Optimizes GPU settings for RTX 3080 if detected
-         - Adjusts thread pool size for Ryzen 9 5900X if detected
+     6. Configuration Setup (Step 5/8)
+      - Creates or updates config.yaml
+      - Applies hardware-specific optimizations
+      - Configures TTS voice model to use af_heart
+      - Optimizes GPU settings for RTX 3080 if detected
+      - Adjusts thread pool size for Ryzen 9 5900X if detected
 
-      6. Model Download (Step 6/8)
-         - Downloads the af_heart TTS voice model
-         - Downloads Mistral 7B LLM (unless --skip-models is specified)
-         - Validates downloaded model files
+     7. Model Download (Step 6/8)
+      - Downloads the af_heart TTS voice model
+      - Downloads Mistral 7B LLM (unless --skip-models is specified)
+      - Validates downloaded model files
 
-      7. Extension Setup (Step 7/8)
-          - Installs extension dependencies
-          - Creates recipe template for the recipe creator extension
-          - Registers extensions in the configuration
+     8.  Extension Setup (Step 7/8)
+      - Installs extension dependencies
+      - Creates recipe template for the recipe creator extension
+      - Registers extensions in the configuration
 
-      8. Finalization (Step 8/8)
-          - Completes installation
-          - Displays summary and installation time
-          - Provides instructions for starting the application
-          - Offers to start Maggie immediately
+     9.  Finalization (Step 8/8)
+      - Completes installation
+      - Displays summary and installation time
+      - Provides instructions for starting the application
+      - Offers to start Maggie immediately
 
 ## Post-Installation
 
