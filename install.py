@@ -1734,10 +1734,9 @@ doc.save("{}")
     
     def _setup_config(self) -> bool:
         """
-        Set up configuration file.
-        
-        Creates or updates config.yaml at the base directory level, configuring it
-        to use the af_heart TTS model located in maggie/models/TTS/.
+        Set up configuration file using the virtual environment's Python.
+
+        Creates or updates config.yaml using YAML operations within the virtual environment.
 
         Returns
         -------
@@ -1746,7 +1745,7 @@ doc.save("{}")
         """
         config_path = os.path.join(self.base_dir, "config.yaml")
         example_path = os.path.join(self.base_dir, "config.yaml.example")
-        
+
         # Check for alternate example paths
         alt_example_path = os.path.join(self.base_dir, "config-yaml-example.txt")
         if not os.path.exists(example_path) and os.path.exists(alt_example_path):
@@ -1756,60 +1755,97 @@ doc.save("{}")
             except Exception as e:
                 self.color.print(f"Error creating config example: {e}", "red")
                 return False
-        
-        # Check if config already exists
-        if os.path.exists(config_path):
-            self.color.print("Configuration file already exists", "yellow")
-            
-            # Update TTS voice model to af_heart if needed
-            try:
-                import yaml
-                with open(config_path, 'r') as f:
-                    config = yaml.safe_load(f)
-                
-                # Set TTS voice model to af_heart
-                if 'speech' in config and 'tts' in config['speech']:
-                    if config['speech']['tts']['voice_model'] != "af_heart":
-                        config['speech']['tts']['voice_model'] = "af_heart"
-                        with open(config_path, 'w') as f:
-                            yaml.dump(config, f, default_flow_style=False)
-                        self.color.print("Updated configuration to use af_heart voice model", "green")
-                
-                return True
-            except Exception as e:
-                self.color.print(f"Error updating configuration: {e}", "red")
-                return False
-        
-        # Check if example exists
-        if not os.path.exists(example_path):
-            self.color.print("Configuration example file not found", "red")
-            return False
-        
-        # Copy example to config and modify for optimal settings
+
+        # Write hardware_info to temporary file
+        import json
+        temp_hardware_file = os.path.join(self.base_dir, "hardware_info.json")
         try:
-            # Read example config
-            import yaml
-            with open(example_path, 'r') as f:
-                config = yaml.safe_load(f)
-            
-            # Set TTS voice model to af_heart
-            if 'speech' in config and 'tts' in config['speech']:
-                config['speech']['tts']['voice_model'] = "af_heart"
-            
-            # Optimize for detected hardware
-            self._optimize_config_for_hardware(config)
-            
-            # Write modified config
-            with open(config_path, 'w') as f:
-                yaml.dump(config, f, default_flow_style=False)
-            
-            self.color.print("Configuration file created with optimized settings", "green")
-            self.color.print("NOTE: You must edit config.yaml to add your Picovoice access key", "yellow")
-            return True
-            
+            with open(temp_hardware_file, 'w') as f:
+                json.dump(self.hardware_info, f)
         except Exception as e:
-            self.color.print(f"Error creating configuration file: {e}", "red")
+            self.color.print(f"Error writing hardware info: {e}", "red")
             return False
+
+        # Subprocess code to run in virtual environment
+        python_cmd = self._get_venv_python()
+        code = f"""
+import yaml
+import json
+import os
+
+base_dir = '{self.base_dir.replace("'", "\\'")}'
+config_path = os.path.join(base_dir, 'config.yaml')
+example_path = os.path.join(base_dir, 'config.yaml.example')
+hardware_file = os.path.join(base_dir, 'hardware_info.json')
+
+# Load hardware info
+with open(hardware_file, 'r') as f:
+    hardware_info = json.load(f)
+
+# Check if config exists
+if not os.path.exists(config_path):
+    if not os.path.exists(example_path):
+        print("Error: Configuration example file not found")
+        exit(1)
+    # Copy example to config
+    with open(example_path, 'r') as f:
+        config = yaml.safe_load(f)
+else:
+    with open(config_path, 'r') as f:
+        config = yaml.safe_load(f)
+
+# Set TTS voice model
+if 'speech' in config and 'tts' in config['speech']:
+    config['speech']['tts']['voice_model'] = 'af_heart'
+
+# Optimize for hardware
+if hardware_info['gpu']['is_rtx_3080']:
+    if 'llm' in config:
+        config['llm']['gpu_layers'] = 32
+        config['llm']['gpu_layer_auto_adjust'] = True
+        config['llm']['precision'] = 'float16'
+    if 'gpu' not in config:
+        config['gpu'] = {{}}
+    config['gpu']['enabled'] = True
+    config['gpu']['compute_type'] = 'float16'
+    config['gpu']['tensor_cores'] = True
+    config['gpu']['reserved_memory_mb'] = 512
+elif {str(self.cpu_only).lower()}:
+    if 'llm' in config:
+        config['llm']['gpu_layers'] = 0
+    if 'gpu' not in config:
+        config['gpu'] = {{}}
+    config['gpu']['enabled'] = False
+
+if hardware_info['cpu']['is_ryzen_9_5900x']:
+    if 'threading' not in config:
+        config['threading'] = {{}}
+    config['threading']['max_workers'] = 8
+    config['threading']['thread_timeout'] = 30
+
+if hardware_info['memory']['is_32gb']:
+    if 'memory' not in config:
+        config['memory'] = {{}}
+    config['memory']['max_percent'] = 75
+    config['memory']['model_unload_threshold'] = 85
+
+# Write config
+with open(config_path, 'w') as f:
+    yaml.dump(config, f, default_flow_style=False)
+
+# Clean up
+os.remove(hardware_file)
+"""
+        # Run the subprocess
+        returncode, _, stderr = self._run_command([python_cmd, "-c", code], cwd=self.base_dir)
+
+        if returncode != 0:
+            self.color.print(f"Error setting up configuration: {stderr}", "red")
+            return False
+
+        self.color.print("Configuration file created with optimized settings", "green")
+        self.color.print("NOTE: You must edit config.yaml to add your Picovoice access key", "yellow")
+        return True
     
     def _optimize_config_for_hardware(self, config: Dict[str, Any]) -> None:
         """
