@@ -247,82 +247,82 @@ This utility demonstrates how the system combines speech recognition, natural la
 ### Windows Installation
 
 #### 1. Install Python 3.10.x
-1. Download Python 3.10.11 from [Python.org](https://www.python.org/downloads/release/python-31011/)
-   - Scroll to Files section and select "Windows installer (64-bit)"
-2. Run the downloaded installer (python-3.10.11-amd64.exe)
-3. **Important:** On the first screen, check the box that says "Add Python 3.10 to PATH"
-4. Select "Install Now" for standard installation or "Customize installation" for advanced options
-5. If you choose "Customize installation":
-   - Ensure all optional features are selected
-   - On the Advanced Options screen, select "Install for all users" if you have admin rights
-   - Check "Add Python to environment variables"
-   - Set the installation path (default is C:\Program Files\Python310)
-6. Wait for the installation to complete
-7. Verify installation by opening Command Prompt and running:
+  1. Download Python 3.10.11 from [Python.org](https://www.python.org/downloads/release/python-31011/)
+     - Scroll to Files section and select "Windows installer (64-bit)"
+  2. Run the downloaded installer (python-3.10.11-amd64.exe)
+  3. **Important:** On the first screen, check the box that says "Add Python 3.10 to PATH"
+  4. Select "Install Now" for standard installation or "Customize installation" for advanced options
+  5. If you choose "Customize installation":
+     - Ensure all optional features are selected
+     - On the Advanced Options screen, select "Install for all users" if you have admin rights
+     - Check "Add Python to environment variables"
+     - Set the installation path (default is C:\Program Files\Python310)
+  6. Wait for the installation to complete
+  7. Verify installation by opening Command Prompt and running:
 ```shell
 python --version
 ```
    It should display "Python 3.10.11"
 
 #### 2. Install Visual C++ Build Tools
-1. Download Build Tools from [Visual Studio Downloads](https://visualstudio.microsoft.com/downloads/) (look for "Build Tools for Visual Studio 2022")
-2. Run the installer (vs_BuildTools.exe) and select:
-   - "Desktop development with C++" workload
-   - MSVC C++ x64/x86 build tools
-   - Windows 10/11 SDK
-   - C++ CMake tools for Windows
-3. Click "Install" in the bottom right corner
-4. Wait for the installation to complete (this may take 10-30 minutes depending on your internet speed)
-5. **Verify installation:**
-   1. Look in the Start menu for "Developer Command Prompt for VS 2022" or "x64 Native Tools Command Prompt for VS 2022"
-   2. Open this special command prompt (it sets up the necessary environment variables)
-   3. Run `cl` and press Enter
-   4. You should see output similar to:
+  1. Download Build Tools from [Visual Studio Downloads](https://visualstudio.microsoft.com/downloads/) (look for "Build Tools for Visual Studio 2022")
+  2. Run the installer (vs_BuildTools.exe) and select:
+     - "Desktop development with C++" workload
+     - MSVC C++ x64/x86 build tools
+     - Windows 10/11 SDK
+     - C++ CMake tools for Windows
+  3. Click "Install" in the bottom right corner
+  4. Wait for the installation to complete (this may take 10-30 minutes depending on your internet speed)
+  5. **Verify installation:**
+     1. Look in the Start menu for "Developer Command Prompt for VS 2022" or "x64 Native Tools Command Prompt for VS 2022"
+     2. Open this special command prompt (it sets up the necessary environment variables)
+     3. Run `cl` and press Enter
+     4. You should see output similar to:
 ```shell
 Microsoft (R) C/C++ Optimizing Compiler Version 19.xx.xxxxx for x64
 Copyright (C) Microsoft Corporation. All rights reserved.
 
 usage: cl [ option... ] filename... [ /link linkoption... ]
 ```
-   5. Alternative verification method:
+  6. Alternative verification method:
      - Check if the directory exists: `C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC`
      - Or newer path: `C:\Program Files\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC`
      - If this directory exists with subfolders containing bin, lib, and include directories, the installation was successful
 
 #### 3. Install Git
-1. Download Git for Windows from [Git-SCM](https://git-scm.com/download/win)
-   - The download should start automatically for 64-bit Windows
-2. Run the downloaded installer (Git-X.XX.X-64-bit.exe)
-3. Installation options (recommended settings):
-   - Accept the license agreement
-   - Choose installation location (default is fine)
-   - Select components:
-     - Make sure "Git LFS (Large File Support)" is checked
-     - Ensure "Add a Git Bash Profile to Windows Terminal" is selected
-     - Keep "Associate .git* files with default editor" checked
-   - Choose default editor (Notepad is safest, or select your preferred editor)
-   - For "Adjusting the name of the initial branch in new repositories":
-     - Choose "Let Git decide" or "Override to main" (recommended)
-   - For PATH environment:
-     - Select "Git from the command line and also from 3rd-party software" (recommended)
-   - For SSH executable:
-     - Choose "Use bundled OpenSSH"
-   - For HTTPS transport:
-     - Choose "Use the OpenSSL library"
-   - For line ending conversions:
-     - Choose "Checkout Windows-style, commit Unix-style line endings"
-   - For terminal emulator:
-     - Choose "Use MinTTY"
-   - For default behavior of `git pull`:
-     - Choose "Default (fast-forward or merge)"
-   - For credential helper:
-     - Choose "Git Credential Manager"
-   - For extra options:
-     - Keep "Enable file system caching" checked
-     - Optionally enable experimental features if desired
-4. Click "Install" and wait for installation to complete
-5. Finish the installation
-6. Verify installation by opening Command Prompt and running:
+  1. Download Git for Windows from [Git-SCM](https://git-scm.com/download/win)
+     - The download should start automatically for 64-bit Windows
+  2. Run the downloaded installer (Git-X.XX.X-64-bit.exe)
+  3. Installation options (recommended settings):
+     - Accept the license agreement
+     - Choose installation location (default is fine)
+     - Select components:
+       - Make sure "Git LFS (Large File Support)" is checked
+       - Ensure "Add a Git Bash Profile to Windows Terminal" is selected
+       - Keep "Associate .git* files with default editor" checked
+     - Choose default editor (Notepad is safest, or select your preferred editor)
+     - For "Adjusting the name of the initial branch in new repositories":
+       - Choose "Let Git decide" or "Override to main" (recommended)
+     - For PATH environment:
+       - Select "Git from the command line and also from 3rd-party software" (recommended)
+     - For SSH executable:
+       - Choose "Use bundled OpenSSH"
+     - For HTTPS transport:
+       - Choose "Use the OpenSSL library"
+     - For line ending conversions:
+       - Choose "Checkout Windows-style, commit Unix-style line endings"
+     - For terminal emulator:
+       - Choose "Use MinTTY"
+     - For default behavior of `git pull`:
+       - Choose "Default (fast-forward or merge)"
+     - For credential helper:
+       - Choose "Git Credential Manager"
+     - For extra options:
+       - Keep "Enable file system caching" checked
+       - Optionally enable experimental features if desired
+  4. Click "Install" and wait for installation to complete
+  5. Finish the installation
+  6. Verify installation by opening Command Prompt and running:
 ```shell
 git --version
 git lfs --version
@@ -330,47 +330,48 @@ git lfs --version
    Both commands should return version information
 
 #### 4. Install CUDA Toolkit 11.8 and cuDNN
-1. **Install CUDA Toolkit 11.8:**
-   - Visit the [NVIDIA CUDA Toolkit 11.8 Archive](https://developer.nvidia.com/cuda-11-8-0-download-archive)
-   - Select your configuration:
-     - Operating System: Windows
-     - Architecture: x86_64
-     - Version: 11 or your specific Windows version
-     - Installer Type: exe (local)
-   - Download the installer (approximately 3GB)
-   - Before installation:
-     - Close all NVIDIA applications
-     - Ensure you have the latest NVIDIA drivers installed
-   - Run the downloaded installer
-   - Choose "Agree and Continue" to accept the license agreement
-   - Choose "Express (Recommended)" installation type
-   - CUDA Visual Studio Integration
-     - If the message "No supported version of Visual Studio was found." appears
-       - Check "I understand, and wish to continue with the installation regardless."
-       - Select "Next"
-       - Select "Next" after the Nsight Visual Studio Edition Summary
-   - Wait for installation to complete (may take 10-20 minutes)
-   - Check desired options and close the installer
-   - Restart your computer when prompted
+  1. **Install CUDA Toolkit 11.8:**
+     - Visit the [NVIDIA CUDA Toolkit 11.8 Archive](https://developer.nvidia.com/cuda-11-8-0-download-archive)
+     - Select your configuration:
+       - Operating System: Windows
+       - Architecture: x86_64
+       - Version: 11 or your specific Windows version
+       - Installer Type: exe (local)
+     - Download the installer (approximately 3GB)
+     - Before installation:
+       - Close all NVIDIA applications
+       - Ensure you have the latest NVIDIA drivers installed
+     - Run the downloaded installer
+     - Choose "Agree and Continue" to accept the license agreement
+     - Choose "Express (Recommended)" installation type
+     - CUDA Visual Studio Integration
+       - If the message "No supported version of Visual Studio was found." appears
+         - Check "I understand, and wish to continue with the installation regardless."
+         - Select "Next"
+         - Select "Next" after the Nsight Visual Studio Edition Summary
+     - Wait for installation to complete (may take 10-20 minutes)
+     - Check desired options and close the installer
+     - Restart your computer when prompted
 
-2. **Install cuDNN 8.9.7 for CUDA 11.8:**
-   - Visit the [NVIDIA cuDNN Archive](https://developer.nvidia.com/rdp/cudnn-archive)
-   - Look for "Download cuDNN v8.9.7 (October 11, 2023), for CUDA 11.x"
-   - Download "Local Installer for Windows (zip)"
-   - Extract the downloaded zip file
-   - Copy the extracted files to your CUDA installation:
-     - Copy `cuda\bin\cudnn*.dll` to `C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v11.8\bin\`
-     - Copy `cuda\include\cudnn*.h` to `C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v11.8\include\`
-     - Copy `cuda\lib\x64\cudnn*.lib` to `C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v11.8\lib\x64\`
+  2. **Install cuDNN 8.9.7 for CUDA 11.8:**
+     - Visit the [NVIDIA cuDNN Archive](https://developer.nvidia.com/rdp/cudnn-archive)
+     - Look for "Download cuDNN v8.9.7 (October 11, 2023), for CUDA 11.x"
+     - Download "Local Installer for Windows (zip)"
+     - Extract the downloaded zip file
+     - Copy the extracted files to your CUDA installation:
+       - Copy `cuda\bin\cudnn*.dll` to `C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v11.8\bin\`
+       - Copy `cuda\include\cudnn*.h` to `C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v11.8\include\`
+       - Copy `cuda\lib\x64\cudnn*.lib` to `C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v11.8\lib\x64\`
 
-3. **Verify installation:**
-   - Open Command Prompt
-   - Check CUDA version:
+  3. **Verify installation:**
+     - Open Command Prompt
+     - Check CUDA version:
 ```shell
 nvcc --version
 ```
-     Look for "Cuda compilation tools, release 11.8"
-   - Verify CUDA samples:
+    Look for "Cuda compilation tools, release 11.8"
+
+    - Verify CUDA samples:
 ```shell
 cd "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v11.8\extras\demo_suite"
 deviceQuery.exe
@@ -385,7 +386,6 @@ git clone https://github.com/formosa/maggie.git
 cd maggie
 ```
    3. Run the installation script:
-
       **Available installation options:**
       
       | Option | Description |
@@ -401,7 +401,6 @@ cd maggie
 ```shell
 python install.py --verbose
 ```
-
    4. Installation Process Steps:
       **The install.py script performs the following actions in sequence:**
 
@@ -583,46 +582,46 @@ python3.10 install.py --verbose
 
      2. Dependency Installation (Step 4/8)
         1. Installs core dependencies:
-         - `urllib3`  ensures that the Maggie AI system has reliable network capabilities
-         - `tqdm` creates progress bars for long-running operations like model downloads and audio processing
-         - `numpy` enables efficient numerical operations for audio processing, speech analysis, and tensor manipulations
-         - `psutil` monitors system resources (CPU, memory, disk) to optimize resource allocation and prevent overloading
-         - `PyYAML` parses YAML configuration files, essential for the flexible configuration system that adapts to different hardware profiles
-         - `loguru` provides advanced logging capabilities with better formatting, level management, and file rotation than standard logging
-         - `requests` handles HTTP requests for downloading models and resources securely
-         - `torch`/ `pytorch` powers neural network operations for LLM inference and audio processing with GPU acceleration support
-     3. Installs PyTorch with CUDA support (if GPU available)
-     4. Installs specialized dependencies:
-       - `PyAudio` for microphone input
-       - `Kokoro` for text-to-speech
-       - `faster-whisper` for speech recognition
-       - `ctransformers` for LLM inference
-       - `PyQt6 for GUI` interface
-       - `python-docx` for document generation
-     5. Handles platform-specific installation requirements
+           - `urllib3`  ensures that the Maggie AI system has reliable network capabilities
+           - `tqdm` creates progress bars for long-running operations like model downloads and audio processing
+           - `numpy` enables efficient numerical operations for audio processing, speech analysis, and tensor manipulations
+           - `psutil` monitors system resources (CPU, memory, disk) to optimize resource allocation and prevent overloading
+           - `PyYAML` parses YAML configuration files, essential for the flexible configuration system that adapts to different hardware profiles
+           - `loguru` provides advanced logging capabilities with better formatting, level management, and file rotation than standard logging
+           - `requests` handles HTTP requests for downloading models and resources securely
+           - `torch`/ `pytorch` powers neural network operations for LLM inference and audio processing with GPU acceleration support
+        2. Installs PyTorch with CUDA support (if GPU available)
+        3. Installs specialized dependencies:
+          - `PyAudio` for microphone input
+          - `Kokoro` for text-to-speech
+          - `faster-whisper` for speech recognition
+          - `ctransformers` for LLM inference
+          - `PyQt6 for GUI` interface
+          - `python-docx` for document generation
+        4. Handles platform-specific installation requirements
 
-     6. Configuration Setup (Step 5/8)
-      - Creates or updates config.yaml
-      - Applies hardware-specific optimizations
-      - Configures TTS voice model to use af_heart
-      - Optimizes GPU settings for RTX 3080 if detected
-      - Adjusts thread pool size for Ryzen 9 5900X if detected
+     3. Configuration Setup (Step 5/8)
+        - Creates or updates config.yaml
+        - Applies hardware-specific optimizations
+        - Configures TTS voice model to use af_heart
+        - Optimizes GPU settings for RTX 3080 if detected
+        - Adjusts thread pool size for Ryzen 9 5900X if detected
 
-     7. Model Download (Step 6/8)
-      - Downloads the af_heart TTS voice model
-      - Downloads Mistral 7B LLM (unless --skip-models is specified)
-      - Validates downloaded model files
+     4. Model Download (Step 6/8)
+        - Downloads the af_heart TTS voice model
+        - Downloads Mistral 7B LLM (unless --skip-models is specified)
+        - Validates downloaded model files
 
-     8.  Extension Setup (Step 7/8)
-      - Installs extension dependencies
-      - Creates recipe template for the recipe creator extension
-      - Registers extensions in the configuration
+     5.  Extension Setup (Step 7/8)
+        - Installs extension dependencies
+        - Creates recipe template for the recipe creator extension
+        - Registers extensions in the configuration
 
-     9.  Finalization (Step 8/8)
-      - Completes installation
-      - Displays summary and installation time
-      - Provides instructions for starting the application
-      - Offers to start Maggie immediately
+     6.  Finalization (Step 8/8)
+        - Completes installation
+        - Displays summary and installation time
+        - Provides instructions for starting the application
+        - Offers to start Maggie immediately
 
 ## Post-Installation
 
