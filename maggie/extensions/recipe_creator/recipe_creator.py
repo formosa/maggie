@@ -5,17 +5,31 @@ Speech-to-document recipe creation extension.
 
 This module provides a streamlined workflow for creating recipe documents
 from speech input, with specific optimizations for AMD Ryzen 9 5900X
-and NVIDIA RTX 3080 hardware.
+and NVIDIA RTX 3080 hardware. It implements a state machine approach to
+guide users through the recipe creation process:
+
+1. Recipe name collection with confirmation
+2. Extended recipe description recording
+3. Processing with LLM to extract structured recipe data
+   - Ingredient list with quantities
+   - Ordered preparation steps
+   - Additional notes and tips
+4. Document generation with proper formatting
+5. Saving to Microsoft Word (.docx) format
+
+The extension leverages thread-safe design, efficient speech processing,
+and optimized LLM inference to provide a responsive user experience.
 
 Examples
 --------
->>> from utils.recipe_creator import RecipeCreator
->>> from maggie import EventBus
+>>> from maggie.extensions.recipe_creator import RecipeCreator
+>>> from maggie.core import EventBus
 >>> event_bus = EventBus()
 >>> config = {"output_dir": "recipes", "template_path": "templates/recipe_template.docx"}
 >>> recipe_creator = RecipeCreator(event_bus, config)
 >>> recipe_creator.initialize()
 >>> recipe_creator.start()
+>>> # This will start an interactive workflow to create a recipe
 >>> # Later, to stop
 >>> recipe_creator.stop()
 """
@@ -47,19 +61,29 @@ class RecipeState(Enum):
     Attributes
     ----------
     INITIAL : enum
-        Initial state before starting
+        Initial state before starting, no data collected
     NAME_INPUT : enum
-        Getting recipe name from user
+        Getting recipe name from user with speech recognition and confirmation
     DESCRIPTION : enum
-        Getting recipe description from user
+        Getting detailed recipe description from user (ingredients, steps, tips)
     PROCESSING : enum
-        Processing with LLM
+        Processing description with LLM to extract structured recipe data
     CREATING : enum
-        Creating document
+        Creating and formatting document with extracted recipe information
     COMPLETED : enum
-        Process completed
+        Process completed successfully, document saved to output directory
     CANCELLED : enum
-        Process cancelled
+        Process cancelled by user or due to error
+        
+    Examples
+    --------
+    >>> state = RecipeState.INITIAL
+    >>> state = RecipeState.NAME_INPUT
+    >>> print(f"Current state: {state.name}")
+    Current state: NAME_INPUT
+    >>> state = RecipeState.PROCESSING
+    >>> print(f"Now processing: {state.name}")
+    Now processing: PROCESSING
     """
     INITIAL = auto()      # Initial state
     NAME_INPUT = auto()   # Getting recipe name
@@ -77,15 +101,29 @@ class RecipeData:
     Parameters
     ----------
     name : str
-        Recipe name
+        Recipe name collected from user via speech recognition
     description : str
-        Raw recipe description
+        Raw recipe description collected from user via speech recognition
     ingredients : List[str]
-        Parsed list of ingredients
+        Parsed list of ingredients with quantities extracted by LLM
     steps : List[str]
-        Parsed list of preparation steps
+        Parsed list of preparation steps in order extracted by LLM
     notes : str
-        Additional notes
+        Additional notes, tips, or variations extracted by LLM
+        
+    Examples
+    --------
+    >>> recipe = RecipeData(
+    ...     name="Classic Chocolate Chip Cookies",
+    ...     description="Mix flour, sugar, and chocolate chips...",
+    ...     ingredients=["2 cups all-purpose flour", "1 cup chocolate chips"],
+    ...     steps=["Preheat oven to 375°F", "Mix dry ingredients"],
+    ...     notes="For softer cookies, reduce baking time by 2 minutes"
+    ... )
+    >>> print(f"Recipe: {recipe.name}")
+    Recipe: Classic Chocolate Chip Cookies
+    >>> print(f"First ingredient: {recipe.ingredients[0]}")
+    First ingredient: 2 cups all-purpose flour
     """
     name: str = ""
     description: str = ""
