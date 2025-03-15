@@ -12,17 +12,28 @@
       - [3. Text-to-Speech Capabilities with Low Latency](#3-text-to-speech-capabilities-with-low-latency)
       - [4. GPU-Accelerated Language Model Inference](#4-gpu-accelerated-language-model-inference)
       - [5. Modular Utility Framework for Extensibility](#5-modular-utility-framework-for-extensibility)
-      - [6. Recipe Creation Utility with Speech-to-Document Processing](#6-recipe-creation-utility-with-speech-to-document-processing)
+      - [6. Graphical User Interface](#6-graphical-user-interface)
+      - [7. \[EXTENSION\]: Recipe Creation Utility with Speech-to-Document Processing](#7-extension-recipe-creation-utility-with-speech-to-document-processing)
   - [Installation Guide](#installation-guide)
     - [System Requirements](#system-requirements)
-    - [Installation Process](#installation-process)
-      - [Step 1: Install Required Software](#step-1-install-required-software)
-      - [Step 2: Clone the Repository](#step-2-clone-the-repository)
-      - [Step 3: Run the Installation Script](#step-3-run-the-installation-script)
-    - [Post-Installation Configuration](#post-installation-configuration)
-      - [Step 1: Obtain Picovoice Access Key](#step-1-obtain-picovoice-access-key)
-      - [Step 2: Verify Installation](#step-2-verify-installation)
-      - [Step 3: Start Maggie](#step-3-start-maggie)
+      - [Hardware Requirements](#hardware-requirements)
+      - [Software Requirements](#software-requirements)
+    - [Windows Installation](#windows-installation)
+      - [1. Install Python 3.10.x](#1-install-python-310x)
+      - [2. Install Visual C++ Build Tools](#2-install-visual-c-build-tools)
+      - [3. Install Git](#3-install-git)
+      - [4. Install CUDA Toolkit 11.8 and cuDNN](#4-install-cuda-toolkit-118-and-cudnn)
+      - [5. Clone and Install Maggie](#5-clone-and-install-maggie)
+    - [Linux Installation](#linux-installation)
+      - [1. Install Python 3.10.x](#1-install-python-310x-1)
+      - [2. Install Build Tools and Dependencies](#2-install-build-tools-and-dependencies)
+      - [3. Install CUDA Toolkit 11.8 and cuDNN](#3-install-cuda-toolkit-118-and-cudnn)
+      - [4. Clone and Install Maggie](#4-clone-and-install-maggie)
+  - [Post-Installation](#post-installation)
+    - [1. Obtain Picovoice Access Key](#1-obtain-picovoice-access-key)
+    - [2. Verify Installation](#2-verify-installation)
+    - [3. Modify Configuration (Optional)](#3-modify-configuration-optional)
+    - [4. Start Maggie](#4-start-maggie)
   - [Application Functionality](#application-functionality)
     - [Core System Architecture](#core-system-architecture)
     - [Component Capabilities](#component-capabilities)
@@ -57,16 +68,16 @@
 
 ## Project Overview
 
-Maggie AI Assistant is an advanced, voice-activated artificial intelligence framework implementing a Finite State Machine (FSM) architecture with event-driven state transitions and modular utility capabilities. The system is specifically optimized for high-performance computing environments, particularly those utilizing AMD Ryzen 9 5900X CPUs and NVIDIA RTX 3080 GPUs, enabling efficient local language model inference, speech processing, and interactive voice response.
+Maggie AI Assistant is an advanced, voice-activated artificial intelligence framework implementing a Finite State Machine (FSM) architecture with event-driven state transitions and modular utility capabilities. The system is specifically optimized for computing environments utilizing an AMD Ryzen 9 5900X CPU and NVIDIA RTX 3080 GPU, enabling efficient local language model inference, speech processing, and interactive voice response.
 
-The project emphasizes local processing with minimal cloud dependencies, ensuring privacy and offline functionality while leveraging consumer hardware to deliver sophisticated AI capabilities. By utilizing advanced software optimization techniques including mixed-precision computation, efficient threading, and dynamic resource management, Maggie achieves performance levels that were previously only possible with cloud-based systems.
+The project emphasizes local processing, ensuring privacy and offline functionality while leveraging consumer hardware to deliver sophisticated AI capabilities. By utilizing advanced software optimization techniques including mixed-precision computation, efficient threading, and dynamic resource management, Maggie strives to be performant while independant from cloud-based systems.
 
 ### Core Technical Architecture
 
-* **State-Machine Design**: Implements a deterministic FSM with five carefully designed states (IDLE, READY, ACTIVE, CLEANUP, SHUTDOWN) that manage system resources efficiently
-* **Event-Driven Communication**: Uses a centralized event bus with publisher-subscriber pattern for decoupled component interactions
-* **Hardware-Aware Optimization**: Automatically detects and configures for system capabilities, with specialized optimizations for Ryzen 9 5900X and RTX 3080
-* **Thread Pool Management**: Implements optimized worker thread allocation (8 threads for Ryzen 9 5900X) for maximum throughput without system interference
+* **State-Machine Design**: Deterministic FSM with five states (IDLE, READY, ACTIVE, CLEANUP, SHUTDOWN) for efficient resource management
+* **Event-Driven Communication**: Centralized event bus with publisher-subscriber pattern for decoupled component interactions
+* **Hardware-Aware Optimization**: Automatic hardware detection, configuration, and optimization (currently specialized for Ryzen 9 5900X and RTX 3080)
+* **Thread Pool Management**: Optimized worker thread allocation (8 threads for Ryzen 9 5900X) for the highest throughput with minimal system disruptions
 
 ### Core Features
 
@@ -112,14 +123,11 @@ This local approach ensures privacy while providing high-quality speech recognit
 
 The system provides natural-sounding voice output with minimal delay:
 
-- **Implementation**: Uses the Piper TTS engine, a lightweight neural text-to-speech system
+- **Implementation**: Uses the Kokoro TTS engine, an open-weight TTS model with 82 million parameters
 - **Optimization Techniques**:
-  - Audio caching system for frequently used phrases (reduces latency for common responses)
-  - Uses ONNX runtime for optimized inference
-  - Leverages RTX 3080's tensor cores through float16 precision
-  - Optimized audio streaming with minimal buffer size (1024 samples) for lowest latency
+  - Audio caching system for frequently used phrases
 - **Voice Models**: 
-  - Default: en_US-kathleen-medium (balanced quality and performance)
+  - Default: af_heart
   - Configurable with different voice models
 - **Performance Metrics**:
   - Sub-100ms latency for cached responses
@@ -130,7 +138,7 @@ The TTS system is carefully balanced to provide natural-sounding voice output wi
 
 #### 4. GPU-Accelerated Language Model Inference
 
-Maggie leverages local LLM inference for understanding and generating responses:
+Maggie can leverage local LLM inference for data processing and response generation:
 
 - **Implementation**: Uses Mistral 7B Instruct model with GPTQ 4-bit quantization
 - **RTX 3080 Specific Optimizations**:
@@ -175,11 +183,22 @@ The system is designed with a plugin architecture for easy expansion:
 
 This modular design allows developers to add new capabilities without modifying the core system, ensuring extensibility and maintainability.
 
-#### 6. Recipe Creation Utility with Speech-to-Document Processing
+#### 6. Graphical User Interface
 
-An example utility showcasing the system's capabilities:
+All user interaction can be done vocally, or by using the application's GUI:
 
-- **Implementation**: Multi-stage workflow converting speech to structured documents
+- **Implementation**: Uses the `PyQt6` Python binding of the cross-platform GUI toolkit Qt, implemented as a Python plug-in
+- **Feature List**:
+  - Status monitoring and visualization
+  - Event logging and history
+  - Command buttons for common operations
+  - Visual state indication
+
+#### 7. \[EXTENSION\]: Recipe Creation Utility with Speech-to-Document Processing
+
+An example of adding functionality using the extension framework:
+
+- **Implementation**: Multi-stage workflow converting conversational speech to structured recipe documents
 - **Processing Pipeline**:
   1. Voice command recognition ("New recipe")
   2. Interactive name collection and confirmation
@@ -208,337 +227,235 @@ This utility demonstrates how the system combines speech recognition, natural la
 
 ### System Requirements
 
+#### Hardware Requirements
+
 * **CPU:** AMD Ryzen 9 5900X or equivalent high-performance processor
 * **GPU:** NVIDIA GeForce RTX 3080 with 10GB VRAM or equivalent
 * **RAM:** 32GB DDR4-3200 or faster
 * **Storage:** Minimum 15GB free disk space
+
+#### Software Requirements
+
 * **OS:** Windows 11 Pro 64-bit or Ubuntu 22.04+ LTS 64-bit
 * **Python:** Version 3.10.x specifically (3.11+ is not compatible)
 * **CUDA:** CUDA 11.8 and cuDNN (for optimal performance)
 
-### Installation Process
+### Windows Installation
 
-#### Step 1: Install Required Software
+#### 1. Install Python 3.10.x
+1. Download Python 3.10.11 from [Python.org](https://www.python.org/downloads/release/python-31011/)
+   - Scroll to Files section and select "Windows installer (64-bit)"
+2. Run the downloaded installer (python-3.10.11-amd64.exe)
+3. **Important:** On the first screen, check the box that says "Add Python 3.10 to PATH"
+4. Select "Install Now" for standard installation or "Customize installation" for advanced options
+5. If you choose "Customize installation":
+  - Ensure all optional features are selected
+  - On the Advanced Options screen, select "Install for all users" if you have admin rights
+  - Check "Add Python to environment variables"
+  - Set the installation path (default is C:\Program Files\Python310)
+6. Wait for the installation to complete
+7. Verify installation by opening Command Prompt and running:
+  ```
+  python --version
+  ```
+  It should display "Python 3.10.11"
 
-1. **Python 3.10.x**
-   * **Windows Installation:**
-     1. Download the Python 3.10.11 installer from [Python.org](https://www.python.org/downloads/release/python-31011/) 
-        - Scroll down to Files and select "Windows installer (64-bit)"
-     2. Run the downloaded installer (python-3.10.11-amd64.exe)
-     3. **Important:** On the first screen, check the box that says "Add Python 3.10 to PATH"
-     4. Select "Install Now" for standard installation or "Customize installation" for advanced options
-     5. If you choose "Customize installation":
-        - Ensure all optional features are selected
-        - On the Advanced Options screen, select "Install for all users" if you have admin rights
-        - Check "Add Python to environment variables"
-        - Set the installation path (default is C:\Program Files\Python310)
-     6. Wait for the installation to complete
-     7. Verify installation by opening Command Prompt and running:
-        ```
-        python --version
-        ```
-        It should display "Python 3.10.11"
-   * **Ubuntu Installation:**
-     1. First, update your package index:
-        ```
-        sudo apt update
-        ```
-     2. Install software-properties-common if not already installed:
-        ```
-        sudo apt install software-properties-common -y
-        ```
-     3. Add the deadsnakes PPA for Python 3.10:
-        ```
-        sudo add-apt-repository ppa:deadsnakes/ppa -y
-        ```
-     4. Update package index again after adding the repository:
-        ```
-        sudo apt update
-        ```
-     5. Install Python 3.10 and development packages:
-        ```
-        sudo apt install python3.10 python3.10-venv python3.10-dev -y
-        ```
-     6. Verify installation:
-        ```
-        python3.10 --version
-        ```
-        It should display "Python 3.10.x" where x is the latest patch version
-     7. If you want to make Python 3.10 the default 'python3' command (optional):
-        ```
-        sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.10 1
-        ```
+#### 2. Install Visual C++ Build Tools
+1. Download Build Tools from [Visual Studio Downloads](https://visualstudio.microsoft.com/downloads/) (look for "Build Tools for Visual Studio 2022")
+2. Run the installer (vs_BuildTools.exe) and select:
+   - "Desktop development with C++" workload
+   - MSVC C++ x64/x86 build tools
+   - Windows 10/11 SDK
+   - C++ CMake tools for Windows
+3. Click "Install" in the bottom right corner
+4. Wait for the installation to complete (this may take 10-30 minutes depending on your internet speed)
+5. **Verify installation:**
+   1. Look in the Start menu for "Developer Command Prompt for VS 2022" or "x64 Native Tools Command Prompt for VS 2022"
+   2. Open this special command prompt (it sets up the necessary environment variables)
+   3. Run `cl` and press Enter
+   4. You should see output similar to:
+     ```
+     Microsoft (R) C/C++ Optimizing Compiler Version 19.xx.xxxxx for x64
+     Copyright (C) Microsoft Corporation. All rights reserved.
 
-2. **Visual C++ Build Tools** (Windows only)
-   * Download the installer from [Visual Studio Downloads](https://visualstudio.microsoft.com/downloads/) (look for "Build Tools for Visual Studio 2022")
-   * Run the downloaded installer (vs_BuildTools.exe)
-   * When the installer launches:
-     1. Wait for the component list to load completely
-     2. Select the "Desktop development with C++" workload checkbox
-     3. In the right panel under "Installation details", ensure the following components are selected:
-        - MSVC C++ x64/x86 build tools
-        - Windows 10/11 SDK
-        - C++ CMake tools for Windows
-     4. Click "Install" in the bottom right corner
-     5. Wait for the installation to complete (this may take 10-30 minutes depending on your internet speed)
-   * Verify installation:
-     1. Look in the Start menu for "Developer Command Prompt for VS 2022" or "x64 Native Tools Command Prompt for VS 2022"
-     2. Open this special command prompt (it sets up the necessary environment variables)
-     3. Run `cl` and press Enter
-     4. You should see output similar to:
-        ```
-        Microsoft (R) C/C++ Optimizing Compiler Version 19.xx.xxxxx for x64
-        Copyright (C) Microsoft Corporation. All rights reserved.
+     usage: cl [ option... ] filename... [ /link linkoption... ]
+     ```
+   5. Alternative verification method:
+     - Check if the directory exists: `C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC`
+     - Or newer path: `C:\Program Files\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC`
+     - If this directory exists with subfolders containing bin, lib, and include directories, the installation was successful
 
-        usage: cl [ option... ] filename... [ /link linkoption... ]
-        ```
-     5. Alternative verification method:
-        - Check if the directory exists: `C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC`
-        - Or newer path: `C:\Program Files\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC`
-        - If this directory exists with subfolders containing bin, lib, and include directories, the installation was successful
+#### 3. Install Git
+   1. Download Git for Windows from [Git-SCM](https://git-scm.com/download/win)
+      - The download should start automatically for 64-bit Windows
+   2. Run the downloaded installer (Git-X.XX.X-64-bit.exe)
+   3. Installation options (recommended settings):
+      - Accept the license agreement
+      - Choose installation location (default is fine)
+      - Select components:
+        - Make sure "Git LFS (Large File Support)" is checked
+        - Ensure "Add a Git Bash Profile to Windows Terminal" is selected
+        - Keep "Associate .git* files with default editor" checked
+      - Choose default editor (Notepad is safest, or select your preferred editor)
+      - For "Adjusting the name of the initial branch in new repositories":
+        - Choose "Let Git decide" or "Override to main" (recommended)
+      - For PATH environment:
+        - Select "Git from the command line and also from 3rd-party software" (recommended)
+      - For SSH executable:
+        - Choose "Use bundled OpenSSH"
+      - For HTTPS transport:
+        - Choose "Use the OpenSSL library"
+      - For line ending conversions:
+        - Choose "Checkout Windows-style, commit Unix-style line endings"
+      - For terminal emulator:
+        - Choose "Use MinTTY"
+      - For default behavior of `git pull`:
+        - Choose "Default (fast-forward or merge)"
+      - For credential helper:
+        - Choose "Git Credential Manager"
+      - For extra options:
+        - Keep "Enable file system caching" checked
+        - Optionally enable experimental features if desired
+   4. Click "Install" and wait for installation to complete
+   5. Finish the installation
+   6. Verify installation by opening Command Prompt and running:
+      ```
+      git --version
+      git lfs --version
+      ```
+      Both commands should return version information
 
-3. **Git**
-   * **Windows Installation:**
-     1. Download Git for Windows from [Git-SCM](https://git-scm.com/download/win)
-        - The download should start automatically for 64-bit Windows
-     2. Run the downloaded installer (Git-X.XX.X-64-bit.exe)
-     3. Installation options (recommended settings):
-        - Accept the license agreement
-        - Choose installation location (default is fine)
-        - Select components:
-          - Make sure "Git LFS (Large File Support)" is checked
-          - Ensure "Add a Git Bash Profile to Windows Terminal" is selected
-          - Keep "Associate .git* files with default editor" checked
-        - Choose default editor (Notepad is safest, or select your preferred editor)
-        - For "Adjusting the name of the initial branch in new repositories":
-          - Choose "Let Git decide" or "Override to main" (recommended)
-        - For PATH environment:
-          - Select "Git from the command line and also from 3rd-party software" (recommended)
-        - For SSH executable:
-          - Choose "Use bundled OpenSSH"
-        - For HTTPS transport:
-          - Choose "Use the OpenSSL library"
-        - For line ending conversions:
-          - Choose "Checkout Windows-style, commit Unix-style line endings"
-        - For terminal emulator:
-          - Choose "Use MinTTY"
-        - For default behavior of `git pull`:
-          - Choose "Default (fast-forward or merge)"
-        - For credential helper:
-          - Choose "Git Credential Manager"
-        - For extra options:
-          - Keep "Enable file system caching" checked
-          - Optionally enable experimental features if desired
-     4. Click "Install" and wait for installation to complete
-     5. Finish the installation
-     6. Verify installation by opening Command Prompt and running:
-        ```
-        git --version
-        git lfs --version
-        ```
-        Both commands should return version information
-   * **Ubuntu Installation:**
-     1. Update package index:
-        ```
-        sudo apt update
-        ```
-     2. Install Git:
-        ```
-        sudo apt install git -y
-        ```
-     3. Install Git LFS (Large File Support) which is needed for model downloads:
-        ```
-        sudo apt install git-lfs -y
-        ```
-     4. Initialize Git LFS:
-        ```
-        git lfs install
-        ```
-     5. Verify installation:
-        ```
-        git --version
-        git lfs --version
-        ```
-     6. Configure your Git identity (required for first use):
-        ```
-        git config --global user.name "Your Name"
-        git config --global user.email "your.email@example.com"
-        ```
+#### 4. Install CUDA Toolkit 11.8 and cuDNN
+   1. **Install CUDA Toolkit 11.8:**
+     - Visit the [NVIDIA CUDA Toolkit 11.8 Archive](https://developer.nvidia.com/cuda-11-8-0-download-archive)
+     - Select your configuration:
+       - Operating System: Windows
+       - Architecture: x86_64
+       - Version: 11 or your specific Windows version
+       - Installer Type: exe (local)
+     - Download the installer (approximately 3GB)
+     - Before installation:
+       - Close all NVIDIA applications
+       - Ensure you have the latest NVIDIA drivers installed
+     - Run the downloaded installer
+     - Choose "Agree and Continue" to accept the license agreement
+     - Choose "Express (Recommended)" installation type
+     - CUDA Visual Studio Integration
+       - If the message "No supported version of Visual Studio was found." appears
+         - Check "I understand, and wish to continue with the installation regardless."
+         - Select "Next"
+         - Select "Next" after the Nsight Visual Studio Edition Summary
+     - Wait for installation to complete (may take 10-20 minutes)
+     - Check desired options and close the installer
+     - Restart your computer when prompted
 
-4. **CUDA Toolkit 11.8 and cuDNN**
-   * **Windows Installation:**
-     1. **Install CUDA Toolkit 11.8:**
-        - Visit the [NVIDIA CUDA Toolkit 11.8 Archive](https://developer.nvidia.com/cuda-11-8-0-download-archive)
-        - Select your configuration:
-          - Operating System: Windows
-          - Architecture: x86_64
-          - Version: 11 or your specific Windows version
-          - Installer Type: exe (local)
-        - Download the installer (approximately 3GB)
-        - Before installation:
-          - Close all NVIDIA applications
-          - Ensure you have the latest NVIDIA drivers installed
-        - Run the downloaded installer
-        - Choose "Agree and Continue" to accept the license agreement
-        - Choose "Express (Recommended)" installation type
-        - CUDA Visual Studio Integration
-          - If the message "No supported version of Visual Studio was found." appears
-            - Check "I understand, and wish to continue with the installation regardless."
-            - Select "Next"
-            - Select "Next" after the Nsight Visual Studio Edition Summary
-        - Wait for installation to complete (may take 10-20 minutes)
-        - Check desired options and close the installer
-        - Restart your computer when prompted
-     
-     2. **Install cuDNN 8.9.7, for CUDA 11.8:**
-        - Visit the [NVIDIA cuDNN-Archive](https://developer.nvidia.com/rdp/cudnn-archive)
-        - Look for "Download cuDNN v8.x.x (CUDA 11.x)" that's compatible with CUDA 11.8
-        - Download "Local Installer for Windows (zip)"
-        - Extract the downloaded zip file
-        - Copy the extracted files to your CUDA installation:
-          - Copy `cuda\bin\cudnn*.dll` to `C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v11.8\bin\`
-          - Copy `cuda\include\cudnn*.h` to `C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v11.8\include\`
-          - Copy `cuda\lib\x64\cudnn*.lib` to `C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v11.8\lib\x64\`
-     
-     3. **Verify installation:**
-        - Open Command Prompt
-        - Check CUDA version:
-          ```
-          nvcc --version
-          ```
-          Look for "Cuda compilation tools, release 11.8"
-        - Verify CUDA samples:
-          ```
-          cd "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v11.8\extras\demo_suite"
-          deviceQuery.exe
-          ```
-          You should see your GPU information and "Result = PASS"
+   2. **Install cuDNN 8.9.7, for CUDA 11.8:**
+     - Visit the [NVIDIA cuDNN-Archive](https://developer.nvidia.com/rdp/cudnn-archive)
+     - Look for "Download cuDNN v8.x.x (CUDA 11.x)" that's compatible with CUDA 11.8
+     - Download "Local Installer for Windows (zip)"
+     - Extract the downloaded zip file
+     - Copy the extracted files to your CUDA installation:
+       - Copy `cuda\bin\cudnn*.dll` to `C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v11.8\bin\`
+       - Copy `cuda\include\cudnn*.h` to `C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v11.8\include\`
+       - Copy `cuda\lib\x64\cudnn*.lib` to `C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v11.8\lib\x64\`
 
-   * **Ubuntu Installation:**
-     1. **Verify your GPU supports CUDA:**
-        ```
-        lspci | grep -i nvidia
-        ```
-        
-     2. **Remove any previous CUDA installation:**
-        ```
-        sudo apt-get --purge remove "*cuda*" "*cublas*" "*cufft*" "*cufile*" "*curand*" "*cusolver*" "*cusparse*" "*npp*" "*nvjpeg*" "nsight*" "*nvvm*"
-        ```
-        
-     3. **Install CUDA dependencies:**
-        ```
-        sudo apt-get update
-        sudo apt-get install -y build-essential gcc-11 g++-11 dkms
-        ```
-        
-     4. **Download CUDA 11.8 runtime and installer:**
-        ```
-        wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-ubuntu2204.pin
-        sudo mv cuda-ubuntu2204.pin /etc/apt/preferences.d/cuda-repository-pin-600
-        wget https://developer.download.nvidia.com/compute/cuda/11.8.0/local_installers/cuda-repo-ubuntu2204-11-8-local_11.8.0-520.61.05-1_amd64.deb
-        sudo dpkg -i cuda-repo-ubuntu2204-11-8-local_11.8.0-520.61.05-1_amd64.deb
-        sudo cp /var/cuda-repo-ubuntu2204-11-8-local/cuda-*-keyring.gpg /usr/share/keyrings/
-        sudo apt-get update
-        sudo apt-get -y install cuda-11-8
-        ```
-        
-     5. **Set up environment variables:**
-        ```
-        echo 'export PATH=/usr/local/cuda-11.8/bin${PATH:+:${PATH}}' >> ~/.bashrc
-        echo 'export LD_LIBRARY_PATH=/usr/local/cuda-11.8/lib64${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}' >> ~/.bashrc
-        source ~/.bashrc
-        ```
-        
-     6. **Install cuDNN for CUDA 11.8:**
-        - Visit [NVIDIA cuDNN Downloads](https://developer.nvidia.com/cudnn)
-        - Log in with your NVIDIA Developer account
-        - Find "Download cuDNN v8.x.x (CUDA 11.x)" compatible with CUDA 11.8
-        - Download "Local Installer for Linux x86_64 (Tar)"
-        - Extract and install:
-          ```
-          tar -xvf cudnn-linux-x86_64-8.x.x.x_cudaX.Y-archive.tar.xz
-          sudo cp cudnn-linux-x86_64-8.x.x.x_cudaX.Y-archive/include/cudnn*.h /usr/local/cuda-11.8/include/
-          sudo cp -P cudnn-linux-x86_64-8.x.x.x_cudaX.Y-archive/lib/libcudnn* /usr/local/cuda-11.8/lib64/
-          sudo chmod a+r /usr/local/cuda-11.8/include/cudnn*.h /usr/local/cuda-11.8/lib64/libcudnn*
-          ```
-          
-     7. **Verify installation:**
-        ```
-        nvcc --version
-        ```
-        Look for "Cuda compilation tools, release 11.8"
-        
-        To verify cuDNN:
-        ```
-        cat /usr/local/cuda-11.8/include/cudnn_version.h | grep CUDNN_MAJOR -A 2
-        ```
-        Should display cuDNN version information
+   3. **Verify installation:**
+     - Open Command Prompt
+     - Check CUDA version:
+       ```
+       nvcc --version
+       ```
+       Look for "Cuda compilation tools, release 11.8"
+     - Verify CUDA samples:
+       ```
+       cd "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v11.8\extras\demo_suite"
+       deviceQuery.exe
+       ```
+       You should see your GPU information and "Result = PASS"
 
-   * **Important Notes:**
-     - CUDA 11.8 requires compatible NVIDIA drivers (minimum driver version: 520.61.05)
-     - For PyTorch compatibility, ensure you use CUDA 11.8 specifically since this is what the pip packages are built against
-     - If you have multiple CUDA versions installed, make sure the correct version is in your PATH
-     - Uninstall any previous CUDA installations completely before installing a new version to avoid conflicts
+#### 5. Clone and Install Maggie
+   1. Open Command Prompt with administrative privileges
+   2. Clone the repository:
+      ```
+      git clone https://github.com/your-org/maggie.git
+      cd maggie
+      ```
+   3. Run the installation script:
+      ```
+      python install.py
+      ```
+   4. Follow the on-screen prompts
 
-#### Step 2: Clone the Repository
+### Linux Installation
 
+#### 1. Install Python 3.10.x
 ```bash
+# Update package index
+sudo apt update
+
+# Install software-properties-common
+sudo apt install software-properties-common -y
+
+# Add deadsnakes PPA
+sudo add-apt-repository ppa:deadsnakes/ppa -y
+
+# Update package index again
+sudo apt update
+
+# Install Python 3.10 and development packages
+sudo apt install python3.10 python3.10-venv python3.10-dev -y
+
+# Verify installation
+python3.10 --version
+```
+
+#### 2. Install Build Tools and Dependencies
+```bash
+# Install build essentials and portaudio (for PyAudio)
+sudo apt install build-essential gcc-11 g++-11 dkms portaudio19-dev -y
+
+# Install Git and Git LFS
+sudo apt install git git-lfs -y
+git lfs install
+```
+
+#### 3. Install CUDA Toolkit 11.8 and cuDNN
+```bash
+# Download CUDA repository package
+wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-ubuntu2204.pin
+sudo mv cuda-ubuntu2204.pin /etc/apt/preferences.d/cuda-repository-pin-600
+wget https://developer.download.nvidia.com/compute/cuda/11.8.0/local_installers/cuda-repo-ubuntu2204-11-8-local_11.8.0-520.61.05-1_amd64.deb
+sudo dpkg -i cuda-repo-ubuntu2204-11-8-local_11.8.0-520.61.05-1_amd64.deb
+sudo cp /var/cuda-repo-ubuntu2204-11-8-local/cuda-*-keyring.gpg /usr/share/keyrings/
+sudo apt-get update
+sudo apt-get -y install cuda-11-8
+
+# Set environment variables
+echo 'export PATH=/usr/local/cuda-11.8/bin${PATH:+:${PATH}}' >> ~/.bashrc
+echo 'export LD_LIBRARY_PATH=/usr/local/cuda-11.8/lib64${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}' >> ~/.bashrc
+source ~/.bashrc
+```
+
+For cuDNN, download from [NVIDIA cuDNN Downloads](https://developer.nvidia.com/cudnn) (requires NVIDIA Developer account) and follow the installation instructions for Linux.
+
+#### 4. Clone and Install Maggie
+```bash
+# Clone repository
 git clone https://github.com/your-org/maggie.git
 cd maggie
+
+# Run installation script
+python3.10 install.py
 ```
 
-#### Step 3: Run the Installation Script
+## Post-Installation
 
-```bash
-python install.py
-```
-
-The installation script performs the following operations:
-
-1. **Environment Verification**
-   * Checks Python version (must be exactly 3.10.x)
-   * Verifies operating system compatibility
-   * Detects hardware configuration (optimizes for Ryzen 9 5900X and RTX 3080)
-   * Checks for administrator/root privileges
-
-2. **Directory Structure Creation**
-   * Creates required directories for logs, models, data, etc.
-
-3. **Virtual Environment Setup**
-   * Creates a Python virtual environment
-   * Upgrades pip, setuptools, and wheel
-
-4. **Dependency Installation**
-   * Installs PyTorch 2.0.1 with CUDA 11.8 support
-   * Installs speech processing libraries:
-     * pvporcupine 2.2.0 (wake word detection)
-     * faster-whisper 0.9.0 (speech recognition)
-     * piper-tts 1.2.0 (text-to-speech)
-   * Installs language model components:
-     * ctransformers 0.2.27
-     * llama-cpp-python 0.2.11
-   * Installs GUI and utility libraries:
-     * PyQt6 6.5.0
-     * python-docx 0.8.11
-
-5. **Model Download**
-   * Downloads Mistral-7B-Instruct-v0.3-GPTQ-4bit model
-   * Downloads Piper TTS voice model (en_US-kathleen-medium)
-
-6. **Configuration Setup**
-   * Creates config.yaml based on detected hardware
-   * Optimizes settings for your specific system
-
-### Post-Installation Configuration
-
-#### Step 1: Obtain Picovoice Access Key
-
+### 1. Obtain Picovoice Access Key
 1. Register at [Picovoice Console](https://console.picovoice.ai/)
 2. Create a free access key
 3. Edit `config.yaml` and add your key in the `wake_word.porcupine_access_key` field
 
-#### Step 2: Verify Installation
-
+### 2. Verify Installation
 ```bash
 # Activate virtual environment
 # On Windows:
@@ -551,7 +468,16 @@ source venv/bin/activate
 python main.py --verify
 ```
 
-#### Step 3: Start Maggie
+### 3. Modify Configuration (Optional)
+The `config.yaml` file contains all configuration options:
+
+- **Wake Word Settings**: Sensitivity, access key
+- **Speech Recognition**: Model size, compute type
+- **Text-to-Speech**: Voice model, sample rate
+- **LLM Settings**: Model path, GPU layers, precision
+- **System Settings**: Inactivity timeout, threading, memory usage
+
+### 4. Start Maggie
 
 ```bash
 # With virtual environment activated:
