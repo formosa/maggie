@@ -24,12 +24,6 @@ venv/
 # PyCharm settings
 .idea/
 
-# Logs and temporary files
-logs/
-*.log
-*.out
-*.pid
-
 # OS-specific files
 .DS_Store
 Thumbs.db
