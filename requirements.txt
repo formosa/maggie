@@ -12,9 +12,9 @@ psutil==5.9.6
 # ===== Speech Processing =====
 pvporcupine==2.2.1
 SpeechRecognition==3.10.0
-PyAudio==0.2.13
+PyAudio==0.2.14
 faster-whisper==0.9.0
-kokoro==0.9.0  # TTS engine
+kokoro==0.8.4  # TTS engine
 soundfile==0.12.1
 
 # ===== Language Model =====
