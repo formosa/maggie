@@ -378,31 +378,97 @@ This utility demonstrates how the system combines speech recognition, natural la
      You should see your GPU information and "Result = PASS"
 
 #### 5. Clone and Install Maggie
-1. Open Command Prompt with administrative privileges
-2. Clone the repository:
-   ```
-   git clone https://github.com/formosa/maggie.git
-   cd maggie
-   ```
-3. Run the installation script:
+   1. Open Command Prompt with administrative privileges
+   2. Clone the repository:
+      ```
+      git clone https://github.com/formosa/maggie.git
+      cd maggie
+      ```
+   3. Run the installation script:
 
-   **Available installation options:**
-   
-   | Option | Description |
-   |--------|-------------|
-   | `--verbose` | Enable detailed output during installation |
-   | `--cpu-only` | Install CPU-only version (no GPU acceleration) |
-   | `--skip-models` | Skip downloading large LLM models (~5GB) |
-   | `--skip-problematic` | Skip dependencies that may cause installation issues |
-   | `--force-reinstall` | Force reinstallation of already installed packages |
-   
-   **Example commands:**
-   Verbose installation with all details displayed:
-   ```
-   python install.py --verbose
-   ```
+      **Available installation options:**
+      
+      | Option | Description |
+      |--------|-------------|
+      | `--verbose` | Enable detailed output during installation |
+      | `--cpu-only` | Install CPU-only version (no GPU acceleration) |
+      | `--skip-models` | Skip downloading large LLM models (~5GB) |
+      | `--skip-problematic` | Skip dependencies that may cause installation issues |
+      | `--force-reinstall` | Force reinstallation of already installed packages |
+      
+      **Example commands:**
+      Verbose installation with all details displayed:
+      ```
+      python install.py --verbose
+      ```
 
-4. Follow the on-screen prompts
+   4. Installation Process Steps:
+    **The install.py script performs the following actions in sequence:**
+
+      1.  **System Verification (Step 1/8)**
+        Checks Python version (requires exactly 3.10.x)
+        Detects CPU, GPU, and memory specifications
+        Identifies specific hardware (Ryzen 9 5900X, RTX 3080)
+        Verifies required tools (Git, C++ compiler)
+        Reports compatibility status and optimization potential
+
+      2. **Directory Structure Creation (Step 2/8)**
+        Creates all required directories for the application:
+        - logs/ - For application logs
+        - models/ - For AI models
+        - models/tts/ - For text-to-speech models
+        - cache/ - For audio and processing caches
+        - recipes/ - For recipe creator output
+        - templates/ - For document templates
+        And other necessary directories
+
+      3. **Virtual Environment Setup (Step 3/8)**
+        Creates a Python virtual environment in venv/
+        Isolates dependencies from system Python
+        Ensures consistent package versions
+
+      4. Dependency Installation (Step 4/8)
+         1. Installs core dependencies:
+          - `urllib3`  ensures that the Maggie AI system has reliable network capabilities
+          - `tqdm` creates progress bars for long-running operations like model downloads and audio processing
+          - `numpy` enables efficient numerical operations for audio processing, speech analysis, and tensor manipulations
+          - `psutil` monitors system resources (CPU, memory, disk) to optimize resource allocation and prevent overloading
+          - `PyYAML` parses YAML configuration files, essential for the flexible configuration system that adapts to different hardware profiles
+          - `loguru` provides advanced logging capabilities with better formatting, level management, and file rotation than standard logging
+          - `requests` handles HTTP requests for downloading models and resources securely
+          - `torch`/ `pytorch` powers neural network operations for LLM inference and audio processing with GPU acceleration support
+         2. Installs PyTorch with CUDA support (if GPU available)
+         3. Installs specialized dependencies:
+           - `PyAudio` for microphone input
+           - `Kokoro` for text-to-speech
+           - `faster-whisper` for speech recognition
+           - `ctransformers` for LLM inference
+           - `PyQt6 for GUI` interface
+           - `python-docx` for document generation
+         4. Handles platform-specific installation requirements
+
+      5. Configuration Setup (Step 5/8)
+         - Creates or updates config.yaml
+         - Applies hardware-specific optimizations
+         - Configures TTS voice model to use af_heart
+         - Optimizes GPU settings for RTX 3080 if detected
+         - Adjusts thread pool size for Ryzen 9 5900X if detected
+
+      6. Model Download (Step 6/8)
+         - Downloads the af_heart TTS voice model
+         - Downloads Mistral 7B LLM (unless --skip-models is specified)
+         - Validates downloaded model files
+
+      7. Extension Setup (Step 7/8)
+          - Installs extension dependencies
+          - Creates recipe template for the recipe creator extension
+          - Registers extensions in the configuration
+
+      8. Finalization (Step 8/8)
+          - Completes installation
+          - Displays summary and installation time
+          - Provides instructions for starting the application
+          - Offers to start Maggie immediately
 
 ### Linux Installation
 
@@ -489,6 +555,73 @@ sudo chmod a+r /usr/local/cuda-11.8/include/cudnn*.h /usr/local/cuda-11.8/lib64/
       # Run installation script
       python3.10 install.py --verbose
       ```
+    3. Installation Process Steps:
+      **The install.py script performs the following actions in sequence:**
+
+      1.  **System Verification (Step 1/8)**
+        Checks Python version (requires exactly 3.10.x)
+        Detects CPU, GPU, and memory specifications
+        Identifies specific hardware (Ryzen 9 5900X, RTX 3080)
+        Verifies required tools (Git, C++ compiler)
+        Reports compatibility status and optimization potential
+
+      2. **Directory Structure Creation (Step 2/8)**
+        Creates all required directories for the application:
+        - logs/ - For application logs
+        - models/ - For AI models
+        - models/tts/ - For text-to-speech models
+        - cache/ - For audio and processing caches
+        - recipes/ - For recipe creator output
+        - templates/ - For document templates
+        And other necessary directories
+
+      3. **Virtual Environment Setup (Step 3/8)**
+        Creates a Python virtual environment in venv/
+        Isolates dependencies from system Python
+        Ensures consistent package versions
+
+      4. Dependency Installation (Step 4/8)
+         1. Installs core dependencies:
+          - `urllib3`  ensures that the Maggie AI system has reliable network capabilities
+          - `tqdm` creates progress bars for long-running operations like model downloads and audio processing
+          - `numpy` enables efficient numerical operations for audio processing, speech analysis, and tensor manipulations
+          - `psutil` monitors system resources (CPU, memory, disk) to optimize resource allocation and prevent overloading
+          - `PyYAML` parses YAML configuration files, essential for the flexible configuration system that adapts to different hardware profiles
+          - `loguru` provides advanced logging capabilities with better formatting, level management, and file rotation than standard logging
+          - `requests` handles HTTP requests for downloading models and resources securely
+          - `torch`/ `pytorch` powers neural network operations for LLM inference and audio processing with GPU acceleration support
+         2. Installs PyTorch with CUDA support (if GPU available)
+         3. Installs specialized dependencies:
+           - `PyAudio` for microphone input
+           - `Kokoro` for text-to-speech
+           - `faster-whisper` for speech recognition
+           - `ctransformers` for LLM inference
+           - `PyQt6 for GUI` interface
+           - `python-docx` for document generation
+         4. Handles platform-specific installation requirements
+
+      5. Configuration Setup (Step 5/8)
+         - Creates or updates config.yaml
+         - Applies hardware-specific optimizations
+         - Configures TTS voice model to use af_heart
+         - Optimizes GPU settings for RTX 3080 if detected
+         - Adjusts thread pool size for Ryzen 9 5900X if detected
+
+      6. Model Download (Step 6/8)
+         - Downloads the af_heart TTS voice model
+         - Downloads Mistral 7B LLM (unless --skip-models is specified)
+         - Validates downloaded model files
+
+      7. Extension Setup (Step 7/8)
+          - Installs extension dependencies
+          - Creates recipe template for the recipe creator extension
+          - Registers extensions in the configuration
+
+      8. Finalization (Step 8/8)
+          - Completes installation
+          - Displays summary and installation time
+          - Provides instructions for starting the application
+          - Offers to start Maggie immediately
 
 ## Post-Installation
 
