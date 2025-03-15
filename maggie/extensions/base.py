@@ -6,23 +6,37 @@ Abstract base class for all Maggie AI Assistant extension modules.
 
 This module defines the common interface and baseline functionality 
 that all extension modules must implement to work properly with the
-Maggie AI Assistant architecture.
+Maggie AI Assistant architecture. Extensions use this base class to ensure
+consistent behavior, proper resource management, and standardized
+lifecycle management.
+
+The extension framework provides:
+1. Standardized lifecycle methods (initialize, start, stop)
+2. Thread-safe event-driven communication
+3. State management and command processing
+4. Resource acquisition and management
+5. Error handling and recovery mechanisms
+
+Extensions can be dynamically loaded at runtime and respond to voice
+commands through their trigger phrases.
 
 Examples
 --------
->>> from utils.extension_base import ExtensionBase
+>>> from maggie.extensions.base import ExtensionBase
 >>> class MyExtension(ExtensionBase):
 ...     def get_trigger(self):
 ...         return "my command"
 ...     def start(self):
 ...         print("Starting extension")
+...         self.running = True
 ...         return True
 ...     def stop(self):
 ...         print("Stopping extension")
+...         self.running = False
 ...         return True
 ...     def process_command(self, command):
 ...         print(f"Processing command: {command}")
-...         return True
+...         return command in ["example", "test"]
 """
 
 # Standard library imports
@@ -45,9 +59,13 @@ class ExtensionBase(ABC):
     Parameters
     ----------
     event_bus : object
-        Reference to the central event bus for event-driven communication
+        Reference to the central event bus for event-driven communication.
+        Must implement publish(), subscribe(), and unsubscribe() methods.
     config : Dict[str, Any]
-        Configuration parameters for the extension
+        Configuration dictionary containing extension-specific settings such as:
+        - enabled: Whether the extension is enabled (default: True)
+        - output_dir: Directory for extension output files (if applicable)
+        - custom parameters specific to each extension
         
     Attributes
     ----------
@@ -59,6 +77,36 @@ class ExtensionBase(ABC):
         Whether the extension is currently running
     _initialized : bool
         Whether the extension has been initialized
+        
+    Examples
+    --------
+    >>> from maggie.extensions.base import ExtensionBase
+    >>> from maggie.core import EventBus
+    >>> class WeatherExtension(ExtensionBase):
+    ...     def get_trigger(self):
+    ...         return "weather forecast"
+    ...     def start(self):
+    ...         print("Starting weather extension")
+    ...         self.running = True
+    ...         return True
+    ...     def stop(self):
+    ...         print("Stopping weather extension")
+    ...         self.running = False
+    ...         return True
+    ...     def process_command(self, command):
+    ...         if "temperature" in command:
+    ...             print("Getting temperature")
+    ...             return True
+    ...         return False
+    >>> event_bus = EventBus()
+    >>> config = {"api_key": "abc123", "units": "metric"}
+    >>> weather = WeatherExtension(event_bus, config)
+    >>> weather.initialize()
+    >>> weather.start()
+    Starting weather extension
+    >>> weather.process_command("What's the temperature today?")
+    Getting temperature
+    True
     """
     
     def __init__(self, event_bus, config: Dict[str, Any]):
