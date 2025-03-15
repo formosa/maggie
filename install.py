@@ -1768,12 +1768,13 @@ doc.save("{}")
 
         # Subprocess code to run in virtual environment
         python_cmd = self._get_venv_python()
-        code = f"""
-import yaml
+        # Use str() to ensure base_dir is a plain string, not a Path object representation
+        escaped_base_dir = str(self.base_dir).replace("'", "\\'")  # Escape single quotes
+        code = f"""import yaml
 import json
 import os
 
-base_dir = '{self.base_dir.replace("'", "\\'")}'
+base_dir = '{escaped_base_dir}'
 config_path = os.path.join(base_dir, 'config.yaml')
 example_path = os.path.join(base_dir, 'config.yaml.example')
 hardware_file = os.path.join(base_dir, 'hardware_info.json')
