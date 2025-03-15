@@ -1290,7 +1290,7 @@ class MaggieInstaller:
             py_ver = f"{sys.version_info.major}{sys.version_info.minor}"
             wheel_url = f"https://files.pythonhosted.org/packages/27/bc/719d140ee63cf4b0725016531d36743a797ffdbab85e8536922902c9349a/PyAudio-0.2.14-cp310-cp310-win_amd64.whl"
             # wheel_url = f"https://download.lfd.uci.edu/pythonlibs/archived/PyAudio-0.2.13-cp{py_ver}-cp{py_ver}-win_amd64.whl"
-            wheel_path = os.path.join(self.base_dir, "downloads", "wheels", "PyAudio-0.2.13.whl")
+            wheel_path = os.path.join(self.base_dir, "downloads", "wheels", "PyAudio-0.2.14-cp310-cp310-win_amd64.whl")
             
             # Download wheel
             os.makedirs(os.path.dirname(wheel_path), exist_ok=True)
