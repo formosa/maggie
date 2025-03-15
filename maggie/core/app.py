@@ -7,6 +7,18 @@ This module implements a simplified Finite State Machine (FSM) architecture
 with event-driven state transitions and optimized resource management.
 Specifically tuned for AMD Ryzen 9 5900X and NVIDIA RTX 3080 hardware.
 
+The architecture consists of:
+1. State - Enum defining possible states (IDLE, READY, ACTIVE, CLEANUP, SHUTDOWN)
+2. StateTransition - Data class for state transition events with metadata
+3. EventBus - Centralized event management with publisher-subscriber pattern
+4. MaggieAI - Main class implementing the FSM with optimized threading
+
+The implementation leverages hardware-specific optimizations including:
+- Thread pool sizing optimized for Ryzen 9 5900X's 12 cores
+- GPU layer allocation for RTX 3080's 10GB VRAM
+- Memory management strategies for 32GB system configurations
+- Dynamic resource allocation based on system state
+
 Examples
 --------
 >>> from maggie import MaggieAI
@@ -45,15 +57,20 @@ class State(Enum):
     Attributes
     ----------
     IDLE : enum
-        Waiting for wake word, minimal resource usage
+        Waiting for wake word, minimal resource usage. Only wake word detection
+        is active, models are unloaded, CPU usage <5%.
     READY : enum
-        Listening for commands, resources initialized
+        Listening for commands, resources initialized. Speech recognition is
+        active, models are loaded, waiting for user command.
     ACTIVE : enum
-        Processing commands and running extensions
+        Processing commands and running extensions. Full system engagement
+        with maximum resource utilization.
     CLEANUP : enum
-        Cleaning up resources
+        Cleaning up resources. Releasing memory, stopping components, and
+        preparing for state transition.
     SHUTDOWN : enum
-        Final state before application exit
+        Final state before application exit. All resources released, threads
+        terminated, application preparing to exit.
     """
     IDLE = auto()      # Waiting for wake word, minimal resource usage
     READY = auto()     # Listening for commands, resources initialized
@@ -69,13 +86,24 @@ class StateTransition:
     Parameters
     ----------
     from_state : State
-        Previous state
+        Previous state the system is transitioning from
     to_state : State
-        New state
+        New state the system is transitioning to
     trigger : str
-        Event that triggered the transition
+        Event that triggered the transition (e.g., "wake_word_detected", "timeout")
     timestamp : float
-        Unix timestamp of the transition
+        Unix timestamp of the transition for logging and debugging
+        
+    Examples
+    --------
+    >>> transition = StateTransition(
+    ...     from_state=State.IDLE,
+    ...     to_state=State.READY,
+    ...     trigger="wake_word_detected",
+    ...     timestamp=time.time()
+    ... )
+    >>> print(f"Transition from {transition.from_state.name} to {transition.to_state.name}")
+    Transition from IDLE to READY
     """
     from_state: State
     to_state: State
@@ -89,16 +117,31 @@ class EventBus:
     Handles event publication, subscription, and dispatching with
     thread-safety and prioritization.
     
+    Parameters
+    ----------
+    None
+    
     Attributes
     ----------
     subscribers : Dict[str, List[Tuple[int, Callable]]]
-        Event subscribers mapped by event type with priority
+        Event subscribers mapped by event type with priority (lower values have higher priority)
     queue : queue.PriorityQueue
         Priority queue for event processing
     running : bool
         Whether the event bus is currently running
     _worker_thread : Optional[threading.Thread]
         Thread for event processing
+        
+    Examples
+    --------
+    >>> event_bus = EventBus()
+    >>> def handle_wake_word(data):
+    ...     print(f"Wake word detected: {data}")
+    >>> event_bus.subscribe("wake_word_detected", handle_wake_word)
+    >>> event_bus.start()
+    >>> event_bus.publish("wake_word_detected", "Maggie")
+    Wake word detected: Maggie
+    >>> event_bus.stop()
     """
     
     def __init__(self):

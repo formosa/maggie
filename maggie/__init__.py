@@ -10,5 +10,5 @@ LLM integration, and modular extensions framework. It's specifically
 optimized for AMD Ryzen 9 5900X and NVIDIA RTX 3080 hardware.
 """
 
-from .core import MaggieAI, State, StateTransition, EventBus
+from maggie.core import MaggieAI, State, StateTransition, EventBus
 __all__ = ['MaggieAI', 'State', 'StateTransition', 'EventBus']
