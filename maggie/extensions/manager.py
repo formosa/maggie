@@ -1,6 +1,6 @@
-# maggie/utils/extension_manager.py
+# maggie/extensions/manager.py
 """
-Maggie AI Assistant - Extension Manager
+Maggie AI Assistant - Extensions Manager
 =====================================
 
 Command-line utility for managing Maggie AI extensions.
