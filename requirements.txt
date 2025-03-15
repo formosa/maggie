@@ -1,31 +1,33 @@
 # Maggie AI Assistant - Dependencies
 # REQUIRES PYTHON 3.10.x - Other versions are not supported
 
-# Core dependencies
-pvporcupine==2.2.0
+# ===== Core Dependencies =====
+PyYAML==6.0.1
+loguru==0.7.2
+numpy==1.26.4
+tqdm==4.66.1
+requests==2.31.0
+psutil==5.9.6
+
+# ===== Speech Processing =====
+pvporcupine==2.2.1
 SpeechRecognition==3.10.0
 PyAudio==0.2.13
-#whisper-streaming==0.2.1
 faster-whisper==0.9.0
-kokoro==0.8.4
+kokoro==0.9.0  # TTS engine
+soundfile==0.12.1
+
+# ===== Language Model =====
 ctransformers==0.2.27
 llama-cpp-python==0.2.11
-PyQt6==6.5.0
+
+# ===== UI and Document Processing =====
+PyQt6==6.6.1
 python-docx==0.8.11
 transitions==0.9.0
-# numpy==1.24.2
-numpy==1.26.4
-PyYAML==6.0
-loguru==0.7.0
-soundfile==0.12.1
-requests==2.31.0
-tqdm==4.66.1
 mammoth==1.7.0
 
-# Hardware acceleration
+# ===== Hardware Acceleration =====
 # For CUDA 11.8 specific build:
 torch==2.0.1+cu118 --extra-index-url https://download.pytorch.org/whl/cu118
 onnxruntime-gpu==1.15.1
-
-# Utility packages
-psutil==5.9.5  # For system monitoring
