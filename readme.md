@@ -11,7 +11,7 @@
       - [2. Local Speech Recognition Using Whisper Models](#2-local-speech-recognition-using-whisper-models)
       - [3. Text-to-Speech Capabilities with Low Latency](#3-text-to-speech-capabilities-with-low-latency)
       - [4. GPU-Accelerated Language Model Inference](#4-gpu-accelerated-language-model-inference)
-      - [5. Modular Utility Framework for Extensibility](#5-modular-utility-framework-for-extensibility)
+      - [5. Modular Extension Framework for Extensibility](#5-modular-extension-framework-for-extensibility)
       - [6. Graphical User Interface](#6-graphical-user-interface)
       - [7. \[EXTENSION\]: Recipe Creation Utility with Speech-to-Document Processing](#7-extension-recipe-creation-utility-with-speech-to-document-processing)
   - [Installation Guide](#installation-guide)
@@ -57,20 +57,20 @@
       - [1. Wake Word Detection Problems](#1-wake-word-detection-problems)
       - [2. Speech Recognition Challenges](#2-speech-recognition-challenges)
       - [3. GPU Memory and Performance Issues](#3-gpu-memory-and-performance-issues)
-      - [4. Recipe Creation and Utility Issues](#4-recipe-creation-and-utility-issues)
+      - [4. Recipe Creation and Extension Issues](#4-recipe-creation-and-extension-issues)
   - [Developer Resources](#developer-resources)
     - [System Architecture](#system-architecture)
     - [Core Classes and Relationships](#core-classes-and-relationships)
-    - [Developing Custom Utilities](#developing-custom-utilities)
+    - [Developing Custom Extensions](#developing-custom-extensions)
     - [Event-Driven Communication](#event-driven-communication)
     - [Performance Optimization Guidelines](#performance-optimization-guidelines)
     - [Debugging and Logging](#debugging-and-logging)
 
 ## Project Overview
 
-Maggie AI Assistant is an advanced, voice-activated artificial intelligence framework implementing a Finite State Machine (FSM) architecture with event-driven state transitions and modular utility capabilities. The system is specifically optimized for computing environments utilizing an AMD Ryzen 9 5900X CPU and NVIDIA RTX 3080 GPU, enabling efficient local language model inference, speech processing, and interactive voice response.
+Maggie AI Assistant is an advanced, voice-activated artificial intelligence framework implementing a Finite State Machine (FSM) architecture with event-driven state transitions and modular extension capabilities. The system is specifically optimized for computing environments utilizing an AMD Ryzen 9 5900X CPU and NVIDIA RTX 3080 GPU, enabling efficient local language model inference, speech processing, and interactive voice response.
 
-The project emphasizes local processing, ensuring privacy and offline functionality while leveraging consumer hardware to deliver sophisticated AI capabilities. By utilizing advanced software optimization techniques including mixed-precision computation, efficient threading, and dynamic resource management, Maggie strives to be performant while independant from cloud-based systems.
+The project emphasizes local processing, ensuring privacy and offline functionality while leveraging consumer hardware to deliver sophisticated AI capabilities. By utilizing advanced software optimization techniques including mixed-precision computation, efficient threading, and dynamic resource management, Maggie strives to be performant while independent from cloud-based systems.
 
 ### Core Technical Architecture
 
@@ -126,6 +126,8 @@ The system provides natural-sounding voice output with minimal delay:
 - **Implementation**: Uses the Kokoro TTS engine, an open-weight TTS model with 82 million parameters
 - **Optimization Techniques**:
   - Audio caching system for frequently used phrases
+  - CUDA acceleration for RTX 3080 (when available)
+  - Low-latency audio playback with optimized buffer sizes
 - **Voice Models**: 
   - Default: af_heart
   - Configurable with different voice models
@@ -159,7 +161,7 @@ Maggie can leverage local LLM inference for data processing and response generat
 
 This implementation balances model quality with performance constraints, making sophisticated AI capabilities possible on consumer hardware.
 
-#### 5. Modular Utility Framework for Extensibility
+#### 5. Modular Extension Framework for Extensibility
 
 The system is designed with a plugin architecture for easy expansion:
 
@@ -170,7 +172,7 @@ The system is designed with a plugin architecture for easy expansion:
   - State-aware command processing
   - Consistent error handling and recovery
 - **Technical Architecture**:
-  - Each utility runs in a dedicated thread
+  - Each extension runs in a dedicated thread
   - Thread-safe communication through event passing
   - Resource acquisition through dependency injection
   - Configuration-driven initialization
@@ -187,14 +189,16 @@ This modular design allows developers to add new capabilities without modifying 
 
 All user interaction can be done vocally, or by using the application's GUI:
 
-- **Implementation**: Uses the `PyQt6` Python binding of the cross-platform GUI toolkit Qt, implemented as a Python plug-in
+- **Implementation**: Uses the `PyQt6` Python binding of the cross-platform GUI toolkit Qt
 - **Feature List**:
   - Status monitoring and visualization
   - Event logging and history
   - Command buttons for common operations
-  - Visual state indication
+  - Visual state indication with color coding
+  - Tab-based interface for different information views
+  - Keyboard shortcuts for rapid control
 
-#### 7. \[EXTENSION\]: Recipe Creation Utility with Speech-to-Document Processing
+#### 7. [EXTENSION]: Recipe Creation Utility with Speech-to-Document Processing
 
 An example of adding functionality using the extension framework:
 
@@ -249,16 +253,16 @@ This utility demonstrates how the system combines speech recognition, natural la
 3. **Important:** On the first screen, check the box that says "Add Python 3.10 to PATH"
 4. Select "Install Now" for standard installation or "Customize installation" for advanced options
 5. If you choose "Customize installation":
-  - Ensure all optional features are selected
-  - On the Advanced Options screen, select "Install for all users" if you have admin rights
-  - Check "Add Python to environment variables"
-  - Set the installation path (default is C:\Program Files\Python310)
+   - Ensure all optional features are selected
+   - On the Advanced Options screen, select "Install for all users" if you have admin rights
+   - Check "Add Python to environment variables"
+   - Set the installation path (default is C:\Program Files\Python310)
 6. Wait for the installation to complete
 7. Verify installation by opening Command Prompt and running:
-  ```
-  python --version
-  ```
-  It should display "Python 3.10.11"
+   ```
+   python --version
+   ```
+   It should display "Python 3.10.11"
 
 #### 2. Install Visual C++ Build Tools
 1. Download Build Tools from [Visual Studio Downloads](https://visualstudio.microsoft.com/downloads/) (look for "Build Tools for Visual Studio 2022")
@@ -286,105 +290,119 @@ This utility demonstrates how the system combines speech recognition, natural la
      - If this directory exists with subfolders containing bin, lib, and include directories, the installation was successful
 
 #### 3. Install Git
-   1. Download Git for Windows from [Git-SCM](https://git-scm.com/download/win)
-      - The download should start automatically for 64-bit Windows
-   2. Run the downloaded installer (Git-X.XX.X-64-bit.exe)
-   3. Installation options (recommended settings):
-      - Accept the license agreement
-      - Choose installation location (default is fine)
-      - Select components:
-        - Make sure "Git LFS (Large File Support)" is checked
-        - Ensure "Add a Git Bash Profile to Windows Terminal" is selected
-        - Keep "Associate .git* files with default editor" checked
-      - Choose default editor (Notepad is safest, or select your preferred editor)
-      - For "Adjusting the name of the initial branch in new repositories":
-        - Choose "Let Git decide" or "Override to main" (recommended)
-      - For PATH environment:
-        - Select "Git from the command line and also from 3rd-party software" (recommended)
-      - For SSH executable:
-        - Choose "Use bundled OpenSSH"
-      - For HTTPS transport:
-        - Choose "Use the OpenSSL library"
-      - For line ending conversions:
-        - Choose "Checkout Windows-style, commit Unix-style line endings"
-      - For terminal emulator:
-        - Choose "Use MinTTY"
-      - For default behavior of `git pull`:
-        - Choose "Default (fast-forward or merge)"
-      - For credential helper:
-        - Choose "Git Credential Manager"
-      - For extra options:
-        - Keep "Enable file system caching" checked
-        - Optionally enable experimental features if desired
-   4. Click "Install" and wait for installation to complete
-   5. Finish the installation
-   6. Verify installation by opening Command Prompt and running:
-      ```
-      git --version
-      git lfs --version
-      ```
-      Both commands should return version information
+1. Download Git for Windows from [Git-SCM](https://git-scm.com/download/win)
+   - The download should start automatically for 64-bit Windows
+2. Run the downloaded installer (Git-X.XX.X-64-bit.exe)
+3. Installation options (recommended settings):
+   - Accept the license agreement
+   - Choose installation location (default is fine)
+   - Select components:
+     - Make sure "Git LFS (Large File Support)" is checked
+     - Ensure "Add a Git Bash Profile to Windows Terminal" is selected
+     - Keep "Associate .git* files with default editor" checked
+   - Choose default editor (Notepad is safest, or select your preferred editor)
+   - For "Adjusting the name of the initial branch in new repositories":
+     - Choose "Let Git decide" or "Override to main" (recommended)
+   - For PATH environment:
+     - Select "Git from the command line and also from 3rd-party software" (recommended)
+   - For SSH executable:
+     - Choose "Use bundled OpenSSH"
+   - For HTTPS transport:
+     - Choose "Use the OpenSSL library"
+   - For line ending conversions:
+     - Choose "Checkout Windows-style, commit Unix-style line endings"
+   - For terminal emulator:
+     - Choose "Use MinTTY"
+   - For default behavior of `git pull`:
+     - Choose "Default (fast-forward or merge)"
+   - For credential helper:
+     - Choose "Git Credential Manager"
+   - For extra options:
+     - Keep "Enable file system caching" checked
+     - Optionally enable experimental features if desired
+4. Click "Install" and wait for installation to complete
+5. Finish the installation
+6. Verify installation by opening Command Prompt and running:
+   ```
+   git --version
+   git lfs --version
+   ```
+   Both commands should return version information
 
 #### 4. Install CUDA Toolkit 11.8 and cuDNN
-   1. **Install CUDA Toolkit 11.8:**
-     - Visit the [NVIDIA CUDA Toolkit 11.8 Archive](https://developer.nvidia.com/cuda-11-8-0-download-archive)
-     - Select your configuration:
-       - Operating System: Windows
-       - Architecture: x86_64
-       - Version: 11 or your specific Windows version
-       - Installer Type: exe (local)
-     - Download the installer (approximately 3GB)
-     - Before installation:
-       - Close all NVIDIA applications
-       - Ensure you have the latest NVIDIA drivers installed
-     - Run the downloaded installer
-     - Choose "Agree and Continue" to accept the license agreement
-     - Choose "Express (Recommended)" installation type
-     - CUDA Visual Studio Integration
-       - If the message "No supported version of Visual Studio was found." appears
-         - Check "I understand, and wish to continue with the installation regardless."
-         - Select "Next"
-         - Select "Next" after the Nsight Visual Studio Edition Summary
-     - Wait for installation to complete (may take 10-20 minutes)
-     - Check desired options and close the installer
-     - Restart your computer when prompted
+1. **Install CUDA Toolkit 11.8:**
+   - Visit the [NVIDIA CUDA Toolkit 11.8 Archive](https://developer.nvidia.com/cuda-11-8-0-download-archive)
+   - Select your configuration:
+     - Operating System: Windows
+     - Architecture: x86_64
+     - Version: 11 or your specific Windows version
+     - Installer Type: exe (local)
+   - Download the installer (approximately 3GB)
+   - Before installation:
+     - Close all NVIDIA applications
+     - Ensure you have the latest NVIDIA drivers installed
+   - Run the downloaded installer
+   - Choose "Agree and Continue" to accept the license agreement
+   - Choose "Express (Recommended)" installation type
+   - CUDA Visual Studio Integration
+     - If the message "No supported version of Visual Studio was found." appears
+       - Check "I understand, and wish to continue with the installation regardless."
+       - Select "Next"
+       - Select "Next" after the Nsight Visual Studio Edition Summary
+   - Wait for installation to complete (may take 10-20 minutes)
+   - Check desired options and close the installer
+   - Restart your computer when prompted
 
-   2. **Install cuDNN 8.9.7, for CUDA 11.8:**
-     - Visit the [NVIDIA cuDNN-Archive](https://developer.nvidia.com/rdp/cudnn-archive)
-     - Look for "Download cuDNN v8.x.x (CUDA 11.x)" that's compatible with CUDA 11.8
-     - Download "Local Installer for Windows (zip)"
-     - Extract the downloaded zip file
-     - Copy the extracted files to your CUDA installation:
-       - Copy `cuda\bin\cudnn*.dll` to `C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v11.8\bin\`
-       - Copy `cuda\include\cudnn*.h` to `C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v11.8\include\`
-       - Copy `cuda\lib\x64\cudnn*.lib` to `C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v11.8\lib\x64\`
+2. **Install cuDNN 8.9.7 for CUDA 11.8:**
+   - Visit the [NVIDIA cuDNN Archive](https://developer.nvidia.com/rdp/cudnn-archive)
+   - Look for "Download cuDNN v8.9.7 (October 11, 2023), for CUDA 11.x"
+   - Download "Local Installer for Windows (zip)"
+   - Extract the downloaded zip file
+   - Copy the extracted files to your CUDA installation:
+     - Copy `cuda\bin\cudnn*.dll` to `C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v11.8\bin\`
+     - Copy `cuda\include\cudnn*.h` to `C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v11.8\include\`
+     - Copy `cuda\lib\x64\cudnn*.lib` to `C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v11.8\lib\x64\`
 
-   3. **Verify installation:**
-     - Open Command Prompt
-     - Check CUDA version:
-       ```
-       nvcc --version
-       ```
-       Look for "Cuda compilation tools, release 11.8"
-     - Verify CUDA samples:
-       ```
-       cd "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v11.8\extras\demo_suite"
-       deviceQuery.exe
-       ```
-       You should see your GPU information and "Result = PASS"
+3. **Verify installation:**
+   - Open Command Prompt
+   - Check CUDA version:
+     ```
+     nvcc --version
+     ```
+     Look for "Cuda compilation tools, release 11.8"
+   - Verify CUDA samples:
+     ```
+     cd "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v11.8\extras\demo_suite"
+     deviceQuery.exe
+     ```
+     You should see your GPU information and "Result = PASS"
 
 #### 5. Clone and Install Maggie
-   1. Open Command Prompt with administrative privileges
-   2. Clone the repository:
-      ```
-      git clone https://github.com/your-org/maggie.git
-      cd maggie
-      ```
-   3. Run the installation script:
-      ```
-      python install.py
-      ```
-   4. Follow the on-screen prompts
+1. Open Command Prompt with administrative privileges
+2. Clone the repository:
+   ```
+   git clone https://github.com/formosa/maggie.git
+   cd maggie
+   ```
+3. Run the installation script:
+
+   **Available installation options:**
+   
+   | Option | Description |
+   |--------|-------------|
+   | `--verbose` | Enable detailed output during installation |
+   | `--cpu-only` | Install CPU-only version (no GPU acceleration) |
+   | `--skip-models` | Skip downloading large LLM models (~5GB) |
+   | `--skip-problematic` | Skip dependencies that may cause installation issues |
+   | `--force-reinstall` | Force reinstallation of already installed packages |
+   
+   **Example commands:**
+   Verbose installation with all details displayed:
+   ```
+   python install.py --verbose
+   ```
+
+4. Follow the on-screen prompts
 
 ### Linux Installation
 
@@ -412,7 +430,7 @@ python3.10 --version
 #### 2. Install Build Tools and Dependencies
 ```bash
 # Install build essentials and portaudio (for PyAudio)
-sudo apt install build-essential gcc-11 g++-11 dkms portaudio19-dev -y
+sudo apt install build-essential gcc-11 g++-11 dkms portaudio19-dev python3-pyaudio -y
 
 # Install Git and Git LFS
 sudo apt install git git-lfs -y
@@ -436,24 +454,54 @@ echo 'export LD_LIBRARY_PATH=/usr/local/cuda-11.8/lib64${LD_LIBRARY_PATH:+:${LD_
 source ~/.bashrc
 ```
 
-For cuDNN, download from [NVIDIA cuDNN Downloads](https://developer.nvidia.com/cudnn) (requires NVIDIA Developer account) and follow the installation instructions for Linux.
+For cuDNN installation on Linux, download from [NVIDIA cuDNN Downloads](https://developer.nvidia.com/cudnn) (requires NVIDIA Developer account) and follow these steps:
+
+```bash
+# After downloading cuDNN (cudnn-linux-x86_64-8.9.7.29_cuda11-archive.tar.xz)
+tar -xf cudnn-linux-x86_64-8.9.7.29_cuda11-archive.tar.xz
+sudo cp cudnn-linux-x86_64-8.9.7.29_cuda11-archive/include/cudnn*.h /usr/local/cuda-11.8/include/
+sudo cp cudnn-linux-x86_64-8.9.7.29_cuda11-archive/lib/libcudnn* /usr/local/cuda-11.8/lib64/
+sudo chmod a+r /usr/local/cuda-11.8/include/cudnn*.h /usr/local/cuda-11.8/lib64/libcudnn*
+```
 
 #### 4. Clone and Install Maggie
-```bash
-# Clone repository
-git clone https://github.com/your-org/maggie.git
-cd maggie
+   1. Clone the repository:
+     ```bash
+     # Clone repository
+     git clone https://github.com/formosa/maggie.git
+     cd maggie
+     ```
+   2. Run the installation script:
 
-# Run installation script
-python3.10 install.py
-```
+    **Available installation options:**
+
+    | Option | Description |
+    |--------|-------------|
+    | `--verbose` | Enable detailed output during installation |
+    | `--cpu-only` | Install CPU-only version (no GPU acceleration) |
+    | `--skip-models` | Skip downloading large LLM models (~5GB) |
+    | `--skip-problematic` | Skip dependencies that may cause installation issues |
+    | `--force-reinstall` | Force reinstallation of already installed packages |
+      
+      **Example commands:**
+      Verbose installation with all details displayed:
+      ```bash
+      # Run installation script
+      python3.10 install.py --verbose
+      ```
 
 ## Post-Installation
 
 ### 1. Obtain Picovoice Access Key
 1. Register at [Picovoice Console](https://console.picovoice.ai/)
-2. Create a free access key
-3. Edit `config.yaml` and add your key in the `wake_word.porcupine_access_key` field
+2. Create a free access key (Console → Access Keys → Create Access Key)
+3. Edit `config.yaml` and add your key in the `wake_word.porcupine_access_key` field:
+   ```yaml
+   wake_word:
+     sensitivity: 0.5
+     keyword_path: null
+     porcupine_access_key: "YOUR_ACCESS_KEY_HERE"  # Replace with your key
+   ```
 
 ### 2. Verify Installation
 ```bash
@@ -469,13 +517,52 @@ python main.py --verify
 ```
 
 ### 3. Modify Configuration (Optional)
-The `config.yaml` file contains all configuration options:
+The `config.yaml` file contains all configuration options. Key sections include:
 
-- **Wake Word Settings**: Sensitivity, access key
-- **Speech Recognition**: Model size, compute type
-- **Text-to-Speech**: Voice model, sample rate
-- **LLM Settings**: Model path, GPU layers, precision
-- **System Settings**: Inactivity timeout, threading, memory usage
+- **Wake Word Settings**: 
+  ```yaml
+  wake_word:
+    sensitivity: 0.5         # Higher values = more sensitive detection
+    keyword_path: null       # Custom keyword model path (optional)
+    porcupine_access_key: "" # Your Picovoice access key (required)
+    cpu_threshold: 5.0       # Max CPU usage percentage
+  ```
+
+- **Speech Recognition**: 
+  ```yaml
+  speech:
+    whisper:
+      model_size: "base"     # Options: tiny, base, small, medium
+      compute_type: "float16" # Optimized for RTX 3080
+  ```
+
+- **Text-to-Speech**: 
+  ```yaml
+  speech:
+    tts:
+      voice_model: "af_heart" # Default voice model
+      model_path: "models/tts" 
+      sample_rate: 22050
+  ```
+
+- **LLM Settings**: 
+  ```yaml
+  llm:
+    model_path: "models/mistral-7b-instruct-v0.3-GPTQ-4bit"
+    model_type: "mistral"
+    gpu_layers: 32           # Optimized for 10GB VRAM
+    gpu_layer_auto_adjust: true
+  ```
+
+- **System Settings**: 
+  ```yaml
+  inactivity_timeout: 300    # 5 minutes in seconds
+  threading:
+    max_workers: 8           # Optimized for Ryzen 9 5900X
+  memory:
+    max_percent: 75          # Use up to 75% of system memory
+    model_unload_threshold: 85
+  ```
 
 ### 4. Start Maggie
 
@@ -500,10 +587,10 @@ Maggie implements a sophisticated Finite State Machine (FSM) architecture with t
    * LLM loaded but not actively processing
    * Inactivity timer running (defaults to 5 minutes)
 
-3. **ACTIVE**: Processing commands and running utilities
+3. **ACTIVE**: Processing commands and running extensions
    * Full resource utilization
    * Actively executing voice commands
-   * Utility modules engaged as needed
+   * Extension modules engaged as needed
 
 4. **CLEANUP**: Resource management state
    * Releasing system resources
@@ -521,6 +608,7 @@ Maggie implements a sophisticated Finite State Machine (FSM) architecture with t
    * Listens for "Maggie" wake word
    * Low CPU utilization in idle state (< 5%)
    * Customizable sensitivity
+   * Powered by Picovoice Porcupine engine
 
 2. **Speech Recognition**
    * Local Whisper model for privacy
@@ -532,10 +620,10 @@ Maggie implements a sophisticated Finite State Machine (FSM) architecture with t
      * medium: Higher accuracy, higher resource usage
 
 3. **Text-to-Speech**
-   * Local Piper TTS for voice synthesis
+   * Local Kokoro TTS for voice synthesis
    * Low-latency audio generation
    * Caching system for repeated phrases
-   * Support for different voice models
+   * Support for the af_heart voice model by default
 
 4. **Language Model Integration**
    * Local Mistral 7B Instruct model
@@ -543,7 +631,7 @@ Maggie implements a sophisticated Finite State Machine (FSM) architecture with t
    * Dynamic GPU memory management
    * Intelligent context handling
 
-5. **Recipe Creator Utility**
+5. **Recipe Creator Extension**
    * Speech-to-document workflow
    * Natural language recipe interpretation
    * Structured document generation
@@ -553,7 +641,7 @@ Maggie implements a sophisticated Finite State Machine (FSM) architecture with t
    * Status monitoring and visualization
    * Event logging and history
    * Command buttons for common operations
-   * Visual state indication
+   * Visual state indication with color coding
 
 ## Example Usage
 
@@ -603,7 +691,7 @@ Maggie implements a sophisticated Finite State Machine (FSM) architecture with t
 * **System Process**:
   1. Speech recognition captures and processes command using Whisper
   2. System transitions from READY to ACTIVE state
-  3. Recipe Creator utility initializes in a dedicated thread
+  3. Recipe Creator extension initializes in a dedicated thread
   4. Multi-stage workflow begins:
   
      **Stage 1: Recipe Name**
@@ -627,10 +715,36 @@ Maggie implements a sophisticated Finite State Machine (FSM) architecture with t
        Drop by rounded tablespoons onto ungreased baking sheets. Bake for 9 to 11 minutes
        until golden brown. Cool on wire racks."
        ```
-     * System processes input for approximately 30 seconds
+     * System processes input for approximately 5-30 seconds
   
      **Stage 3: Document Creation**
-     * System extracts structured data using LLM processing
+     * System extracts structured data using LLM processing:
+       ```
+       INGREDIENTS:
+       - 2 cups all-purpose flour
+       - 1 teaspoon baking soda
+       - 1/2 teaspoon salt
+       - 3/4 cup unsalted butter
+       - 3/4 cup brown sugar
+       - 1/2 cup white sugar
+       - 1 egg
+       - 1 teaspoon vanilla extract
+       - 2 cups chocolate chips
+       
+       STEPS:
+       1. Preheat oven to 375 degrees Fahrenheit.
+       2. In a small bowl, mix flour, baking soda, and salt.
+       3. In a large bowl, cream butter and sugars until fluffy.
+       4. Beat in egg and vanilla.
+       5. Gradually add dry ingredients.
+       6. Stir in chocolate chips.
+       7. Drop by rounded tablespoons onto ungreased baking sheets.
+       8. Bake for 9 to 11 minutes until golden brown.
+       9. Cool on wire racks.
+       
+       NOTES:
+       For softer cookies, reduce baking time by 1-2 minutes. Store in an airtight container up to 1 week.
+       ```
      * Creates formatted document with proper sections
      * Saves file to recipes folder with timestamp (e.g., "Chocolate_Chip_Cookies_1716249871.docx")
   
@@ -699,13 +813,13 @@ Maggie implements a sophisticated Finite State Machine (FSM) architecture with t
 | "Maggie" | IDLE | Wake word to activate assistant | Audio: "Ready for your command" | - Primary keyword model trained on diverse speakers<br>- Detection sensitivity configurable (0.0-1.0)<br>- 98.7% accuracy with sensitivity 0.5 |
 | "Sleep" or "Go to sleep" | READY, ACTIVE | Return to IDLE state and release resources | Audio: "Going to sleep" | - Releases ~7GB GPU memory<br>- Terminates speech recognition<br>- Returns to ~1% CPU usage |
 | "Shutdown" or "Turn off" | Any | Fully close the application | Audio: "Shutting down" | - Complete resource cleanup<br>- Proper thread termination<br>- Closes application process |
-| "Cancel" | ACTIVE | Abort current operation | Audio: "Operation cancelled" | - Thread-safe operation termination<br>- Returns to READY state<br>- Frees utility-specific resources |
+| "Cancel" | ACTIVE | Abort current operation | Audio: "Operation cancelled" | - Thread-safe operation termination<br>- Returns to READY state<br>- Frees extension-specific resources |
 
 #### Recipe Creator Workflow Commands
 
 | Command | Context | Description | Expected Response | Technical Notes |
 |---------|---------|-------------|-------------------|----------------|
-| "New recipe" | READY | Start the Recipe Creator utility | Audio: "Starting recipe creator. Let's create a new recipe." | - Initializes RecipeCreator thread<br>- Transitions to ACTIVE state<br>- Activates extended listening mode |
+| "New recipe" | READY | Start the Recipe Creator extension | Audio: "Starting recipe creator. Let's create a new recipe." | - Initializes RecipeCreator thread<br>- Transitions to ACTIVE state<br>- Activates extended listening mode |
 | "[Recipe name]" | When prompted for name | Provide a name for the recipe (e.g., "Banana Bread") | Audio: "I heard [name]. Is that correct?" | - Uses Whisper for accurate transcription<br>- Filters common speech artifacts<br>- Prepares for confirmation step |
 | "Yes" or "Correct" | During name confirmation | Confirm the recognized name | Audio: "Please describe the recipe, including ingredients and steps." | - Advances workflow to description stage<br>- Records name in RecipeData structure<br>- Prepares for extended listening |
 | "No" or "Wrong" | During name confirmation | Reject the recognized name | Audio: "Let's try again. What would you like to name this recipe?" | - Resets name field<br>- Restarts name collection step<br>- Improves recognition parameters |
@@ -717,7 +831,7 @@ Maggie implements a sophisticated Finite State Machine (FSM) architecture with t
 |---------|----------|----------|-------------------|--------------------------|
 | Sleep Button | Bottom control panel | Equivalent to saying "Sleep" | Alt+S | - Triggers FSM transition to CLEANUP<br>- Implements same resource cleanup as voice command<br>- Thread-safe implementation |
 | Shutdown Button | Bottom control panel | Equivalent to saying "Shutdown" | Alt+Q | - Triggers application termination<br>- Ensures proper resource cleanup<br>- Closes all threads gracefully |
-| Recipe Creator Button | Utilities panel | Equivalent to saying "New recipe" | Alt+R | - Initializes RecipeCreator utility<br>- Same workflow as voice activation<br>- Updates status display |
+| Recipe Creator Button | Extensions panel | Equivalent to saying "New recipe" | Alt+R | - Initializes RecipeCreator extension<br>- Same workflow as voice activation<br>- Updates status display |
 | Status Display | Top of right panel | Shows current state with color coding | N/A | - Real-time FSM state visualization<br>- Color scheme:<br>  • IDLE: Light gray<br>  • READY: Light green<br>  • ACTIVE: Yellow<br>  • BUSY: Orange<br>  • CLEANUP: Pink<br>  • SHUTDOWN: Red |
 | Chat Log Tab | Left panel tabbed view | Shows conversation history | Alt+1 | - Timestamps all interactions<br>- Color-coded by speaker<br>- Searchable history |
 | Event Log Tab | Left panel tabbed view | Shows system events and transitions | Alt+2 | - Detailed system event tracking<br>- Includes state transitions<br>- Timestamps for performance analysis |
@@ -744,6 +858,7 @@ The system also supports combined control methods:
 | `--verify` | Verify system configuration | `python main.py --verify` |
 | `--optimize` | Optimize for detected hardware | `python main.py --optimize` |
 | `--create-template` | Create recipe template | `python main.py --create-template` |
+| `--cpu-only` | Run without GPU acceleration | `python main.py --cpu-only` |
 
 ## User Reference Materials
 
@@ -754,16 +869,25 @@ For best performance with your Ryzen 9 5900X and RTX 3080:
 1. **Windows Power Plan**:
    * Set to "High Performance" or "Ultimate Performance"
    * Control Panel → Power Options → High Performance
+   * Or use PowerShell: `powercfg /setactive 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c`
 
 2. **NVIDIA Control Panel Settings**:
    * Power Management Mode: "Prefer Maximum Performance"
    * Threaded Optimization: "On"
    * CUDA - GPUs: "All"
+   * Preferred graphics processor: "High-performance NVIDIA processor"
 
 3. **Audio Setup**:
    * Use a clear, noise-free microphone
    * Position approximately 12-18 inches from face
-   * Calibrate microphone levels in Windows Sound settings
+   * Calibrate microphone levels in Windows Sound settings:
+     * Right-click sound icon → Sound settings → Input → Device properties
+     * Test microphone and adjust input volume to 70-90%
+
+4. **System Optimization**:
+   * Close resource-intensive background applications
+   * Disable unnecessary startup programs
+   * Ensure adequate system cooling for sustained performance
 
 ### Troubleshooting Common Issues
 
@@ -833,7 +957,10 @@ For best performance with your Ryzen 9 5900X and RTX 3080:
     ```
   * **Solution 2**: Monitor and free VRAM
     * Close other GPU applications (especially browsers, games)
-    * Use NVIDIA-SMI to check VRAM usage
+    * Use NVIDIA-SMI to check VRAM usage:
+      ```
+      nvidia-smi
+      ```
     * Restart application to clear GPU memory
   * **Solution 3**: Implement more aggressive memory management
     ```yaml
@@ -853,7 +980,7 @@ For best performance with your Ryzen 9 5900X and RTX 3080:
     * Update to latest NVIDIA Game Ready Driver
     * Disable background GPU processes
 
-#### 4. Recipe Creation and Utility Issues
+#### 4. Recipe Creation and Extension Issues
 
 * **Issue**: Recipe ingredients not properly extracted
   * **Solution 1**: Use structured speech patterns
@@ -878,7 +1005,10 @@ For best performance with your Ryzen 9 5900X and RTX 3080:
   * **Solution 3**: Review error logs
     * Check GUI Error Log tab
     * Look for python-docx specific errors
-    * Verify docx dependencies are installed correctly
+    * Verify docx dependencies are installed correctly:
+      ```
+      pip install python-docx>=0.8.11
+      ```
 
 ## Developer Resources
 
@@ -887,16 +1017,16 @@ For best performance with your Ryzen 9 5900X and RTX 3080:
 Maggie employs a sophisticated event-driven architecture with these key components:
 
 1. **Finite State Machine (FSM)**:
-   * Core state management using the transitions library
-   * Event-driven state transitions
-   * State-specific behavior encapsulation
+   * Core state management (IDLE, READY, ACTIVE, CLEANUP, SHUTDOWN)
+   * Event-driven state transitions with `StateTransition` data class
+   * State-specific behavior encapsulation with handler methods
    * Thread-safe operation with explicit locks
 
 2. **Event Bus System**:
-   * Centralized publisher-subscriber pattern implementation
-   * Priority-based event handling
+   * Centralized publisher-subscriber pattern implementation in `EventBus` class
+   * Priority-based event handling with queue
    * Thread-safe event queue management
-   * Asynchronous event processing
+   * Asynchronous event processing in worker thread
 
 3. **Component Management**:
    * Dependency injection for component references
@@ -905,7 +1035,7 @@ Maggie employs a sophisticated event-driven architecture with these key componen
    * Thread pool execution with optimized worker count
 
 4. **Hardware Optimization**:
-   * Dynamic configuration based on detected hardware
+   * Dynamic configuration based on detected hardware (in `HardwareManager`)
    * Specific optimizations for Ryzen 9 5900X:
      * Thread affinity targeting first 8 cores
      * Process priority management for responsiveness
@@ -917,59 +1047,62 @@ Maggie employs a sophisticated event-driven architecture with these key componen
 
 ### Core Classes and Relationships
 
-1. **MaggieCore** (`maggie.py`):
+1. **MaggieAI** (`maggie/core/app.py`):
    * Central control class managing the FSM
    * Coordinates component interactions
    * Manages system lifecycle
-   * Handles state transitions
+   * Handles state transitions with `_transition_to()`
 
-2. **EventBus** (`maggie.py`):
+2. **EventBus** (`maggie/core/app.py`):
    * Implements publisher-subscriber pattern
    * Enables decoupled component communication
    * Handles event prioritization and distribution
    * Manages asynchronous event processing
 
-3. **HardwareManager** (`hardware_manager.py`):
+3. **HardwareManager** (`maggie/utils/hardware/manager.py`):
    * Detects and analyzes system capabilities
    * Creates optimization profiles
    * Monitors resource utilization
    * Provides configuration recommendations
 
-4. **ConfigManager** (`configuration_manager.py`):
+4. **ConfigManager** (`maggie/utils/config/manager.py`):
    * Manages configuration loading and validation
    * Implements configuration recovery mechanisms
    * Applies hardware-specific optimizations
    * Ensures configuration persistence
 
-5. **SpeechProcessor**:
-   * Handles speech recognition via Whisper
-   * Manages audio input and processing
-   * Implements recognition error handling
-   * Provides timeout and cancellation support
+5. **ExtensionBase** (`maggie/extensions/base.py`):
+   * Abstract base class for all extensions
+   * Defines standard extension interface
+   * Implements common extension behaviors
+   * Provides state management for extensions
 
-6. **LLMProcessor**:
-   * Manages language model inference
-   * Handles model loading/unloading
-   * Implements efficient text generation
-   * Manages GPU memory utilization
+### Developing Custom Extensions
 
-7. **ExtensionBase** (`utils/utility_base.py`):
-   * Abstract base class for all utilities
-   * Defines standard utility interface
-   * Implements common utility behaviors
-   * Provides state management for utilities
+To extend Maggie with custom extensions, follow these steps:
 
-### Developing Custom Utilities
+1. **Create Extension Directory Structure**:
+   ```
+   maggie/extensions/my_extension/
+   ├── __init__.py
+   ├── my_extension.py
+   ├── config.py
+   └── requirements.txt
+   ```
 
-To extend Maggie with custom utilities, follow these steps:
+2. **Use Extension Manager to Create Boilerplate**:
+   ```bash
+   # While in the Maggie directory with venv activated
+   python -m scripts.extension_manager create my_extension
+   ```
 
-1. **Create Utility Class**:
+3. **Implement Extension Class**:
    ```python
-   from utils.utility_base import ExtensionBase
+   from maggie.extensions.base import ExtensionBase
    
-   class MyCustomUtility(ExtensionBase):
+   class MyCustomExtension(ExtensionBase):
        """
-       Custom utility implementation.
+       Custom extension implementation.
        
        Parameters
        ----------
@@ -981,7 +1114,7 @@ To extend Maggie with custom utilities, follow these steps:
        
        def __init__(self, event_bus, config: Dict[str, Any]):
            """
-           Initialize the custom utility.
+           Initialize the custom extension.
            
            Parameters
            ----------
@@ -997,34 +1130,40 @@ To extend Maggie with custom utilities, follow these steps:
        
        def get_trigger(self) -> str:
            """
-           Get the trigger phrase for this utility.
+           Get the trigger phrase for this extension.
            
            Returns
            -------
            str
-               Trigger phrase that activates this utility
+               Trigger phrase that activates this extension
            """
            return "custom command"
        
        def initialize(self) -> bool:
            """
-           Initialize the utility.
+           Initialize the extension.
            
            Returns
            -------
            bool
                True if initialization successful, False otherwise
            """
+           if self._initialized:
+               return True
+               
            try:
                # Acquire component references
-               for component in self.event_bus.subscribers.get("state_changed", []):
-                   if hasattr(component, "required_component"):
-                       self.required_component = component.required_component
-                       break
+               self.speech_processor = self.get_service("speech_processor")
+               self.llm_processor = self.get_service("llm_processor")
+               
+               if not self.speech_processor or not self.llm_processor:
+                   logger.error("Failed to acquire required services")
+                   return False
                
                # Custom initialization logic
                # ...
                
+               self._initialized = True
                return True
            except Exception as e:
                logger.error(f"Error initializing {self.__class__.__name__}: {e}")
@@ -1032,7 +1171,7 @@ To extend Maggie with custom utilities, follow these steps:
        
        def start(self) -> bool:
            """
-           Start the utility workflow.
+           Start the extension workflow.
            
            Returns
            -------
@@ -1057,7 +1196,7 @@ To extend Maggie with custom utilities, follow these steps:
        
        def stop(self) -> bool:
            """
-           Stop the utility.
+           Stop the extension.
            
            Returns
            -------
@@ -1070,7 +1209,7 @@ To extend Maggie with custom utilities, follow these steps:
        
        def process_command(self, command: str) -> bool:
            """
-           Process a command directed to this utility.
+           Process a command directed to this extension.
            
            Parameters
            ----------
@@ -1087,53 +1226,34 @@ To extend Maggie with custom utilities, follow these steps:
        
        def _workflow(self) -> None:
            """
-           Main utility workflow.
+           Main extension workflow.
            
-           Implements the utility's core functionality.
+           Implements the extension's core functionality.
            """
            try:
-               # Utility-specific logic
+               # Extension-specific logic
                # ...
                
                # Signal completion
-               self.event_bus.publish("utility_completed", self.__class__.__name__)
+               self.event_bus.publish("extension_completed", self.__class__.__name__)
            except Exception as e:
                logger.error(f"Error in {self.__class__.__name__} workflow: {e}")
-               self.event_bus.publish("utility_error", self.__class__.__name__)
+               self.event_bus.publish("extension_error", self.__class__.__name__)
            finally:
                self.running = False
    ```
 
-2. **Configure Utility in config.yaml**:
+4. **Configure Extension in config.yaml**:
    ```yaml
-   utilities:
-     my_custom_utility:
+   extensions:
+     my_extension:
        custom_attribute: "custom_value"
        output_dir: "custom_output"
+       enabled: true
    ```
 
-3. **Register Utility in MaggieCore**:
-   ```python
-   def _initialize_utilities(self):
-       """Initialize extension modules based on configuration."""
-       extensions_config = self.config.get("utilities", {})
-       
-       # Load recipe creator if configured
-       if "recipe_creator" in extensions_config:
-           from utils.recipe_creator import RecipeCreator
-           self.utilities["recipe_creator"] = RecipeCreator(
-               self.event_bus, 
-               extensions_config["recipe_creator"]
-           )
-           
-       # Load custom utility if configured
-       if "my_custom_utility" in extensions_config:
-           from utils.my_custom_utility import MyCustomUtility
-           self.utilities["my_custom_utility"] = MyCustomUtility(
-               self.event_bus, 
-               extensions_config["my_custom_utility"]
-           )
-   ```
+5. **Register Extension with Service Locator**:
+   The extension will be automatically discovered and loaded if it follows the correct structure, as the `ExtensionRegistry` class will scan the extensions directory.
 
 ### Event-Driven Communication
 
@@ -1169,9 +1289,10 @@ Communication between components uses the event bus, following these principles:
 4. **Common Event Types**:
    * `"wake_word_detected"`: Wake word detected
    * `"command_detected"`: Speech command recognized
-   * `"state_changed"`: FSM state transition
-   * `"utility_completed"`: Utility finished execution
-   * `"utility_error"`: Error in utility execution
+   * `"state_changed"`: FSM state transition (with StateTransition object)
+   * `"extension_completed"`: Extension finished execution
+   * `"extension_error"`: Error in extension execution
+   * `"inactivity_timeout"`: Inactivity timer triggered
 
 ### Performance Optimization Guidelines
 
@@ -1182,11 +1303,17 @@ When developing extensions for Maggie, follow these optimization guidelines:
    * Limit concurrent threads to 8 for Ryzen 9 5900X
    * Make threads daemon to ensure proper cleanup
    * Use thread names for easier debugging
+   * Use thread-safe communication via event bus
 
 2. **GPU Optimization**:
    * Use float16 precision for Tensor Core acceleration
    * Implement automatic fallback to CPU for memory pressure
-   * Explicitly manage CUDA memory when possible
+   * Explicitly release CUDA memory when possible:
+     ```python
+     import torch
+     if torch.cuda.is_available():
+         torch.cuda.empty_cache()
+     ```
    * Use batched processing when appropriate
 
 3. **Memory Management**:
@@ -1230,7 +1357,7 @@ Maggie uses the Loguru library for comprehensive logging:
    logger.critical("Critical failure")
    
    # Use structured logging with context
-   logger.bind(utility="my_custom_utility").info("Utility-specific log")
+   logger.bind(extension="my_custom_extension").info("Extension-specific log")
    
    # Log exceptions with traceback
    try:
@@ -1245,6 +1372,7 @@ Maggie uses the Loguru library for comprehensive logging:
    * Files rotate at 10MB with 1-week retention
    * Console logs show INFO level by default
    * File logs capture DEBUG level for detailed diagnostics
+   * Check logs/maggie.log for historical information
 
 4. **Debugging Tools**:
    * Use `python main.py --debug` to enable detailed logging
@@ -1254,8 +1382,9 @@ Maggie uses the Loguru library for comprehensive logging:
 
 5. **Performance Profiling**:
    * Monitor CPU usage with Task Manager or htop
-   * Check GPU memory usage with nvidia-smi
+   * Check GPU memory usage with nvidia-smi:
+     ```bash
+     nvidia-smi -l 2  # Real-time updates every 2 seconds
+     ```
    * Use timestamps in logs to identify bottlenecks
    * Look for memory leaks with tools like memory_profiler
-
-By following these guidelines, you can create powerful extensions to Maggie that maintain the system's performance characteristics and integrate seamlessly with its architecture.
