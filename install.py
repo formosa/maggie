@@ -1815,7 +1815,7 @@ if hardware_info['gpu']['is_rtx_3080']:
     config['gpu']['compute_type'] = 'float16'
     config['gpu']['tensor_cores'] = True
     config['gpu']['reserved_memory_mb'] = 512
-elif {str(self.cpu_only).lower()}:
+elif {self.cpu_only}:
     if 'llm' in config:
         config['llm']['gpu_layers'] = 0
     if 'gpu' not in config:
