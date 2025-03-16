@@ -1851,6 +1851,7 @@ os.remove(hardware_file)
         self.color.print("Configuration file created with optimized settings", "green")
         self.color.print("NOTE: You must edit config.yaml to add your Picovoice access key", "yellow")
         return True
+
     
     def _optimize_config_for_hardware(self, config: Dict[str, Any]) -> None:
         """
