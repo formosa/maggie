@@ -1768,13 +1768,17 @@ doc.save("{}")
 
         # Subprocess code to run in virtual environment
         python_cmd = self._get_venv_python()
-        # Use str() to ensure base_dir is a plain string, not a Path object representation
-        escaped_base_dir = str(self.base_dir).replace("'", "\\'")  # Escape single quotes
+        
+        # Fix: Use a properly normalized path without escape sequences
+        normalized_base_dir = os.path.normpath(str(self.base_dir))
+        # Fix: Use raw string for path in Python code
+        base_dir_str = repr(normalized_base_dir)
+
         code = f"""import yaml
 import json
 import os
 
-base_dir = '{escaped_base_dir}'
+base_dir = {base_dir_str}
 config_path = os.path.join(base_dir, 'config.yaml')
 example_path = os.path.join(base_dir, 'config.yaml.example')
 hardware_file = os.path.join(base_dir, 'hardware_info.json')
