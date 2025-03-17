@@ -104,6 +104,11 @@ class MainWindow(QMainWindow):
         # Initialize UI
         self.update_state("IDLE")
         self.log_event("Maggie AI Assistant started")
+
+        # Subscribe to events from MaggieAI
+        self.maggie_ai.event_bus.subscribe("state_changed", self._on_state_changed)
+        self.maggie_ai.event_bus.subscribe("extension_completed", self._on_extension_completed)
+        self.maggie_ai.event_bus.subscribe("extension_error", self._on_extension_error)
         
         # Set keyboard shortcuts
         self.setup_shortcuts()
@@ -289,6 +294,32 @@ class MainWindow(QMainWindow):
         except Exception as e:
             logger.error(f"Error creating extension buttons: {e}")
         
+    def _on_state_changed(self, transition) -> None:
+        """
+        Handle state transition events.
+        
+        Parameters
+        ----------
+        transition : StateTransition
+            Data object containing transition information
+            
+        Returns
+        -------
+        None
+            This method doesn't return anything
+        
+        Notes
+        -----
+        Updates the GUI to reflect the new system state
+        and logs the transition for user awareness
+        """
+        # Update the state display
+        self.update_state(transition.to_state.name)
+        
+        # Log the transition
+        self.log_event(f"State changed: {transition.from_state.name} -> "
+                    f"{transition.to_state.name} (trigger: {transition.trigger})")
+
     def update_state(self, state: str) -> None:
         """
         Update the displayed state.
@@ -453,7 +484,7 @@ class MainWindow(QMainWindow):
         
         logger.info("GUI window closed, shutdown initiated")
 
-    def safe_update_gui(self, func, *args, **kwargs):
+    def safe_update_gui(self, func, *args, **kwargs) -> None:
         """
         Safely update the GUI from another thread.
         
@@ -469,13 +500,77 @@ class MainWindow(QMainWindow):
         Returns
         -------
         None
+            This method doesn't return anything
+        
+        Notes
+        -----
+        Uses Qt's invokeMethod mechanism for thread-safe GUI updates
+        with fallback to direct calls when appropriate
         """
-        from PyQt6.QtCore import QMetaObject, Qt, Q_ARG
+        from PyQt6.QtCore import QMetaObject, Qt, Q_ARG, QVariant
         
         # Convert args to Q_ARG objects
-        q_args = [Q_ARG(type(arg), arg) for arg in args]
+        q_args = []
+        for arg in args:
+            try:
+                # Handle primitive types directly
+                if isinstance(arg, (int, float, bool, str)):
+                    q_args.append(Q_ARG(type(arg), arg))
+                else:
+                    # For complex objects, use QVariant
+                    q_args.append(Q_ARG(QVariant, QVariant(arg)))
+            except Exception as e:
+                logger.debug(f"Error converting argument to Q_ARG: {e}")
+                # Fall back to string conversion
+                q_args.append(Q_ARG(str, str(arg)))
         
         # Invoke the method in the GUI thread
-        QMetaObject.invokeMethod(self, func.__name__, 
-                                Qt.ConnectionType.QueuedConnection, 
-                                *q_args)
+        try:
+            QMetaObject.invokeMethod(
+                self, 
+                func.__name__, 
+                Qt.ConnectionType.QueuedConnection, 
+                *q_args
+            )
+        except Exception as e:
+            logger.error(f"Error invoking GUI method {func.__name__}: {e}")
+            # Fall back to direct call if in same thread
+            if QThread.currentThread() == self.thread():
+                try:
+                    func(*args, **kwargs)
+                except Exception as e2:
+                    logger.error(f"Error calling GUI method directly: {e2}")
+
+    def _on_extension_completed(self, extension_name: str) -> None:
+        """
+        Handle extension completion events.
+        
+        Parameters
+        ----------
+        extension_name : str
+            Name of the completed extension
+            
+        Returns
+        -------
+        None
+            This method doesn't return anything
+        """
+        self.log_event(f"Extension completed: {extension_name}")
+        self.update_state("READY")  # Update to match core state
+
+    def _on_extension_error(self, extension_name: str) -> None:
+        """
+        Handle extension error events.
+        
+        Parameters
+        ----------
+        extension_name : str
+            Name of the extension that encountered an error
+            
+        Returns
+        -------
+        None
+            This method doesn't return anything
+        """
+        self.log_error(f"Error in extension: {extension_name}")
+        self.update_state("READY")  # Update to match core state

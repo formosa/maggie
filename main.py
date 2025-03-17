@@ -924,6 +924,7 @@ def start_maggie(args: argparse.Namespace) -> int:
         try:
             app = QApplication(sys.argv)
             window = MainWindow(maggie)
+            maggie.set_gui(window)  # Add this line to establish bidirectional reference
             window.show()
             return app.exec()
         except Exception as e:

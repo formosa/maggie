@@ -1009,6 +1009,27 @@ class MaggieAI:
                 
         return False
     
+    def set_gui(self, gui) -> None:
+        """
+        Set the GUI instance for this MaggieAI instance.
+        
+        Parameters
+        ----------
+        gui : MainWindow
+            The GUI instance for updating visual elements
+            
+        Returns
+        -------
+        None
+            This method doesn't return anything
+        
+        Notes
+        -----
+        This establishes bidirectional communication between
+        the core and GUI components
+        """
+        self.gui = gui
+
     def update_gui(self, event_type: str, data: Any = None) -> None:
         """
         Update GUI with event data in a thread-safe manner.
