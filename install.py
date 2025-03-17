@@ -29,11 +29,15 @@ Standard installation:
 Verbose installation:
     $ python install.py --verbose
 
-CPU-only installation:
+CPU-only installation (no GPU acceleration):
     $ python install.py --cpu-only
 
 Skip large model downloads:
     $ python install.py --skip-models
+
+Force reinstallation of already installed packages:
+    $ python install.py --force-reinstall
+
 """
 
 # Standard library imports
@@ -1614,7 +1618,7 @@ class MaggieInstaller:
         if self.has_git:
             self.color.print("Downloading Mistral 7B model using Git (this may take a while)...", "cyan")
             returncode, _, _ = self._run_command([
-                "git", "clone", "https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.3-GPTQ",
+                "git", "clone", "https://huggingface.co/neuralmagic/Mistral-7B-Instruct-v0.3-GPTQ-4bit",
                 mistral_dir
             ], capture_output=False)
             
@@ -1634,7 +1638,7 @@ class MaggieInstaller:
         else:
             self.color.print("Git not found, cannot download Mistral model", "red")
             self.color.print("Install Git and rerun installation, or download model manually:", "yellow")
-            self.color.print("https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.3-GPTQ", "yellow")
+            self.color.print("https://huggingface.co/neuralmagic/Mistral-7B-Instruct-v0.3-GPTQ-4bit", "yellow")
             
             # Offer to continue without model
             response = self.color.input(
