@@ -920,7 +920,7 @@ class MaggieAI:
             
     def _run_extension(self, extension_name: str) -> None:
         """
-        Run a extension.
+        Run an extension.
         
         Parameters
         ----------
@@ -940,10 +940,14 @@ class MaggieAI:
             
             if not success:
                 logger.error(f"Failed to start extension: {extension_name}")
+                # Add event publication for extension errors
+                self.event_bus.publish("extension_error", extension_name)
                 self._transition_to(State.READY, f"extension_{extension_name}_failed")
                 
         except Exception as e:
             logger.error(f"Error running extension {extension_name}: {e}")
+            # Add event publication for extension errors
+            self.event_bus.publish("extension_error", extension_name)
             self._transition_to(State.READY, f"extension_{extension_name}_error")
             
     def shutdown(self) -> bool:

@@ -25,7 +25,7 @@ import sys
 import time
 from typing import Dict, Any, Optional, List, Callable
 
-# Third-party imports - Add QThread to imports
+# Third-party imports
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QTextEdit,
     QPushButton, QLabel, QSplitter, QTabWidget, QSizePolicy,
@@ -82,12 +82,11 @@ class MainWindow(QMainWindow):
         self.maggie_ai = maggie_ai
         self.setWindowTitle("Maggie AI Assistant")
         self.setMinimumSize(800, 600)
-        self.is_shutting_down = False  # Missing initialization added
+        self.is_shutting_down = False
         
         # Create central widget and layout
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
-        
         self.main_layout = QVBoxLayout(self.central_widget)
         
         # Create status bar
@@ -331,8 +330,15 @@ class MainWindow(QMainWindow):
                 return
                 
             # Extract state information with defensive coding
-            to_state_name = getattr(transition.to_state, 'name', 'UNKNOWN')
-            from_state_name = getattr(transition.from_state, 'name', 'UNKNOWN')
+            to_state = getattr(transition, 'to_state', None)
+            from_state = getattr(transition, 'from_state', None)
+            
+            if to_state is None or from_state is None:
+                logger.error("Invalid state transition object: to_state or from_state is None")
+                return
+                
+            to_state_name = getattr(to_state, 'name', 'UNKNOWN')
+            from_state_name = getattr(from_state, 'name', 'UNKNOWN')
             trigger = getattr(transition, 'trigger', 'UNKNOWN')
             
             # Update the state display
@@ -345,31 +351,31 @@ class MainWindow(QMainWindow):
             logger.error(f"Error handling state transition: {e}")
 
     def _cleanup_extension_buttons(self) -> None:
-            """
-            Clean up extension buttons before recreating them.
-            
-            Parameters
-            ----------
-            None
-            
-            Returns
-            -------
-            None
-                This method doesn't return anything
-            
-            Notes
-            -----
-            Removes existing buttons from the layout and properly
-            disposes of them to prevent memory leaks
-            """
-            try:
-                if hasattr(self, 'extension_buttons'):
-                    for button in self.extension_buttons.values():
-                        self.extensions_layout.removeWidget(button)
-                        button.deleteLater()
-                    self.extension_buttons.clear()
-            except Exception as e:
-                logger.error(f"Error cleaning up extension buttons: {e}")
+        """
+        Clean up extension buttons before recreating them.
+        
+        Parameters
+        ----------
+        None
+        
+        Returns
+        -------
+        None
+            This method doesn't return anything
+        
+        Notes
+        -----
+        Removes existing buttons from the layout and properly
+        disposes of them to prevent memory leaks
+        """
+        try:
+            if hasattr(self, 'extension_buttons'):
+                for button in self.extension_buttons.values():
+                    self.extensions_layout.removeWidget(button)
+                    button.deleteLater()
+                self.extension_buttons.clear()
+        except Exception as e:
+            logger.error(f"Error cleaning up extension buttons: {e}")
 
     def update_state(self, state: str) -> None:
         """
