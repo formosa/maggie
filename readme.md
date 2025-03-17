@@ -23,12 +23,14 @@
       - [2. Install Visual C++ Build Tools](#2-install-visual-c-build-tools)
       - [3. Install Git](#3-install-git)
       - [4. Install CUDA Toolkit 11.8 and cuDNN](#4-install-cuda-toolkit-118-and-cudnn)
-      - [5. Clone and Install Maggie](#5-clone-and-install-maggie)
+      - [5. Configure Git Credentials for Model Download](#5-configure-git-credentials-for-model-download)
+      - [6. Clone and Install Maggie](#6-clone-and-install-maggie)
     - [Linux Installation](#linux-installation)
       - [1. Install Python 3.10.x](#1-install-python-310x-1)
       - [2. Install Build Tools and Dependencies](#2-install-build-tools-and-dependencies)
       - [3. Install CUDA Toolkit 11.8 and cuDNN](#3-install-cuda-toolkit-118-and-cudnn)
-      - [4. Clone and Install Maggie](#4-clone-and-install-maggie)
+      - [4. Configure Git Credentials for Model Download](#4-configure-git-credentials-for-model-download)
+      - [5. Clone and Install Maggie](#5-clone-and-install-maggie)
   - [Post-Installation](#post-installation)
     - [1. Obtain Picovoice Access Key](#1-obtain-picovoice-access-key)
     - [2. Verify Installation](#2-verify-installation)
@@ -378,6 +380,155 @@ deviceQuery.exe
 ```
      You should see your GPU information and "Result = PASS"
 
+#### 5. Configure Git Credentials for Model Download
+Before cloning the repository, you need to set up Git credentials for downloading models from Hugging Face:
+
+1. **Configure Git identity**:
+```shell
+git config --global user.name "HuggingFormosa"
+git config --global user.email "emailformosa@gmail.com"
+```
+
+2. **Create a Hugging Face access token**:
+   - Create a Hugging Face account at [https://huggingface.co/](https://huggingface.co/)
+   - Go to Settings → Access Tokens → New Token
+   - Name your token (e.g., "Maggie Download")
+   - Select **only the "Read" permission** - this is sufficient for downloading models
+   - Click "Generate a token"
+   - Save this token securely - you'll need it during installation
+
+3. **Configure Git credential helper**:
+```shell
+git config --global credential.helper store
+```
+
+4. **Test your credentials** (optional):
+```shell
+git clone https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.3-GPTQ
+```
+   - When prompted, enter your Hugging Face username
+   - Use your access token as the password
+
+#### 6. Clone and Install Maggie
+   1. Open Command Prompt with administrative privileges
+   2. Clone the repository:
+```shell
+git clone https://github.com/formosa/maggie.git
+cd maggie
+```
+   3. Run the installation script:
+      **Available installation options:**
+      
+      | Option | Description |
+      |--------|-------------|
+      | `--verbose` | Enable detailed output during installation |
+      | `--cpu-only` | Install CPU-only version (no GPU acceleration) |
+      | `--skip-models` | Skip downloading large LLM models (~5GB) |
+      | `--skip-problematic` | Skip dependencies that may cause installation issues |
+      | `--force-reinstall` | Force reinstallation of already installed packages |
+      
+      **Example commands:**
+      
+      Verbose installation with all details displayed:
+```shell
+python install.py --verbose
+```
+
+      If you're having issues with Git credentials for model downloads:
+```shell
+python install.py --skip-models
+```
+      You can manually download the models later if needed.
+
+### Linux Installation
+
+#### 1. Install Python 3.10.x
+```bash
+# Update package index
+sudo apt update
+
+# Install software-properties-common
+sudo apt install software-properties-common -y
+
+# Add deadsnakes PPA
+sudo add-apt-repository ppa:deadsnakes/ppa -y
+
+# Update package index again
+sudo apt update
+
+# Install Python 3.10 and development packages
+sudo apt install python3.10 python3.10-venv python3.10-dev -y
+
+# Verify installation
+python3.10 --version
+```
+
+#### 2. Install Build Tools and Dependencies
+```bash
+# Install build essentials and portaudio (for PyAudio)
+sudo apt install build-essential gcc-11 g++-11 dkms portaudio19-dev python3-pyaudio -y
+
+# Install Git and Git LFS
+sudo apt install git git-lfs -y
+git lfs install
+```
+
+#### 3. Install CUDA Toolkit 11.8 and cuDNN
+```bash
+# Download CUDA repository package
+wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-ubuntu2204.pin
+sudo mv cuda-ubuntu2204.pin /etc/apt/preferences.d/cuda-repository-pin-600
+wget https://developer.download.nvidia.com/compute/cuda/11.8.0/local_installers/cuda-repo-ubuntu2204-11-8-local_11.8.0-520.61.05-1_amd64.deb
+sudo dpkg -i cuda-repo-ubuntu2204-11-8-local_11.8.0-520.61.05-1_amd64.deb
+sudo cp /var/cuda-repo-ubuntu2204-11-8-local/cuda-*-keyring.gpg /usr/share/keyrings/
+sudo apt-get update
+sudo apt-get -y install cuda-11-8
+
+# Set environment variables
+echo 'export PATH=/usr/local/cuda-11.8/bin${PATH:+:${PATH}}' >> ~/.bashrc
+echo 'export LD_LIBRARY_PATH=/usr/local/cuda-11.8/lib64${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}' >> ~/.bashrc
+source ~/.bashrc
+```
+
+For cuDNN installation on Linux, download from [NVIDIA cuDNN Downloads](https://developer.nvidia.com/cudnn) (requires NVIDIA Developer account) and follow these steps:
+
+```bash
+# After downloading cuDNN (cudnn-linux-x86_64-8.9.7.29_cuda11-archive.tar.xz)
+tar -xf cudnn-linux-x86_64-8.9.7.29_cuda11-archive.tar.xz
+sudo cp cudnn-linux-x86_64-8.9.7.29_cuda11-archive/include/cudnn*.h /usr/local/cuda-11.8/include/
+sudo cp cudnn-linux-x86_64-8.9.7.29_cuda11-archive/lib/libcudnn* /usr/local/cuda-11.8/lib64/
+sudo chmod a+r /usr/local/cuda-11.8/include/cudnn*.h /usr/local/cuda-11.8/lib64/libcudnn*
+```
+
+#### 4. Configure Git Credentials for Model Download
+Before cloning the repository, you need to set up Git credentials for downloading models from Hugging Face:
+
+1. **Configure Git identity**:
+```bash
+git config --global user.name "Your Name"
+git config --global user.email "your.email@example.com"
+```
+
+2. **Create a Hugging Face access token**:
+   - Create a Hugging Face account at [https://huggingface.co/](https://huggingface.co/)
+   - Go to Settings → Access Tokens → New Token
+   - Name your token (e.g., "Maggie Download")
+   - Select **only the "Read" permission** - this is sufficient for downloading models
+   - Click "Generate a token"
+   - Save this token securely - you'll need it during installation
+
+3. **Configure Git credential helper**:
+```bash
+git config --global credential.helper store
+```
+
+4. **Test your credentials** (optional):
+```bash
+git clone https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.3-GPTQ
+```
+   - When prompted, enter your Hugging Face username
+   - Use your access token as the password
+
 #### 5. Clone and Install Maggie
    1. Open Command Prompt with administrative privileges
    2. Clone the repository:
@@ -468,161 +619,6 @@ python install.py --verbose
           - Displays summary and installation time
           - Provides instructions for starting the application
           - Offers to start Maggie immediately
-
-### Linux Installation
-
-#### 1. Install Python 3.10.x
-```bash
-# Update package index
-sudo apt update
-
-# Install software-properties-common
-sudo apt install software-properties-common -y
-
-# Add deadsnakes PPA
-sudo add-apt-repository ppa:deadsnakes/ppa -y
-
-# Update package index again
-sudo apt update
-
-# Install Python 3.10 and development packages
-sudo apt install python3.10 python3.10-venv python3.10-dev -y
-
-# Verify installation
-python3.10 --version
-```
-
-#### 2. Install Build Tools and Dependencies
-```bash
-# Install build essentials and portaudio (for PyAudio)
-sudo apt install build-essential gcc-11 g++-11 dkms portaudio19-dev python3-pyaudio -y
-
-# Install Git and Git LFS
-sudo apt install git git-lfs -y
-git lfs install
-```
-
-#### 3. Install CUDA Toolkit 11.8 and cuDNN
-```bash
-# Download CUDA repository package
-wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-ubuntu2204.pin
-sudo mv cuda-ubuntu2204.pin /etc/apt/preferences.d/cuda-repository-pin-600
-wget https://developer.download.nvidia.com/compute/cuda/11.8.0/local_installers/cuda-repo-ubuntu2204-11-8-local_11.8.0-520.61.05-1_amd64.deb
-sudo dpkg -i cuda-repo-ubuntu2204-11-8-local_11.8.0-520.61.05-1_amd64.deb
-sudo cp /var/cuda-repo-ubuntu2204-11-8-local/cuda-*-keyring.gpg /usr/share/keyrings/
-sudo apt-get update
-sudo apt-get -y install cuda-11-8
-
-# Set environment variables
-echo 'export PATH=/usr/local/cuda-11.8/bin${PATH:+:${PATH}}' >> ~/.bashrc
-echo 'export LD_LIBRARY_PATH=/usr/local/cuda-11.8/lib64${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}' >> ~/.bashrc
-source ~/.bashrc
-```
-
-For cuDNN installation on Linux, download from [NVIDIA cuDNN Downloads](https://developer.nvidia.com/cudnn) (requires NVIDIA Developer account) and follow these steps:
-
-```bash
-# After downloading cuDNN (cudnn-linux-x86_64-8.9.7.29_cuda11-archive.tar.xz)
-tar -xf cudnn-linux-x86_64-8.9.7.29_cuda11-archive.tar.xz
-sudo cp cudnn-linux-x86_64-8.9.7.29_cuda11-archive/include/cudnn*.h /usr/local/cuda-11.8/include/
-sudo cp cudnn-linux-x86_64-8.9.7.29_cuda11-archive/lib/libcudnn* /usr/local/cuda-11.8/lib64/
-sudo chmod a+r /usr/local/cuda-11.8/include/cudnn*.h /usr/local/cuda-11.8/lib64/libcudnn*
-```
-
-#### 4. Clone and Install Maggie
-  1. Clone the repository:
-```bash
-# Clone repository
-git clone https://github.com/formosa/maggie.git
-cd maggie
-```
-
-  2. Run the installation script:
-    **Available installation options:**
-
-    | Option | Description |
-    |--------|-------------|
-    | `--verbose` | Enable detailed output during installation |
-    | `--cpu-only` | Install CPU-only version (no GPU acceleration) |
-    | `--skip-models` | Skip downloading large LLM models (~5GB) |
-    | `--skip-problematic` | Skip dependencies that may cause installation issues |
-    | `--force-reinstall` | Force reinstallation of already installed packages |
-
-    **Example commands:**
-    Verbose installation with all details displayed:
-
-```bash
-# Run installation script
-python3.10 install.py --verbose
-```
-
-  3. Installation Process Steps:
-    **The install.py script performs the following actions in sequence:**
-
-     1.  **System Verification (Step 1/8)**
-        Checks Python version (requires exactly 3.10.x)
-        Detects CPU, GPU, and memory specifications
-        Identifies specific hardware (Ryzen 9 5900X, RTX 3080)
-        Verifies required tools (Git, C++ compiler)
-        Reports compatibility status and optimization potential
-
-     2. **Directory Structure Creation (Step 2/8)**
-        Creates all required directories for the application:
-        - logs/ - For application logs
-        - models/ - For AI models
-        - models/tts/ - For text-to-speech models
-        - cache/ - For audio and processing caches
-        - recipes/ - For recipe creator output
-        - templates/ - For document templates
-        And other necessary directories
-
-     1. **Virtual Environment Setup (Step 3/8)**
-        Creates a Python virtual environment in venv/
-        Isolates dependencies from system Python
-        Ensures consistent package versions
-
-     2. Dependency Installation (Step 4/8)
-        1. Installs core dependencies:
-           - `urllib3`  ensures that the Maggie AI system has reliable network capabilities
-           - `tqdm` creates progress bars for long-running operations like model downloads and audio processing
-           - `numpy` enables efficient numerical operations for audio processing, speech analysis, and tensor manipulations
-           - `psutil` monitors system resources (CPU, memory, disk) to optimize resource allocation and prevent overloading
-           - `PyYAML` parses YAML configuration files, essential for the flexible configuration system that adapts to different hardware profiles
-           - `loguru` provides advanced logging capabilities with better formatting, level management, and file rotation than standard logging
-           - `requests` handles HTTP requests for downloading models and resources securely
-           - `torch` / `pytorch` powers neural network operations for LLM inference and audio processing with GPU acceleration support
-        2. Installs PyTorch with CUDA support (if GPU available)
-        3. Installs specialized dependencies:
-          - `PyAudio` for microphone input
-          - `Kokoro` for text-to-speech
-          - `faster-whisper` for speech recognition
-          - `ctransformers` for LLM inference
-          - `PyQt6 for GUI` interface
-          - `python-docx` for document generation
-        4. Handles platform-specific installation requirements
-
-     3. Configuration Setup (Step 5/8)
-        - Creates or updates config.yaml
-        - Applies hardware-specific optimizations
-        - Configures TTS voice model to use af_heart
-        - Optimizes GPU settings for RTX 3080 if detected
-        - Adjusts thread pool size for Ryzen 9 5900X if detected
-
-     4. Model Download (Step 6/8)
-        - Downloads the af_heart TTS voice model
-        - Downloads Mistral 7B LLM (unless --skip-models is specified)
-        - Validates downloaded model files
-
-     5.  Extension Setup (Step 7/8)
-        - Installs extension dependencies
-        - Creates recipe template for the recipe creator extension
-        - Registers extensions in the configuration
-
-     6.  Finalization (Step 8/8)
-        - Completes installation
-        - Displays summary and installation time
-        - Provides instructions for starting the application
-        - Offers to start Maggie immediately
 
 ## Post-Installation
 
