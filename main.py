@@ -57,6 +57,7 @@ def parse_arguments() -> argparse.Namespace:
         - verify: Boolean flag for system verification
         - create_template: Boolean flag for template creation
         - optimize: Boolean flag for hardware optimization
+        - headless: Boolean flag for headless mode
     """
     parser = argparse.ArgumentParser(
         description="Maggie AI Assistant",
@@ -87,6 +88,11 @@ def parse_arguments() -> argparse.Namespace:
         "--optimize",
         action="store_true",
         help="Optimize configuration for detected hardware"
+    )
+    parser.add_argument(
+        "--headless",
+        action="store_true",
+        help="Run in headless mode without GUI"
     )
     return parser.parse_args()
 
@@ -878,6 +884,8 @@ def start_maggie(args: argparse.Namespace) -> int:
     try:
         # Import here to avoid circular imports
         from maggie.core import MaggieAI
+        from PyQt6.QtWidgets import QApplication
+        from maggie.utils.gui import MainWindow
     except ImportError as e:
         logger.error(f"Failed to import required module: {e}")
         return 1
@@ -906,10 +914,24 @@ def start_maggie(args: argparse.Namespace) -> int:
     # Register signal handlers for graceful shutdown
     register_signal_handlers(maggie)
     
-    # Start Maggie
+    # Start Maggie core services
     success = maggie.start()
+    if not success:
+        return 1
+        
+    # Initialize and start GUI if not in headless mode
+    if not args.headless:
+        try:
+            app = QApplication(sys.argv)
+            window = MainWindow(maggie)
+            window.show()
+            return app.exec()
+        except Exception as e:
+            logger.error(f"Error starting GUI: {e}")
+            maggie.shutdown()
+            return 1
     
-    return 0 if success else 1
+    return 0
 
 
 def register_signal_handlers(maggie) -> None:

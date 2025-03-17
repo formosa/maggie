@@ -8,8 +8,10 @@ offering visual state indication, command controls, and log displays.
 
 Examples
 --------
->>> from utils.gui import MainWindow
+>>> from maggie.utils.gui import MainWindow
 >>> from maggie import MaggieAI
+>>> from PyQt6.QtWidgets import QApplication
+>>> import sys
 >>> config = {"threading": {"max_workers": 8}}
 >>> maggie = MaggieAI(config)
 >>> app = QApplication(sys.argv)

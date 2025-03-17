@@ -469,6 +469,9 @@ class MaggieAI:
             # Register event bus
             ServiceLocator.register("event_bus", self.event_bus)
             
+            # Register self in service locator for GUI access
+            ServiceLocator.register("maggie_ai", self)
+            
             # Initialize extensions
             self._initialize_extensions()
             
@@ -952,7 +955,19 @@ class MaggieAI:
         bool
             True if shutdown initiated successfully
         """
-        return self.stop()
+        logger.info("Shutdown initiated")
+        
+        # Transition to shutdown state through cleanup
+        if self.state != State.SHUTDOWN:
+            self._transition_to(State.CLEANUP, "shutdown_requested")
+            
+        # If GUI exists, properly handle shutdown
+        if hasattr(self, 'gui') and self.gui:
+            # GUI will close naturally through the shutdown process
+            # as implemented in the improved closeEvent handler
+            pass
+            
+        return True
         
     def timeout(self) -> None:
         """
@@ -993,3 +1008,30 @@ class MaggieAI:
                 return True
                 
         return False
+    
+    def update_gui(self, event_type: str, data: Any = None) -> None:
+        """
+        Update GUI with event data in a thread-safe manner.
+        
+        Parameters
+        ----------
+        event_type : str
+            Type of event for GUI update
+        data : Any, optional
+            Event data for GUI update, by default None
+            
+        Returns
+        -------
+        None
+        """
+        if self.gui and hasattr(self.gui, "safe_update_gui"):
+            if event_type == "state_change":
+                self.gui.safe_update_gui(self.gui.update_state, data)
+            elif event_type == "chat_message":
+                is_user = data.get("is_user", False)
+                message = data.get("message", "")
+                self.gui.safe_update_gui(self.gui.log_chat, message, is_user)
+            elif event_type == "event_log":
+                self.gui.safe_update_gui(self.gui.log_event, data)
+            elif event_type == "error_log":
+                self.gui.safe_update_gui(self.gui.log_error, data)
