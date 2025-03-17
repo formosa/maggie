@@ -82,6 +82,7 @@ class MainWindow(QMainWindow):
         self.maggie_ai = maggie_ai
         self.setWindowTitle("Maggie AI Assistant")
         self.setMinimumSize(800, 600)
+        self.is_shutting_down = False  # Missing initialization added
         
         # Create central widget and layout
         self.central_widget = QWidget()
@@ -264,14 +265,24 @@ class MainWindow(QMainWindow):
         """
         Create buttons for each available extension.
         
-        Creates a button for each extension in the Maggie AI system,
-        with appropriate handlers and shortcuts.
+        Parameters
+        ----------
+        None
         
         Returns
         -------
         None
+            This method doesn't return anything
+        
+        Notes
+        -----
+        Creates a button for each extension in the Maggie AI system,
+        with appropriate handlers and shortcuts
         """
         try:
+            # Clean up existing buttons first
+            self._cleanup_extension_buttons()
+            
             self.extension_buttons = {}
             for extension_name in self.maggie_ai.extensions:
                 display_name = extension_name.replace("_", " ").title()
@@ -313,12 +324,52 @@ class MainWindow(QMainWindow):
         Updates the GUI to reflect the new system state
         and logs the transition for user awareness
         """
-        # Update the state display
-        self.update_state(transition.to_state.name)
-        
-        # Log the transition
-        self.log_event(f"State changed: {transition.from_state.name} -> "
-                    f"{transition.to_state.name} (trigger: {transition.trigger})")
+        try:
+            # Validate transition object
+            if not transition or not hasattr(transition, 'to_state') or not hasattr(transition, 'from_state'):
+                logger.error("Invalid state transition object received")
+                return
+                
+            # Extract state information with defensive coding
+            to_state_name = getattr(transition.to_state, 'name', 'UNKNOWN')
+            from_state_name = getattr(transition.from_state, 'name', 'UNKNOWN')
+            trigger = getattr(transition, 'trigger', 'UNKNOWN')
+            
+            # Update the state display
+            self.update_state(to_state_name)
+            
+            # Log the transition
+            self.log_event(f"State changed: {from_state_name} -> "
+                        f"{to_state_name} (trigger: {trigger})")
+        except Exception as e:
+            logger.error(f"Error handling state transition: {e}")
+
+    def _cleanup_extension_buttons(self) -> None:
+            """
+            Clean up extension buttons before recreating them.
+            
+            Parameters
+            ----------
+            None
+            
+            Returns
+            -------
+            None
+                This method doesn't return anything
+            
+            Notes
+            -----
+            Removes existing buttons from the layout and properly
+            disposes of them to prevent memory leaks
+            """
+            try:
+                if hasattr(self, 'extension_buttons'):
+                    for button in self.extension_buttons.values():
+                        self.extensions_layout.removeWidget(button)
+                        button.deleteLater()
+                    self.extension_buttons.clear()
+            except Exception as e:
+                logger.error(f"Error cleaning up extension buttons: {e}")
 
     def update_state(self, state: str) -> None:
         """
@@ -363,6 +414,26 @@ class MainWindow(QMainWindow):
         
         logger.debug(f"GUI state updated to: {state}")
         
+    def refresh_extensions(self) -> None:
+        """
+        Refresh the extension buttons to reflect current available extensions.
+        
+        Parameters
+        ----------
+        None
+        
+        Returns
+        -------
+        None
+            This method doesn't return anything
+        
+        Notes
+        -----
+        Updates the GUI when extensions are added or removed
+        """
+        self._create_extension_buttons()
+        self.log_event("Extension list updated")
+
     def log_chat(self, message: str, is_user: bool = False) -> None:
         """
         Log a chat message.
@@ -496,7 +567,7 @@ class MainWindow(QMainWindow):
             Arguments to pass to the function
         **kwargs
             Keyword arguments to pass to the function
-            
+                
         Returns
         -------
         None
@@ -507,23 +578,33 @@ class MainWindow(QMainWindow):
         Uses Qt's invokeMethod mechanism for thread-safe GUI updates
         with fallback to direct calls when appropriate
         """
-        # Convert args to Q_ARG objects
-        q_args = []
-        for arg in args:
+        # Check if already in GUI thread first for efficiency
+        if QThread.currentThread() == self.thread():
             try:
-                # Handle primitive types directly
-                if isinstance(arg, (int, float, bool, str)):
-                    q_args.append(Q_ARG(type(arg), arg))
-                else:
-                    # For complex objects, use QVariant
-                    q_args.append(Q_ARG(QVariant, QVariant(arg)))
+                func(*args, **kwargs)
+                return
             except Exception as e:
-                logger.debug(f"Error converting argument to Q_ARG: {e}")
-                # Fall back to string conversion
-                q_args.append(Q_ARG(str, str(arg)))
+                logger.error(f"Error calling GUI method directly: {e}")
+                return
         
-        # Invoke the method in the GUI thread
+        # Thread-safe call for non-GUI threads
         try:
+            # Convert args to Q_ARG objects
+            q_args = []
+            for arg in args:
+                try:
+                    # Handle primitive types directly
+                    if isinstance(arg, (int, float, bool, str)):
+                        q_args.append(Q_ARG(type(arg), arg))
+                    else:
+                        # For complex objects, use QVariant
+                        q_args.append(Q_ARG(QVariant, QVariant(arg)))
+                except Exception as e:
+                    logger.debug(f"Error converting argument to Q_ARG: {e}")
+                    # Fall back to string conversion
+                    q_args.append(Q_ARG(str, str(arg)))
+            
+            # Invoke the method in the GUI thread
             QMetaObject.invokeMethod(
                 self, 
                 func.__name__, 
@@ -532,12 +613,6 @@ class MainWindow(QMainWindow):
             )
         except Exception as e:
             logger.error(f"Error invoking GUI method {func.__name__}: {e}")
-            # Fall back to direct call if in same thread
-            if QThread.currentThread() == self.thread():
-                try:
-                    func(*args, **kwargs)
-                except Exception as e2:
-                    logger.error(f"Error calling GUI method directly: {e2}")
 
     def _on_extension_completed(self, extension_name: str) -> None:
         """
