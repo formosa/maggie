@@ -505,8 +505,8 @@ Before cloning the repository, you need to set up Git credentials for downloadin
 
 1. **Configure Git identity**:
 ```bash
-git config --global user.name "Your Name"
-git config --global user.email "your.email@example.com"
+git config --global user.name "HuggingFormosa"
+git config --global user.email "emailformosa@gmail.com"
 ```
 
 2. **Create a Hugging Face access token**:
@@ -524,7 +524,7 @@ git config --global credential.helper store
 
 4. **Test your credentials** (optional):
 ```bash
-git clone https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.3-GPTQ
+git clone https://huggingface.co/neuralmagic/Mistral-7B-Instruct-v0.3-GPTQ-4bit
 ```
    - When prompted, enter your Hugging Face username
    - Use your access token as the password
@@ -606,7 +606,7 @@ python install.py --verbose
 
       6. Model Download (Step 6/8)
          - Downloads the af_heart TTS voice model
-         - Downloads Mistral 7B LLM (unless --skip-models is specified)
+         - Downloads Mistral 7B Instruct 4bit LLM (unless --skip-models is specified)
          - Validates downloaded model files
 
       7. Extension Setup (Step 7/8)
