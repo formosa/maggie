@@ -27,7 +27,8 @@ from typing import Dict, Any, Optional, List, Callable
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QTextEdit,
     QPushButton, QLabel, QSplitter, QTabWidget, QSizePolicy,
-    QListWidget, QListWidgetItem, QGroupBox, QFrame, QStatusBar
+    QListWidget, QListWidgetItem, QGroupBox, QFrame, QStatusBar,
+    QApplication  # Add this import
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer
 from PyQt6.QtGui import QFont, QColor, QIcon, QKeySequence, QShortcut
@@ -186,24 +187,37 @@ class MainWindow(QMainWindow):
         Set up keyboard shortcuts for the GUI.
         
         Configures keyboard shortcuts for common actions to improve usability.
+        
+        Returns
+        -------
+        None
         """
         try:
+            # Define shortcut configuration (could be loaded from settings)
+            shortcut_config = {
+                "sleep": "Alt+S",
+                "shutdown": "Alt+Q",
+                "chat_tab": "Alt+1",
+                "event_tab": "Alt+2",
+                "error_tab": "Alt+3",
+            }
+            
             # Alt+S: Sleep
-            sleep_shortcut = QShortcut(QKeySequence("Alt+S"), self)
+            sleep_shortcut = QShortcut(QKeySequence(shortcut_config["sleep"]), self)
             sleep_shortcut.activated.connect(self.on_sleep_clicked)
             
             # Alt+Q: Shutdown
-            shutdown_shortcut = QShortcut(QKeySequence("Alt+Q"), self)
+            shutdown_shortcut = QShortcut(QKeySequence(shortcut_config["shutdown"]), self)
             shutdown_shortcut.activated.connect(self.on_shutdown_clicked)
             
             # Alt+1, Alt+2, Alt+3: Switch tabs
-            chat_tab_shortcut = QShortcut(QKeySequence("Alt+1"), self)
+            chat_tab_shortcut = QShortcut(QKeySequence(shortcut_config["chat_tab"]), self)
             chat_tab_shortcut.activated.connect(lambda: self.log_tabs.setCurrentIndex(0))
             
-            event_tab_shortcut = QShortcut(QKeySequence("Alt+2"), self)
+            event_tab_shortcut = QShortcut(QKeySequence(shortcut_config["event_tab"]), self)
             event_tab_shortcut.activated.connect(lambda: self.log_tabs.setCurrentIndex(1))
             
-            error_tab_shortcut = QShortcut(QKeySequence("Alt+3"), self)
+            error_tab_shortcut = QShortcut(QKeySequence(shortcut_config["error_tab"]), self)
             error_tab_shortcut.activated.connect(lambda: self.log_tabs.setCurrentIndex(2))
             
             logger.debug("Keyboard shortcuts configured")
@@ -245,26 +259,33 @@ class MainWindow(QMainWindow):
         
         Creates a button for each extension in the Maggie AI system,
         with appropriate handlers and shortcuts.
+        
+        Returns
+        -------
+        None
         """
-        self.extension_buttons = {}
-        for extension_name in self.maggie_ai.extensions:
-            display_name = extension_name.replace("_", " ").title()
-            extension_button = QPushButton(display_name)
-            extension_button.clicked.connect(
-                lambda checked, name=extension_name: self.on_extension_clicked(name)
-            )
-            self.extensions_layout.addWidget(extension_button)
-            self.extension_buttons[extension_name] = extension_button
-            
-            # Set shortcut if it's the recipe creator
-            if extension_name == "recipe_creator":
-                try:
-                    recipe_shortcut = QShortcut(QKeySequence("Alt+R"), self)
-                    recipe_shortcut.activated.connect(
-                        lambda: self.on_extension_clicked("recipe_creator")
-                    )
-                except Exception as e:
-                    logger.error(f"Error setting up recipe shortcut: {e}")
+        try:
+            self.extension_buttons = {}
+            for extension_name in self.maggie_ai.extensions:
+                display_name = extension_name.replace("_", " ").title()
+                extension_button = QPushButton(display_name)
+                extension_button.clicked.connect(
+                    lambda checked, name=extension_name: self.on_extension_clicked(name)
+                )
+                self.extensions_layout.addWidget(extension_button)
+                self.extension_buttons[extension_name] = extension_button
+                
+                # Set shortcut if it's the recipe creator
+                if extension_name == "recipe_creator":
+                    try:
+                        recipe_shortcut = QShortcut(QKeySequence("Alt+R"), self)
+                        recipe_shortcut.activated.connect(
+                            lambda: self.on_extension_clicked("recipe_creator")
+                        )
+                    except Exception as e:
+                        logger.error(f"Error setting up recipe shortcut: {e}")
+        except Exception as e:
+            logger.error(f"Error creating extension buttons: {e}")
         
     def update_state(self, state: str) -> None:
         """
@@ -277,7 +298,19 @@ class MainWindow(QMainWindow):
         ----------
         state : str
             New state name
+            
+        Returns
+        -------
+        None
         """
+        # Define valid states
+        valid_states = ["IDLE", "STARTUP", "READY", "ACTIVE", "BUSY", "CLEANUP", "SHUTDOWN"]
+        
+        # Validate state
+        if state not in valid_states:
+            logger.warning(f"Invalid state: {state}. Defaulting to IDLE.")
+            state = "IDLE"
+        
         self.state_display.setText(state)
         self.status_label.setText(f"Status: {state}")
         
@@ -399,10 +432,48 @@ class MainWindow(QMainWindow):
         Parameters
         ----------
         event : QCloseEvent
-            The close event
+            The close event from PyQt
+        
+        Returns
+        -------
+        None
         """
         self.log_event("Window close requested, shutting down")
+        
+        # Set a flag to track shutdown progress
+        self.is_shutting_down = True
+        
+        # Start shutdown
         self.maggie_ai.shutdown()
-        event.accept()
+        
+        # Add a short delay to allow shutdown to progress before closing
+        QTimer.singleShot(2000, lambda: event.accept())
         
         logger.info("GUI window closed, shutdown initiated")
+
+    def safe_update_gui(self, func, *args, **kwargs):
+        """
+        Safely update the GUI from another thread.
+        
+        Parameters
+        ----------
+        func : Callable
+            Function to call in the GUI thread
+        *args
+            Arguments to pass to the function
+        **kwargs
+            Keyword arguments to pass to the function
+            
+        Returns
+        -------
+        None
+        """
+        from PyQt6.QtCore import QMetaObject, Qt, Q_ARG
+        
+        # Convert args to Q_ARG objects
+        q_args = [Q_ARG(type(arg), arg) for arg in args]
+        
+        # Invoke the method in the GUI thread
+        QMetaObject.invokeMethod(self, func.__name__, 
+                                Qt.ConnectionType.QueuedConnection, 
+                                *q_args)
