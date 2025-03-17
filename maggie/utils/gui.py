@@ -25,14 +25,14 @@ import sys
 import time
 from typing import Dict, Any, Optional, List, Callable
 
-# Third-party imports
+# Third-party imports - Add QThread to imports
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QTextEdit,
     QPushButton, QLabel, QSplitter, QTabWidget, QSizePolicy,
     QListWidget, QListWidgetItem, QGroupBox, QFrame, QStatusBar,
-    QApplication  # Add this import
+    QApplication
 )
-from PyQt6.QtCore import Qt, pyqtSignal, QTimer
+from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QMetaObject, Q_ARG, QVariant, QThread
 from PyQt6.QtGui import QFont, QColor, QIcon, QKeySequence, QShortcut
 from loguru import logger
 
@@ -484,7 +484,7 @@ class MainWindow(QMainWindow):
         
         logger.info("GUI window closed, shutdown initiated")
 
-    def safe_update_gui(self, func, *args, **kwargs) -> None:
+    def safe_update_gui(self, func: Callable, *args, **kwargs) -> None:
         """
         Safely update the GUI from another thread.
         
@@ -507,8 +507,6 @@ class MainWindow(QMainWindow):
         Uses Qt's invokeMethod mechanism for thread-safe GUI updates
         with fallback to direct calls when appropriate
         """
-        from PyQt6.QtCore import QMetaObject, Qt, Q_ARG, QVariant
-        
         # Convert args to Q_ARG objects
         q_args = []
         for arg in args:

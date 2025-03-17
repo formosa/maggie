@@ -899,9 +899,6 @@ def start_maggie(args: argparse.Namespace) -> int:
                 if config is None:
                     logger.warning(f"Empty config file: {args.config}, using defaults")
                     config = {}
-        except yaml.YAMLError as e:
-            logger.error(f"Error parsing config file: {e}")
-            return 1
         except Exception as e:
             logger.error(f"Error reading config file: {e}")
             return 1
@@ -917,6 +914,7 @@ def start_maggie(args: argparse.Namespace) -> int:
     # Start Maggie core services
     success = maggie.start()
     if not success:
+        logger.error("Failed to start Maggie AI core services")
         return 1
         
     # Initialize and start GUI if not in headless mode
@@ -924,15 +922,25 @@ def start_maggie(args: argparse.Namespace) -> int:
         try:
             app = QApplication(sys.argv)
             window = MainWindow(maggie)
-            maggie.set_gui(window)  # Add this line to establish bidirectional reference
+            maggie.set_gui(window)  # Set bidirectional reference
             window.show()
             return app.exec()
         except Exception as e:
             logger.error(f"Error starting GUI: {e}")
             maggie.shutdown()
             return 1
-    
-    return 0
+    else:
+        # Headless operation - keep running until signal received
+        logger.info("Running in headless mode")
+        try:
+            # Main thread waits here
+            while maggie.state != State.SHUTDOWN:
+                time.sleep(1)
+            return 0
+        except KeyboardInterrupt:
+            logger.info("Keyboard interrupt received, shutting down")
+            maggie.shutdown()
+            return 0
 
 
 def register_signal_handlers(maggie) -> None:
