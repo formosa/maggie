@@ -564,12 +564,12 @@ python install.py --verbose
 
       2. **Directory Structure Creation (Step 2/8)**
         Creates all required directories for the application:
-        - logs/ - For application logs
-        - models/ - For AI models
-        - models/tts/ - For text-to-speech models
-        - cache/ - For audio and processing caches
-        - recipes/ - For recipe creator output
-        - templates/ - For document templates
+        - `logs/` - For application logs
+        - `models/` - For AI models
+        - `models/tts/` - For text-to-speech models
+        - `cache/` - For audio and processing caches
+        - `recipes/` - For recipe creator output
+        - `templates/` - For document templates
         And other necessary directories
 
       3. **Virtual Environment Setup (Step 3/8)**
