@@ -4,7 +4,8 @@ Maggie AI Assistant - GUI Module
 GUI implementation for the Maggie AI Assistant using PySide6.
 
 This module provides a graphical user interface for the Maggie AI Assistant,
-offering visual state indication, command controls, and log displays.
+offering visual state indication, command controls, text input capabilities,
+and organized log displays for chat, events, and errors.
 
 Examples
 --------
@@ -29,57 +30,143 @@ from typing import Dict, Any, Optional, List, Callable
 sys.path.append("C:\\AI\\claude\\fresh\\maggie\\venv\\Lib\\site-packages\\PySide6")
 sys.path.append("C:\\AI\\claude\\fresh\\maggie\\venv\\Lib\\site-packages\\PySide6\\Qt6")
 sys.path.append("C:\\AI\\claude\\fresh\\maggie\\venv\\Lib\\site-packages\\PySide6\\Qt6\\bin")
-# import sys
-# import contextlib
-
-# @contextlib.contextmanager
-# def add_to_path(path):
-#     original_sys_path = sys.path[:]
-#     sys.path.append(path)
-#     try:
-#         yield
-#     finally:
-#         sys.path = original_sys_path
-
-# Use the context manager to temporarily modify sys.path
-# with add_to_path('C:\AI\claude\fresh\maggie\venv\Lib\site-packages\PySide6'):
-#     # Third-party imports
-#     from PySide6.QtWidgets import (
-#         QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QTextEdit,
-#         QPushButton, QLabel, QSplitter, QTabWidget, QSizePolicy,
-#         QListWidget, QListWidgetItem, QGroupBox, QFrame, QStatusBar,
-#         QApplication
-#     )
-#     from PySide6.QtCore import Qt, Signal, QTimer, QMetaObject, Q_ARG, QVariant, QThread
-#     from PySide6.QtGui import QFont, QColor, QIcon, QKeySequence, QShortcut
-
-# sys.path is automatically reverted after exiting the 'with' block
 
 # Third-party imports
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QTextEdit,
     QPushButton, QLabel, QSplitter, QTabWidget, QSizePolicy,
     QListWidget, QListWidgetItem, QGroupBox, QFrame, QStatusBar,
-    QApplication
+    QApplication, QLineEdit
 )
-# from PySide6.QtCore import Qt, Signal, QTimer, QMetaObject, Q_ARG, QVariant, QThread
 from PySide6.QtCore import Qt, Signal, QTimer, QMetaObject, Q_ARG, QThread
-from PySide6.QtGui import QFont, QColor, QIcon, QKeySequence, QShortcut
+from PySide6.QtGui import QFont, QColor, QIcon, QKeySequence, QShortcut, QFocusEvent
 from loguru import logger
 
 __all__ = ['MainWindow']
 
 class QVariant:
+    """
+    Simple variant class for Qt method invocation compatibility.
+    
+    Parameters
+    ----------
+    value : Any, optional
+        The value to store
+        
+    Attributes
+    ----------
+    value : Any
+        The stored value
+    """
     def __init__(self, value=None):
         self.value = value
     def value(self):
         return self.value
+
+class InputField(QLineEdit):
+    """
+    Custom input field with speech-to-text awareness.
+    
+    Provides an input field that can operate in two modes:
+    manual typing or speech-to-text input display.
+    
+    Parameters
+    ----------
+    parent : QWidget
+        Parent widget
+    submit_callback : Callable
+        Function to call when input is submitted
+    
+    Attributes
+    ----------
+    stt_mode : bool
+        Whether in speech-to-text mode
+    submit_callback : Callable
+        Function to call when input is submitted
+    """
+    
+    def __init__(self, parent=None, submit_callback=None):
+        """
+        Initialize the input field.
+        
+        Parameters
+        ----------
+        parent : QWidget, optional
+            Parent widget, by default None
+        submit_callback : Callable, optional
+            Function to call when input is submitted, by default None
+        """
+        super().__init__(parent)
+        self.stt_mode = True
+        self.submit_callback = submit_callback
+        self.setPlaceholderText("Speak or type your message here...")
+        
+        # Connect events
+        self.returnPressed.connect(self.on_return_pressed)
+    
+    def focusInEvent(self, event: QFocusEvent) -> None:
+        """
+        Handle focus in event.
+        
+        When input field gains focus, switch to manual input mode.
+        
+        Parameters
+        ----------
+        event : QFocusEvent
+            Focus event
+        """
+        super().focusInEvent(event)
+        self.stt_mode = False
+        self.setStyleSheet("background-color: white;")
+    
+    def focusOutEvent(self, event: QFocusEvent) -> None:
+        """
+        Handle focus out event.
+        
+        When input field loses focus, switch back to STT mode.
+        
+        Parameters
+        ----------
+        event : QFocusEvent
+            Focus event
+        """
+        super().focusOutEvent(event)
+        self.stt_mode = True
+        self.update_appearance_for_state("IDLE")  # Will be overridden if state changes
+    
+    def on_return_pressed(self) -> None:
+        """
+        Handle return key press.
+        
+        Submits the input text and clears the field.
+        """
+        if self.submit_callback and self.text().strip():
+            self.submit_callback(self.text())
+            self.clear()
+    
+    def update_appearance_for_state(self, state: str) -> None:
+        """
+        Update appearance based on system state.
+        
+        Parameters
+        ----------
+        state : str
+            Current system state
+        """
+        if state == "IDLE" and self.stt_mode:
+            self.setStyleSheet("background-color: lightgray;")
+            self.setReadOnly(True)
+        else:
+            self.setReadOnly(False)
+            if not self.hasFocus():  # Don't change style if user is typing
+                self.setStyleSheet("background-color: white;")
+
 class MainWindow(QMainWindow):
     """
     Main window for the Maggie AI Assistant GUI.
     
     Provides a graphical interface for interacting with Maggie AI, including
-    status indicators, log displays, and extension controls.
+    status indicators, log displays, text input, and extension controls.
     
     Parameters
     ----------
@@ -98,6 +185,8 @@ class MainWindow(QMainWindow):
         Text display for system events
     error_log : QTextEdit
         Text display for error messages
+    input_field : InputField
+        Text input field for user commands
     state_display : QLabel
         Visual indicator of current system state
     extension_buttons : Dict[str, QPushButton]
@@ -117,7 +206,7 @@ class MainWindow(QMainWindow):
         
         self.maggie_ai = maggie_ai
         self.setWindowTitle("Maggie AI Assistant")
-        self.setMinimumSize(800, 600)
+        self.setMinimumSize(900, 700)
         self.is_shutting_down = False
         
         # Create central widget and layout
@@ -153,8 +242,9 @@ class MainWindow(QMainWindow):
         """
         Create the main window layout.
         
-        Sets up the split pane layout with logs on the left and
-        controls on the right.
+        Sets up a horizontal split pane layout with logs panel on the left and
+        controls on the right. The logs panel contains Chat, Event Log, and
+        Error Log sections arranged vertically.
         """
         # Create main content area
         self.content_splitter = QSplitter(Qt.Orientation.Horizontal)
@@ -171,10 +261,10 @@ class MainWindow(QMainWindow):
         self.content_splitter.addWidget(self.right_panel)
         
         # Set initial splitter sizes
-        self.content_splitter.setSizes([600, 200])
+        self.content_splitter.setSizes([700, 200])
         
-        # Create tab widget for logs
-        self._create_log_tabs()
+        # Create log sections
+        self._create_log_sections()
         
         # Create right panel contents
         self._create_right_panel()
@@ -182,29 +272,84 @@ class MainWindow(QMainWindow):
         # Create bottom control panel
         self._create_control_panel()
         
-    def _create_log_tabs(self) -> None:
+    def _create_log_sections(self) -> None:
         """
-        Create the tabbed log display.
+        Create the log sections for chat, events, and errors.
         
-        Sets up tabs for chat, events, and errors.
+        Sets up three vertical panels instead of tabs, with the chat
+        panel taking more space than the others.
         """
-        self.log_tabs = QTabWidget()
-        self.left_layout.addWidget(self.log_tabs)
+        # Create a vertical splitter for all logs
+        self.logs_splitter = QSplitter(Qt.Orientation.Vertical)
+        self.left_layout.addWidget(self.logs_splitter)
         
-        # Chat log
+        # Chat section (with input field below)
+        self.chat_section = QWidget()
+        self.chat_layout = QVBoxLayout(self.chat_section)
+        self.chat_layout.setContentsMargins(0, 0, 0, 0)
+        
+        # Chat log with title
+        self.chat_group = QGroupBox("Chat")
+        self.chat_group_layout = QVBoxLayout(self.chat_group)
         self.chat_log = QTextEdit()
         self.chat_log.setReadOnly(True)
-        self.log_tabs.addTab(self.chat_log, "Chat")
+        self.chat_group_layout.addWidget(self.chat_log)
+        self.chat_layout.addWidget(self.chat_group)
         
-        # Event log
+        # Input field
+        self.input_field = InputField(submit_callback=self._on_input_submitted)
+        self.input_field.setFixedHeight(30)
+        self.input_field.update_appearance_for_state("IDLE")
+        self.chat_layout.addWidget(self.input_field)
+        
+        # Event log section with title
+        self.event_group = QGroupBox("Event Log")
+        self.event_group_layout = QVBoxLayout(self.event_group)
         self.event_log = QTextEdit()
         self.event_log.setReadOnly(True)
-        self.log_tabs.addTab(self.event_log, "Events")
+        self.event_group_layout.addWidget(self.event_log)
         
-        # Error log
+        # Error log section with title
+        self.error_group = QGroupBox("Error Log")
+        self.error_group_layout = QVBoxLayout(self.error_group)
         self.error_log = QTextEdit()
         self.error_log.setReadOnly(True)
-        self.log_tabs.addTab(self.error_log, "Errors")
+        self.error_group_layout.addWidget(self.error_log)
+        
+        # Add all sections to the splitter
+        self.logs_splitter.addWidget(self.chat_section)
+        self.logs_splitter.addWidget(self.event_group)
+        self.logs_splitter.addWidget(self.error_group)
+        
+        # Set initial sizes with chat taking more space
+        self.logs_splitter.setSizes([400, 150, 150])
+        
+    def _create_right_panel(self) -> None:
+        """
+        Create the contents of the right panel.
+        
+        Sets up the state display and extension buttons in the right panel.
+        """
+        # Current state display
+        self.state_group = QGroupBox("Current State")
+        self.state_layout = QVBoxLayout(self.state_group)
+        self.state_display = QLabel("IDLE")
+        self.state_display.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.state_display.setStyleSheet("font-size: 18px; font-weight: bold;")
+        self.state_layout.addWidget(self.state_display)
+        self.right_layout.addWidget(self.state_group)
+        
+        # Utilities group
+        self.extensions_group = QGroupBox("Utilities")
+        self.extensions_layout = QVBoxLayout(self.extensions_group)
+        
+        # Add extension buttons based on loaded extensions
+        self._create_extension_buttons()
+        
+        self.right_layout.addWidget(self.extensions_group)
+        
+        # Add spacer
+        self.right_layout.addStretch()
         
     def _create_control_panel(self) -> None:
         """
@@ -240,9 +385,7 @@ class MainWindow(QMainWindow):
             shortcut_config = {
                 "sleep": "Alt+S",
                 "shutdown": "Alt+Q",
-                "chat_tab": "Alt+1",
-                "event_tab": "Alt+2",
-                "error_tab": "Alt+3",
+                "focus_input": "Alt+I",
             }
             
             # Alt+S: Sleep
@@ -253,49 +396,15 @@ class MainWindow(QMainWindow):
             shutdown_shortcut = QShortcut(QKeySequence(shortcut_config["shutdown"]), self)
             shutdown_shortcut.activated.connect(self.on_shutdown_clicked)
             
-            # Alt+1, Alt+2, Alt+3: Switch tabs
-            chat_tab_shortcut = QShortcut(QKeySequence(shortcut_config["chat_tab"]), self)
-            chat_tab_shortcut.activated.connect(lambda: self.log_tabs.setCurrentIndex(0))
-            
-            event_tab_shortcut = QShortcut(QKeySequence(shortcut_config["event_tab"]), self)
-            event_tab_shortcut.activated.connect(lambda: self.log_tabs.setCurrentIndex(1))
-            
-            error_tab_shortcut = QShortcut(QKeySequence(shortcut_config["error_tab"]), self)
-            error_tab_shortcut.activated.connect(lambda: self.log_tabs.setCurrentIndex(2))
+            # Alt+I: Focus input field
+            input_shortcut = QShortcut(QKeySequence(shortcut_config["focus_input"]), self)
+            input_shortcut.activated.connect(lambda: self.input_field.setFocus())
             
             logger.debug("Keyboard shortcuts configured")
             
         except Exception as e:
             logger.error(f"Error setting up shortcuts: {e}")
-        
     
-    def _create_right_panel(self) -> None:
-        """
-        Create the contents of the right panel.
-        
-        Sets up the state display and extension buttons in the right panel.
-        """
-        # Current state display
-        self.state_group = QGroupBox("Current State")
-        self.state_layout = QVBoxLayout(self.state_group)
-        self.state_display = QLabel("IDLE")
-        self.state_display.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.state_display.setStyleSheet("font-size: 18px; font-weight: bold;")
-        self.state_layout.addWidget(self.state_display)
-        self.right_layout.addWidget(self.state_group)
-        
-        # Utilities group
-        self.extensions_group = QGroupBox("Utilities")
-        self.extensions_layout = QVBoxLayout(self.extensions_group)
-        
-        # Add extension buttons based on loaded extensions
-        self._create_extension_buttons()
-        
-        self.right_layout.addWidget(self.extensions_group)
-        
-        # Add spacer
-        self.right_layout.addStretch()
-        
     def _create_extension_buttons(self) -> None:
         """
         Create buttons for each available extension.
@@ -380,6 +489,9 @@ class MainWindow(QMainWindow):
             # Update the state display
             self.update_state(to_state_name)
             
+            # Update input field appearance
+            self.input_field.update_appearance_for_state(to_state_name)
+            
             # Log the transition
             self.log_event(f"State changed: {from_state_name} -> "
                         f"{to_state_name} (trigger: {trigger})")
@@ -454,6 +566,9 @@ class MainWindow(QMainWindow):
         color = color_map.get(state, "white")
         self.state_display.setStyleSheet(f"font-size: 18px; font-weight: bold; background-color: {color}; padding: 5px;")
         
+        # Update input field based on state
+        self.input_field.update_appearance_for_state(state)
+        
         logger.debug(f"GUI state updated to: {state}")
         
     def refresh_extensions(self) -> None:
@@ -490,10 +605,10 @@ class MainWindow(QMainWindow):
             True if message is from user, False if from Maggie, by default False
         """
         timestamp = time.strftime("%H:%M:%S")
-        prefix = "User" if is_user else "Maggie"
+        prefix = "user" if is_user else "Maggie"
         color = "blue" if is_user else "green"
         
-        self.chat_log.append(f'<span style="color:gray">[{timestamp}]</span> <span style="color:{color}"><b>{prefix}:</b></span> {message}')
+        self.chat_log.append(f'<span style="color:gray">[{timestamp}]</span> <span style="color:{color}"><b>&lt; {prefix} &gt;</b></span> {message}')
         
     def log_event(self, event: str) -> None:
         """
@@ -515,8 +630,7 @@ class MainWindow(QMainWindow):
         """
         Log an error message.
         
-        Adds an error message to the error log with timestamp and switches
-        to the error tab to ensure visibility.
+        Adds an error message to the error log with timestamp.
         
         Parameters
         ----------
@@ -525,7 +639,6 @@ class MainWindow(QMainWindow):
         """
         timestamp = time.strftime("%H:%M:%S")
         self.error_log.append(f'<span style="color:gray">[{timestamp}]</span> <span style="color:red"><b>ERROR:</b></span> {error}')
-        self.log_tabs.setCurrentIndex(2)  # Switch to error tab
         
         logger.error(f"Error logged in GUI: {error}")
         
@@ -568,6 +681,35 @@ class MainWindow(QMainWindow):
             self.maggie_ai.process_command(extension=extension)
             
             logger.info(f"Extension '{extension_name}' activated from GUI")
+    
+    def _on_input_submitted(self, text: str) -> None:
+        """
+        Handle input submission from the input field.
+        
+        Parameters
+        ----------
+        text : str
+            The input text to process
+            
+        Returns
+        -------
+        None
+        """
+        if not text.strip():
+            return
+            
+        # Log the user input to the chat display
+        self.log_chat(text, is_user=True)
+        
+        # Process the command through the Maggie AI core
+        if self.maggie_ai.state.name == "IDLE":
+            # If in IDLE state, transition to READY first
+            self.maggie_ai._transition_to(self.maggie_ai.State.READY, "user_input")
+            
+        # Send the command to be processed
+        self.maggie_ai.event_bus.publish("command_detected", text)
+        
+        logger.debug(f"User input submitted: {text}")
             
     def closeEvent(self, event) -> None:
         """
@@ -689,3 +831,19 @@ class MainWindow(QMainWindow):
         """
         self.log_error(f"Error in extension: {extension_name}")
         self.update_state("READY")  # Update to match core state
+        
+    def update_stt_text(self, text: str) -> None:
+        """
+        Update the input field with speech-to-text results.
+        
+        Parameters
+        ----------
+        text : str
+            The recognized text from speech recognition
+            
+        Returns
+        -------
+        None
+        """
+        if self.input_field.stt_mode:
+            self.input_field.setText(text)
