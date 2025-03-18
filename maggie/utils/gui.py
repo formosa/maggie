@@ -1,7 +1,7 @@
 """
 Maggie AI Assistant - GUI Module
 ===============================
-GUI implementation for the Maggie AI Assistant using PyQt6.
+GUI implementation for the Maggie AI Assistant using PySide6.
 
 This module provides a graphical user interface for the Maggie AI Assistant,
 offering visual state indication, command controls, and log displays.
@@ -10,7 +10,7 @@ Examples
 --------
 >>> from maggie.utils.gui import MainWindow
 >>> from maggie import MaggieAI
->>> from PyQt6.QtWidgets import QApplication
+>>> from PySide6.QtWidgets import QApplication
 >>> import sys
 >>> config = {"threading": {"max_workers": 8}}
 >>> maggie = MaggieAI(config)
@@ -25,15 +25,45 @@ import sys
 import time
 from typing import Dict, Any, Optional, List, Callable
 
+# Temporarily adjust PATH to allow PySide6 import
+sys.path.append("C:\\AI\\claude\\fresh\\maggie\\venv\\Lib\\site-packages\\PySide6")
+sys.path.append("C:\\AI\\claude\\fresh\\maggie\\venv\\Lib\\site-packages\\PySide6\\Qt6")
+sys.path.append("C:\\AI\\claude\\fresh\\maggie\\venv\\Lib\\site-packages\\PySide6\\Qt6\\bin")
+# import sys
+# import contextlib
+
+# @contextlib.contextmanager
+# def add_to_path(path):
+#     original_sys_path = sys.path[:]
+#     sys.path.append(path)
+#     try:
+#         yield
+#     finally:
+#         sys.path = original_sys_path
+
+# Use the context manager to temporarily modify sys.path
+# with add_to_path('C:\AI\claude\fresh\maggie\venv\Lib\site-packages\PySide6'):
+#     # Third-party imports
+#     from PySide6.QtWidgets import (
+#         QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QTextEdit,
+#         QPushButton, QLabel, QSplitter, QTabWidget, QSizePolicy,
+#         QListWidget, QListWidgetItem, QGroupBox, QFrame, QStatusBar,
+#         QApplication
+#     )
+#     from PySide6.QtCore import Qt, Signal, QTimer, QMetaObject, Q_ARG, QVariant, QThread
+#     from PySide6.QtGui import QFont, QColor, QIcon, QKeySequence, QShortcut
+
+# sys.path is automatically reverted after exiting the 'with' block
+
 # Third-party imports
-from PyQt6.QtWidgets import (
+from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QTextEdit,
     QPushButton, QLabel, QSplitter, QTabWidget, QSizePolicy,
     QListWidget, QListWidgetItem, QGroupBox, QFrame, QStatusBar,
     QApplication
 )
-from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QMetaObject, Q_ARG, QVariant, QThread
-from PyQt6.QtGui import QFont, QColor, QIcon, QKeySequence, QShortcut
+from PySide6.Qt6Core import Qt, Signal, QTimer, QMetaObject, Q_ARG, QVariant, QThread
+from PySide6.QtGui import QFont, QColor, QIcon, QKeySequence, QShortcut
 from loguru import logger
 
 __all__ = ['MainWindow']

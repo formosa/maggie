@@ -22,7 +22,7 @@ ctransformers==0.2.27
 llama-cpp-python==0.2.11
 
 # ===== UI and Document Processing =====
-PyQt6==6.6.1
+PySide6==6.5.2
 python-docx==0.8.11
 transitions==0.9.0
 mammoth==1.7.0

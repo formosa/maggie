@@ -191,7 +191,7 @@ This modular design allows developers to add new capabilities without modifying 
 
 All user interaction can be done vocally, or by using the application's GUI:
 
-- **Implementation**: Uses the `PyQt6` Python binding of the cross-platform GUI toolkit Qt
+- **Implementation**: Uses the `PySide6` Python binding of the cross-platform GUI toolkit Qt
 - **Feature List**:
   - Status monitoring and visualization
   - Event logging and history
@@ -593,7 +593,7 @@ python install.py --verbose
            - `Kokoro` for text-to-speech
            - `faster-whisper` for speech recognition
            - `ctransformers` for LLM inference
-           - `PyQt6 for GUI` interface
+           - `PySide6 for GUI` interface
            - `python-docx` for document generation
          4. Handles platform-specific installation requirements
 

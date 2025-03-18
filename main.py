@@ -558,16 +558,16 @@ def check_dependencies() -> bool:
     # Check for other critical dependencies
     critical_deps = [
         "pvporcupine", "faster_whisper", "ctransformers", 
-        "transitions", "docx", "PyQt6"
+        "transitions", "docx", "PySide6"
     ]
     missing_deps = []
     
     for dep in critical_deps:
         try:
             module_name = dep.replace("-", "_")
-            if dep == "PyQt6":
-                # module_name = "PyQt6.QtCore"
-                 module_name = "PyQt6"
+            if dep == "PySide6":
+                # module_name = "PySide6.QtCore"
+                 module_name = "PySide6"
             __import__(module_name)
         except ImportError:
             missing_deps.append(dep)
@@ -883,8 +883,12 @@ def start_maggie(args: argparse.Namespace) -> int:
     """
     try:
         # Import here to avoid circular imports
+        sys.path.append("C:\\AI\\claude\\fresh\\maggie\\venv\\Lib\\site-packages\\PySide6")
+        sys.path.append("C:\\AI\\claude\\fresh\\maggie\\venv\\Lib\\site-packages\\PySide6\\Qt6")
+        sys.path.append("C:\\AI\\claude\\fresh\\maggie\\venv\\Lib\\site-packages\\PySide6\\Qt6\\bin")
+        print("sys.path = ", sys.path)
         from maggie.core import MaggieAI
-        from PyQt6.QtWidgets import QApplication
+        from PySide6.QtWidgets import QApplication
         from maggie.utils.gui import MainWindow
     except ImportError as e:
         logger.error(f"Failed to import required module: {e}")
