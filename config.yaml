@@ -17,12 +17,12 @@ speech:
   tts:
     # Changed from en_US-kathleen-medium to af_heart
     voice_model: "af_heart"
-    model_path: "models/tts"
+    model_path: "maggie/models/tts"
     sample_rate: 22050
 
 # LLM configuration
 llm:
-  model_path: "models/mistral-7b-instruct-v0.3-GPTQ-4bit"
+  model_path: "maggie/models/llm/mistral-7b-instruct-v0.3-GPTQ-4bit"
   model_type: "mistral"
   gpu_layers: 32  # Optimized for RTX 3080 10GB
   gpu_layer_auto_adjust: true  # NEW: Allow automatic adjustment based on available VRAM
