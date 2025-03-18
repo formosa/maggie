@@ -387,8 +387,8 @@ def check_memory_configuration() -> bool:
     Returns
     -------
     bool
-        True if memory configuration is sufficient, False otherwise
-        
+        True if memory configuration is sufficient, False if critical issues found
+    
     Notes
     -----
     Verifies:
@@ -406,57 +406,35 @@ def check_memory_configuration() -> bool:
         
         logger.info(f"Total RAM: {total_gb:.2f}GB, Available: {available_gb:.2f}GB")
         
-        # Check if system has enough RAM (minimum 16GB, recommended 32GB)
-        if total_gb < 16:
-            logger.error(f"Insufficient RAM: {total_gb:.2f}GB (minimum 16GB required)")
+        # Critical check: Require at least 8GB RAM to function at all
+        if total_gb < 8:
+            logger.error(f"Critical: Insufficient RAM: {total_gb:.2f}GB (minimum 8GB required)")
             return False
+            
+        # Warning level checks
+        if total_gb < 16:
+            logger.warning(f"Insufficient RAM: {total_gb:.2f}GB (minimum 16GB recommended)")
+            # Continue but log warning - not a critical failure
         elif total_gb < 32:
             logger.warning(f"RAM: {total_gb:.2f}GB (32GB recommended for optimal performance)")
         else:
             logger.info(f"RAM: {total_gb:.2f}GB (optimal)")
         
-        # Check if enough RAM is available
-        if available_gb < 8:
-            logger.warning(f"Low available RAM: {available_gb:.2f}GB (8GB+ recommended)")
-        
-        # Check virtual memory configuration on Windows
-        if platform.system() == "Windows":
-            try:
-                import ctypes
-                kernel32 = ctypes.windll.kernel32
-                c_ulong = ctypes.c_ulong
-                
-                class MEMORYSTATUSEX(ctypes.Structure):
-                    _fields_ = [
-                        ("dwLength", c_ulong),
-                        ("dwMemoryLoad", c_ulong),
-                        ("ullTotalPhys", ctypes.c_ulonglong),
-                        ("ullAvailPhys", ctypes.c_ulonglong),
-                        ("ullTotalPageFile", ctypes.c_ulonglong),
-                        ("ullAvailPageFile", ctypes.c_ulonglong),
-                        ("ullTotalVirtual", ctypes.c_ulonglong),
-                        ("ullAvailVirtual", ctypes.c_ulonglong),
-                        ("ullAvailExtendedVirtual", ctypes.c_ulonglong),
-                    ]
-                
-                memory_status = MEMORYSTATUSEX()
-                memory_status.dwLength = ctypes.sizeof(MEMORYSTATUSEX)
-                kernel32.GlobalMemoryStatusEx(ctypes.byref(memory_status))
-                
-                # Check page file size (virtual memory)
-                total_page_file_gb = memory_status.ullTotalPageFile / (1024**3)
-                if total_page_file_gb < total_gb * 1.5:
-                    logger.warning(f"Virtual memory size ({total_page_file_gb:.2f}GB) is less than recommended (1.5x RAM = {total_gb * 1.5:.2f}GB)")
-            except Exception as e:
-                logger.debug(f"Could not check virtual memory configuration: {e}")
-        
+        # Check available memory - critical if extremely low
+        if available_gb < 2:
+            logger.error(f"Critical: Only {available_gb:.2f}GB RAM available. Close other applications.")
+            return False
+            
         return True
+        
     except ImportError:
         logger.warning("psutil not available for memory checks")
-        return True  # Continue anyway
+        logger.warning("Install psutil for comprehensive memory verification")
+        return True  # Continue anyway - not critical
     except Exception as e:
         logger.error(f"Error checking memory configuration: {e}")
-        return True  # Continue anyway
+        logger.warning("Memory check failed, proceeding with caution")
+        return True  # Continue anyway - not critical
 
 
 def check_python_version() -> bool:
