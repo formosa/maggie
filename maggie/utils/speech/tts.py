@@ -11,7 +11,7 @@ high-quality voice output.
 Examples
 --------
 >>> from utils.kokoro_tts import KokoroTTS
->>> config = {"voice_model": "af_heart", "model_path": "models/tts"}
+>>> config = {"voice_model": "af_heart.pt", "model_path": "models/tts"}
 >>> tts = KokoroTTS(config)
 >>> tts.speak("Hello, I am Maggie AI Assistant")
 >>> # Save to file
@@ -78,14 +78,14 @@ class KokoroTTS:
         ----------
         config : Dict[str, Any]
             Configuration dictionary for TTS containing:
-            - voice_model: Name of voice to use (default: "af_heart")
+            - voice_model: Name of voice to use (default: "af_heart.pt")
             - model_path: Path to TTS models (default: "models/tts")
             - sample_rate: Sample rate in Hz (default: 22050)
             - use_cache: Whether to cache TTS results (default: True)
             - cache_size: Maximum number of cached utterances (default: 100)
         """
         self.config = config
-        self.voice_model = config.get("voice_model", "af_heart")
+        self.voice_model = config.get("voice_model", "af_heart.pt")
         self.model_path = config.get("model_path", "models/tts")
         self.sample_rate = config.get("sample_rate", 22050)
         self.kokoro_instance = None
