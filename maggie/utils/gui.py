@@ -62,12 +62,18 @@ from PySide6.QtWidgets import (
     QListWidget, QListWidgetItem, QGroupBox, QFrame, QStatusBar,
     QApplication
 )
-from PySide6.Qt6Core import Qt, Signal, QTimer, QMetaObject, Q_ARG, QVariant, QThread
+# from PySide6.QtCore import Qt, Signal, QTimer, QMetaObject, Q_ARG, QVariant, QThread
+from PySide6.QtCore import Qt, Signal, QTimer, QMetaObject, Q_ARG, QThread
 from PySide6.QtGui import QFont, QColor, QIcon, QKeySequence, QShortcut
 from loguru import logger
 
 __all__ = ['MainWindow']
 
+class QVariant:
+    def __init__(self, value=None):
+        self.value = value
+    def value(self):
+        return self.value
 class MainWindow(QMainWindow):
     """
     Main window for the Maggie AI Assistant GUI.

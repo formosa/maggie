@@ -566,8 +566,8 @@ def check_dependencies() -> bool:
         try:
             module_name = dep.replace("-", "_")
             if dep == "PySide6":
-                # module_name = "PySide6.QtCore"
-                 module_name = "PySide6"
+                module_name = "PySide6.QtCore"
+                module_name = "PySide6"
             __import__(module_name)
         except ImportError:
             missing_deps.append(dep)
