@@ -677,8 +677,8 @@ class HardwareManager:
         """
         while self._monitoring_enabled:
             try:
-                cpu_percent = psutil.cpu_count(percpu=True)
-                cpu_avg = sum(cpu_percent) / len(cpu_percent) if cpu_percent else 0
+                cpu_percent = psutil.cpu_percent(percpu=True)
+                cpu_avg = sum(cpu_percent) / len(cpu_percent) if cpu_percent else 00
                 memory = psutil.virtual_memory()
                 
                 # Store historical data for trend analysis
