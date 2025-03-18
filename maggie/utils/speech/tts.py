@@ -149,20 +149,58 @@ class KokoroTTS:
             except ImportError as import_error:
                 # Handle specific import error related to huggingface_hub
                 if "OfflineModeIsEnabled" in str(import_error):
-                    logger.error(f"Incompatible huggingface_hub version: {import_error}")
-                    logger.error("Try reinstalling huggingface_hub with: pip install huggingface_hub==0.15.1")
-                    return False
+                    logger.error(f"Import Error(kokoro)-'OfflineModeIsEnabled': {import_error}")
                 else:
-                    logger.error(f"Failed to import Kokoro TTS module: {import_error}")
-                    logger.error("Please install kokoro with: pip install git+https://github.com/hexgrad/kokoro")
-                    return False
+                    logger.error(f"Import Error(kokoro): {import_error}")
+                return False
             
             voice_path = os.path.join(self.model_path, self.voice_model)
-            
-            # Check if model exists
+
+            # Check if model exists with improved error reporting
             if not os.path.exists(voice_path):
-                logger.error(f"TTS voice model not found: {voice_path}")
+                error_msg = f"TTS voice model not found: {voice_path}"
+                logger.error(error_msg)
+                
+                # Publish detailed error to event bus
+                try:
+                    from maggie.utils.service_locator import ServiceLocator
+                    event_bus = ServiceLocator.get("event_bus")
+                    if event_bus:
+                        event_bus.publish("error_logged", {
+                            "source": "tts",
+                            "message": f"Voice model not found: {voice_path}",
+                            "path": voice_path
+                        })
+                except ImportError:
+                    pass  # Service locator not available
+                    
+                # Suggest model download
+                logger.info(f"Attempting to download missing voice model...")
+                if self._download_voice_model():
+                    logger.info(f"Successfully downloaded voice model")
+                    # Try again with the downloaded model
+                    if os.path.exists(voice_path):
+                        return self._initialize_kokoro_engine(voice_path)
                 return False
+
+            return self._initialize_kokoro_engine(voice_path)
+    
+    def _initialize_kokoro_engine(self, voice_path: str) -> bool:
+        """
+        Initialize the Kokoro TTS engine with the specified voice model.
+        
+        Parameters
+        ----------
+        voice_path : str
+            Path to the voice model file
+            
+        Returns
+        -------
+        bool
+            True if initialization was successful, False otherwise
+        """
+        try:
+            import kokoro
             
             # Configure GPU options for Kokoro
             gpu_options = {}
@@ -175,11 +213,11 @@ class KokoroTTS:
                         if "3080" in gpu_name:
                             gpu_options = {
                                 "precision": self.gpu_precision,
-                                "cuda_graphs": True,       # Use CUDA graphs for faster inference
-                                "max_batch_size": 64,      # Increased batch size for efficient processing
-                                "mixed_precision": True,   # Use mixed precision for RTX 3080
-                                "tensor_cores": True,      # Use tensor cores
-                                "stream_buffer_size": 8    # Increased buffer size
+                                "cuda_graphs": True,
+                                "max_batch_size": 64,
+                                "mixed_precision": True,
+                                "tensor_cores": True,
+                                "stream_buffer_size": 8
                             }
                 except ImportError:
                     pass
@@ -190,7 +228,7 @@ class KokoroTTS:
             # Configure Kokoro to use CUDA if available
             self.kokoro_instance = kokoro.load_tts_model(
                 voice_path,
-                use_cuda=self.gpu_acceleration,  # Will fall back to CPU if CUDA is not available
+                use_cuda=self.gpu_acceleration,
                 sample_rate=self.sample_rate,
                 **gpu_options
             )
@@ -208,9 +246,9 @@ class KokoroTTS:
             return True
             
         except Exception as e:
-            logger.error(f"Failed to initialize Kokoro TTS: {e}")
+            logger.error(f"Failed to initialize Kokoro TTS engine: {e}")
             return False
-    
+
     def _warm_up_model(self) -> None:
         """
         Warm up the TTS model to initialize CUDA kernels.
@@ -249,7 +287,45 @@ class KokoroTTS:
                 logger.info("TTS using CPU (CUDA not available)")
         except ImportError:
             logger.debug("PyTorch not available for GPU detection")
+
+    def _download_voice_model(self) -> bool:
+        """
+        Download the TTS voice model if missing.
+        
+        Returns
+        -------
+        bool
+            True if download was successful, False otherwise
+        """
+        try:
+            # Ensure model directory exists
+            os.makedirs(self.model_path, exist_ok=True)
             
+            model_filename = self.voice_model
+            target_path = os.path.join(self.model_path, model_filename)
+            
+            # URL for the voice model
+            model_url = "https://huggingface.co/hexgrad/Kokoro-82M/resolve/main/voices/af_heart.pt"
+            
+            logger.info(f"Downloading voice model from {model_url}")
+            
+            # Use requests to download the file
+            import requests
+            response = requests.get(model_url, stream=True)
+            response.raise_for_status()
+            
+            # Write the file
+            with open(target_path, 'wb') as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    f.write(chunk)
+                    
+            logger.info(f"Voice model downloaded to {target_path}")
+            return True
+        
+        except Exception as e:
+            logger.error(f"Failed to download voice model: {e}")
+            return False
+
     def _get_cache_key(self, text: str) -> str:
         """
         Generate a cache key for the given text.
