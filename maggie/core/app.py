@@ -440,7 +440,7 @@ class MaggieAI:
         """
         try:
             # Import service locator
-            from maggie.utils.speech import SpeechProcessor
+            from maggie.utils.speech.speech_processor import SpeechProcessor
             
             # Import service locator
             from maggie.utils.service_locator import ServiceLocator
