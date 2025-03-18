@@ -463,9 +463,9 @@ class MaggieAI:
             ServiceLocator.register("speech_processor", self.speech_processor)
             
             # Initialize LLM processor
-            from llm_processor import LLMProcessor
-            self.llm_processor = LLMProcessor(self.config.get("llm", {}))
-            ServiceLocator.register("llm_processor", self.llm_processor)
+            # from llm_processor import LLMProcessor
+            # self.llm_processor = LLMProcessor(self.config.get("llm", {}))
+            # ServiceLocator.register("llm_processor", self.llm_processor)
             
             # Register event bus
             ServiceLocator.register("event_bus", self.event_bus)
