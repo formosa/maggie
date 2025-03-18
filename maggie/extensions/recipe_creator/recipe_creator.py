@@ -255,21 +255,22 @@ class RecipeCreator(ExtensionBase):
     
     def _acquire_component_references(self) -> bool:
         """
-        Acquire references to required components.
+        Acquire references to required components using ServiceLocator.
         
         Returns
         -------
         bool
             True if all required component references were acquired
         """
-        for component in self.event_bus.subscribers.get("state_changed", []):
-            if hasattr(component, "speech_processor") and hasattr(component, "llm_processor"):
-                self.speech_processor = component.speech_processor
-                self.llm_processor = component.llm_processor
-                return True
-                
-        return False
-    
+        # Get speech processor from service locator
+        self.speech_processor = self.get_service("speech_processor")
+        
+        # Get LLM processor from service locator
+        self.llm_processor = self.get_service("llm_processor")
+        
+        # Check if both services were found
+        return self.speech_processor is not None and self.llm_processor is not None
+
     def start(self) -> bool:
         """
         Start the Recipe Creator workflow.
