@@ -109,6 +109,23 @@ class StateTransition:
     to_state: State
     trigger: str
     timestamp: float
+    
+    def __lt__(self, other):
+        """
+        Compare transitions for priority queue ordering.
+        
+        Parameters
+        ----------
+        other : StateTransition
+            Another transition to compare with
+            
+        Returns
+        -------
+        bool
+            True if self has higher priority than other
+        """
+        # Compare by timestamp for ordering in priority queue
+        return self.timestamp < other.timestamp
 
 class EventBus:
     """
@@ -422,8 +439,6 @@ class MaggieAI:
         self.event_bus.subscribe("inactivity_timeout", self._handle_timeout)
         self.event_bus.subscribe("extension_completed", self._handle_extension_completed)
         
-    # In maggie/maggie.py, update the initialize_components method
-
     def initialize_components(self) -> bool:
         """
         Initialize all required components.
@@ -439,7 +454,6 @@ class MaggieAI:
             If required modules cannot be imported
         """
         try:
-
             # Import service locator
             from maggie.utils.service_locator import ServiceLocator
             
@@ -463,9 +477,9 @@ class MaggieAI:
             ServiceLocator.register("speech_processor", self.speech_processor)
             
             # Initialize LLM processor
-            # from llm_processor import LLMProcessor
-            # self.llm_processor = LLMProcessor(self.config.get("llm", {}))
-            # ServiceLocator.register("llm_processor", self.llm_processor)
+            from maggie.utils.llm.llm_processor import LLMProcessor
+            self.llm_processor = LLMProcessor(self.config.get("llm", {}))
+            ServiceLocator.register("llm_processor", self.llm_processor)
             
             # Register event bus
             ServiceLocator.register("event_bus", self.event_bus)

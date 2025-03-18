@@ -144,7 +144,18 @@ class KokoroTTS:
             
         try:
             # Import Kokoro library
-            import kokoro
+            try:
+                import kokoro
+            except ImportError as import_error:
+                # Handle specific import error related to huggingface_hub
+                if "OfflineModeIsEnabled" in str(import_error):
+                    logger.error(f"Incompatible huggingface_hub version: {import_error}")
+                    logger.error("Try reinstalling huggingface_hub with: pip install huggingface_hub==0.15.1")
+                    return False
+                else:
+                    logger.error(f"Failed to import Kokoro TTS module: {import_error}")
+                    logger.error("Please install kokoro with: pip install git+https://github.com/hexgrad/kokoro")
+                    return False
             
             voice_path = os.path.join(self.model_path, self.voice_model)
             
@@ -196,10 +207,6 @@ class KokoroTTS:
                 
             return True
             
-        except ImportError as import_error:
-            logger.error(f"Failed to import Kokoro TTS module: {import_error}")
-            logger.error("Please install kokoro with: pip install git+https://github.com/hexgrad/kokoro")
-            return False
         except Exception as e:
             logger.error(f"Failed to initialize Kokoro TTS: {e}")
             return False
