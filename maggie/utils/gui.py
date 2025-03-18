@@ -85,6 +85,9 @@ class InputField(QLineEdit):
         Function to call when input is submitted
     """
     
+    # Add a signal
+    state_change_requested = Signal(str)
+
     def __init__(self, parent=None, submit_callback=None):
         """
         Initialize the input field.
@@ -108,7 +111,8 @@ class InputField(QLineEdit):
         """
         Handle focus in event.
         
-        When input field gains focus, switch to manual input mode.
+        When input field gains focus, switch to manual input mode and
+        request state transition if needed.
         
         Parameters
         ----------
@@ -118,6 +122,9 @@ class InputField(QLineEdit):
         super().focusInEvent(event)
         self.stt_mode = False
         self.setStyleSheet("background-color: white;")
+        
+        # Signal the MainWindow to check for state transition
+        self.state_change_requested.emit("ACTIVE")
     
     def focusOutEvent(self, event: QFocusEvent) -> None:
         """
@@ -234,7 +241,8 @@ class MainWindow(QMainWindow):
         self.maggie_ai.event_bus.subscribe("state_changed", self._on_state_changed)
         self.maggie_ai.event_bus.subscribe("extension_completed", self._on_extension_completed)
         self.maggie_ai.event_bus.subscribe("extension_error", self._on_extension_error)
-        
+        self.maggie_ai.event_bus.subscribe("error_logged", self._on_error_logged)
+
         # Set keyboard shortcuts
         self.setup_shortcuts()
         
@@ -300,8 +308,9 @@ class MainWindow(QMainWindow):
         self.input_field = InputField(submit_callback=self._on_input_submitted)
         self.input_field.setFixedHeight(30)
         self.input_field.update_appearance_for_state("IDLE")
+        self.input_field.state_change_requested.connect(self._on_input_state_change)
         self.chat_layout.addWidget(self.input_field)
-        
+    
         # Event log section with title
         self.event_group = QGroupBox("Event Log")
         self.event_group_layout = QVBoxLayout(self.event_group)
@@ -370,6 +379,44 @@ class MainWindow(QMainWindow):
         self.sleep_button.clicked.connect(self.on_sleep_clicked)
         self.control_layout.addWidget(self.sleep_button)
         
+    def _on_input_state_change(self, requested_state: str) -> None:
+        """
+        Handle state change requests from the input field.
+        
+        Parameters
+        ----------
+        requested_state : str
+            The requested state to transition to
+            
+        Returns
+        -------
+        None
+        """
+        if self.maggie_ai.state.name == "IDLE" and requested_state == "ACTIVE":
+            # Transition from IDLE to READY when input field is activated
+            self.maggie_ai._transition_to(self.maggie_ai.State.READY, "input_field_activated")
+            self.log_event("State transition requested by input field")
+
+    def _on_error_logged(self, error_data):
+        """
+        Handle error logging events from the system.
+        
+        Parameters
+        ----------
+        error_data : str or dict
+            Error message or dictionary with error details
+            
+        Returns
+        -------
+        None
+        """
+        if isinstance(error_data, dict):
+            message = error_data.get('message', 'Unknown error')
+            source = error_data.get('source', 'system')
+            self.log_error(f"[{source}] {message}")
+        else:
+            self.log_error(str(error_data))
+
     def setup_shortcuts(self) -> None:
         """
         Set up keyboard shortcuts for the GUI.

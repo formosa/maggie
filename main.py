@@ -123,6 +123,16 @@ def setup_logging(debug: bool = False) -> None:
         ]
     )
     
+    # Add custom handler to route error logs to event bus
+    # Register the handler after Maggie is initialized
+    class EventBusHandler:
+        def __init__(self, event_bus):
+            self.event_bus = event_bus
+        
+        def emit(self, record):
+            if record.levelname == 'ERROR':
+                self.event_bus.publish("error_logged", record.getMessage())
+
     # Log system info
     log_system_info()
 
@@ -910,6 +920,10 @@ def start_maggie(args: argparse.Namespace) -> int:
     # Register signal handlers for graceful shutdown
     register_signal_handlers(maggie)
     
+    # Register the handler after Maggie is initialized
+    # Add this line in the start_maggie function after maggie = MaggieAI(config)
+    logger.add(EventBusHandler(maggie.event_bus))
+
     # Start Maggie core services
     success = maggie.start()
     if not success:
