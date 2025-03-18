@@ -883,16 +883,33 @@ def start_maggie(args: argparse.Namespace) -> int:
     """
     try:
         # Import here to avoid circular imports
-        sys.path.append("C:\\AI\\claude\\fresh\\maggie\\venv\\Lib\\site-packages\\PySide6")
-        sys.path.append("C:\\AI\\claude\\fresh\\maggie\\venv\\Lib\\site-packages\\PySide6\\Qt6")
-        sys.path.append("C:\\AI\\claude\\fresh\\maggie\\venv\\Lib\\site-packages\\PySide6\\Qt6\\bin")
-        print("sys.path = ", sys.path)
-        from maggie.core import MaggieAI
-        from PySide6.QtWidgets import QApplication
-        from maggie.utils.gui import MainWindow
+        for path in find_pyside6_paths():
+            if path not in sys.path:
+                sys.path.append(path)
+                
+        # Import required components with better error handling
+        from maggie.core import MaggieAI, State  # Import State explicitly
+        if not args.headless:
+            try:
+                from PySide6.QtWidgets import QApplication
+                from maggie.utils.gui import MainWindow
+            except ImportError as e:
+                logger.error(f"GUI components import failed: {e}")
+                logger.info("Falling back to headless mode")
+                args.headless = True
     except ImportError as e:
         logger.error(f"Failed to import required module: {e}")
         return 1
+    #     sys.path.append("C:\\AI\\claude\\fresh\\maggie\\venv\\Lib\\site-packages\\PySide6")
+    #     sys.path.append("C:\\AI\\claude\\fresh\\maggie\\venv\\Lib\\site-packages\\PySide6\\Qt6")
+    #     sys.path.append("C:\\AI\\claude\\fresh\\maggie\\venv\\Lib\\site-packages\\PySide6\\Qt6\\bin")
+    #     print("sys.path = ", sys.path)
+    #     from maggie.core import MaggieAI
+    #     from PySide6.QtWidgets import QApplication
+    #     from maggie.utils.gui import MainWindow
+    # except ImportError as e:
+    #     logger.error(f"Failed to import required module: {e}")
+    #     return 1
 
     # Load config from file
     config = {}
@@ -935,16 +952,17 @@ def start_maggie(args: argparse.Namespace) -> int:
             return 1
     else:
         # Headless operation - keep running until signal received
-        logger.info("Running in headless mode")
-        try:
-            # Main thread waits here
-            while maggie.state != State.SHUTDOWN:
-                time.sleep(1)
-            return 0
-        except KeyboardInterrupt:
-            logger.info("Keyboard interrupt received, shutting down")
-            maggie.shutdown()
-            return 0
+        if args.headless:
+            logger.info("Running in headless mode")
+            try:
+                # Main thread waits here
+                while maggie.state != State.SHUTDOWN:  # Now State is properly imported
+                    time.sleep(1)
+                return 0
+            except KeyboardInterrupt:
+                logger.info("Keyboard interrupt received, shutting down")
+                maggie.shutdown()
+                return 0
 
 
 def register_signal_handlers(maggie) -> None:
@@ -969,6 +987,85 @@ def register_signal_handlers(maggie) -> None:
     except Exception as e:
         logger.warning(f"Failed to register signal handlers: {e}")
 
+def find_pyside6_paths():
+    """
+    Find PySide6 paths dynamically across platforms.
+    
+    Returns
+    -------
+    List[str]
+        List of paths to add to sys.path for PySide6 imports
+    
+    Notes
+    -----
+    This function attempts to locate PySide6 installation directories
+    using multiple methods across different platforms.
+    """
+    pyside_paths = []
+    
+    try:
+        # Method 1: Use pip to find the package location
+        import subprocess
+        import json
+        
+        result = subprocess.run(
+            [sys.executable, "-m", "pip", "show", "pyside6", "-f", "--json"],
+            capture_output=True,
+            text=True
+        )
+        
+        if result.returncode == 0:
+            try:
+                # Parse pip output as JSON (newer pip versions)
+                data = json.loads(result.stdout)
+                if "location" in data:
+                    base_path = data["location"]
+                    pyside_paths = [
+                        os.path.join(base_path, "PySide6"),
+                        os.path.join(base_path, "PySide6", "Qt6"),
+                        os.path.join(base_path, "PySide6", "Qt6", "bin")
+                    ]
+                    return [p for p in pyside_paths if os.path.exists(p)]
+            except json.JSONDecodeError:
+                # Fall through to other methods
+                pass
+        
+        # Method 2: Try to find in site-packages
+        import site
+        for site_dir in site.getsitepackages():
+            pyside_dir = os.path.join(site_dir, "PySide6")
+            if os.path.exists(pyside_dir):
+                pyside_paths = [
+                    pyside_dir,
+                    os.path.join(pyside_dir, "Qt6"),
+                    os.path.join(pyside_dir, "Qt6", "bin")
+                ]
+                return [p for p in pyside_paths if os.path.exists(p)]
+                
+        # Method 3: Check in virtual environment
+        venv_dir = os.path.dirname(os.path.dirname(sys.executable))
+        if os.path.exists(venv_dir):
+            # Different structures in different platforms
+            potential_paths = [
+                os.path.join(venv_dir, "Lib", "site-packages", "PySide6"),  # Windows
+                os.path.join(venv_dir, "lib", "python3.10", "site-packages", "PySide6"),  # Linux
+                os.path.join(venv_dir, "lib", "site-packages", "PySide6")  # Alternative
+            ]
+            
+            for path in potential_paths:
+                if os.path.exists(path):
+                    pyside_paths = [
+                        path,
+                        os.path.join(path, "Qt6"),
+                        os.path.join(path, "Qt6", "bin")
+                    ]
+                    return [p for p in pyside_paths if os.path.exists(p)]
+    
+    except Exception as e:
+        print(f"Error finding PySide6 paths: {e}")
+    
+    # Return whatever we found (could be empty)
+    return pyside_paths
 
 if __name__ == "__main__":
     sys.exit(main())
