@@ -439,9 +439,7 @@ class MaggieAI:
             If required modules cannot be imported
         """
         try:
-            # Import service locator
-            from maggie.utils.speech.speech_processor import SpeechProcessor
-            
+
             # Import service locator
             from maggie.utils.service_locator import ServiceLocator
             
@@ -460,7 +458,7 @@ class MaggieAI:
             ServiceLocator.register("wake_word_detector", self.wake_word_detector)
             
             # Initialize speech processor
-            from speech_processor import SpeechProcessor
+            from maggie.utils.speech.speech_processor import SpeechProcessor
             self.speech_processor = SpeechProcessor(self.config.get("speech", {}))
             ServiceLocator.register("speech_processor", self.speech_processor)
             
