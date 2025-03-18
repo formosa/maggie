@@ -672,7 +672,30 @@ class MainWindow(QMainWindow):
         self.event_log.append(f'<span style="color:gray">[{timestamp}]</span> {event}')
         
         logger.debug(f"Event logged: {event}")
+
+    # Add to MainWindow class
+    def show_download_progress(self, progress_data):
+        """
+        Display download progress in the GUI.
         
+        Parameters
+        ----------
+        progress_data : dict
+            Dictionary containing progress information
+            
+        Returns
+        -------
+        None
+        """
+        item = progress_data.get('item', 'file')
+        percent = progress_data.get('percent', 0)
+        status = f"Downloading {item}: {percent}% complete"
+        self.status_label.setText(status)
+        
+        if percent >= 100:
+            # Reset status after 3 seconds
+            QTimer.singleShot(3000, lambda: self.status_label.setText(f"Status: {self.state_display.text()}"))   
+
     def log_error(self, error: str) -> None:
         """
         Log an error message.
@@ -685,7 +708,17 @@ class MainWindow(QMainWindow):
             Error to log
         """
         timestamp = time.strftime("%H:%M:%S")
-        self.error_log.append(f'<span style="color:gray">[{timestamp}]</span> <span style="color:red"><b>ERROR:</b></span> {error}')
+        
+        # Format the error with HTML for better styling
+        formatted_error = f'<span style="color:gray">[{timestamp}]</span> <span style="color:red"><b>ERROR:</b></span> {error}'
+        
+        # Add the error to the log
+        self.error_log.append(formatted_error)
+        
+        # Make the Error Log section visible by updating splitter sizes
+        current_sizes = self.logs_splitter.sizes()
+        if current_sizes[2] < 100:  # If Error Log section is too small
+            self.logs_splitter.setSizes([current_sizes[0], current_sizes[1], 200])
         
         logger.error(f"Error logged in GUI: {error}")
         
