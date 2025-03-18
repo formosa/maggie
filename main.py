@@ -44,17 +44,6 @@ from maggie.core import MaggieAI
 
 __all__ = ['main', 'parse_arguments', 'setup_logging', 'verify_system']
 
-# Add custom handler to route error logs to event bus
-# Register the handler after Maggie is initialized
-class EventBusHandler:
-    def __init__(self, event_bus):
-        self.event_bus = event_bus
-    
-    def emit(self, record):
-        if record.levelname == 'ERROR':
-            self.event_bus.publish("error_logged", record.getMessage())
-
-
 def parse_arguments() -> argparse.Namespace:
     """
     Parse command line arguments.
@@ -134,6 +123,16 @@ def setup_logging(debug: bool = False) -> None:
         ]
     )
     
+    # Add custom handler to route error logs to event bus
+    # Register the handler after Maggie is initialized
+    class EventBusHandler:
+        def __init__(self, event_bus):
+            self.event_bus = event_bus
+        
+        def emit(self, record):
+            if record.levelname == 'ERROR':
+                self.event_bus.publish("error_logged", record.getMessage())
+
     # Log system info
     log_system_info()
 
