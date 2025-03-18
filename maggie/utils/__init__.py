@@ -3,7 +3,8 @@ Maggie AI Assistant Utilities Package
 ====================================
 
 Core utilities package for the Maggie AI Assistant, providing support 
-modules for hardware management, configuration, logging, and services.
+modules for, audio attention, hardware management, configuration, 
+logging, and services.
 
 This package offers hardware-aware optimization, configuration management,
 and service locator utilities specifically tuned for AMD Ryzen 9 5900X and 
@@ -13,6 +14,7 @@ NVIDIA RTX 3080 hardware, enabling efficient resource usage across the system.
 from maggie.utils.service_locator import ServiceLocator
 from maggie.utils.hardware.manager import HardwareManager
 from maggie.utils.config.manager import ConfigManager
+from maggie.utils.attention import WakeWordDetector
 from maggie.utils.gui import MainWindow
 
-__all__ = ['ServiceLocator', 'HardwareManager', 'ConfigManager', 'MainWindow']
+__all__ = ['ServiceLocator', 'HardwareManager', 'ConfigManager','WakeWordDetector', 'MainWindow']

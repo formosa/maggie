@@ -451,7 +451,7 @@ class MaggieAI:
             self.config = self.hardware_manager.optimize_config(self.config)
             
             # Initialize wake word detector
-            from wake_word import WakeWordDetector
+            from maggie.utils.attention.wake_word import WakeWordDetector
             self.wake_word_detector = WakeWordDetector(self.config.get("wake_word", {}))
             self.wake_word_detector.on_detected = lambda: self.event_bus.publish("wake_word_detected")
             ServiceLocator.register("wake_word_detector", self.wake_word_detector)

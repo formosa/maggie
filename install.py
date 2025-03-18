@@ -433,6 +433,7 @@ class MaggieInstaller:
             "maggie/templates",
             "maggie/templates/extension",
             "maggie/utils",
+            "maggie/utils/attention",
             "maggie/utils/config",
             "maggie/utils/hardware",
             "maggie/utils/speech",
