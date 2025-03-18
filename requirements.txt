@@ -20,6 +20,7 @@ soundfile==0.12.1
 
 # ===== Language Model =====
 ctransformers==0.2.27
+transformers==4.27.4
 llama-cpp-python==0.2.11
 
 # ===== UI and Document Processing =====
