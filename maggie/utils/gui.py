@@ -323,7 +323,7 @@ class MainWindow(QMainWindow):
                 display_name = extension_name.replace("_", " ").title()
                 extension_button = QPushButton(display_name)
                 extension_button.clicked.connect(
-                    lambda checked, name=extension_name: self.on_extension_clicked(name)
+                    lambda checked=False, name=extension_name: self.on_extension_clicked(name)
                 )
                 self.extensions_layout.addWidget(extension_button)
                 self.extension_buttons[extension_name] = extension_button
