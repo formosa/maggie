@@ -182,8 +182,13 @@ class KokoroTTS:
                     if os.path.exists(voice_path):
                         return self._initialize_kokoro_engine(voice_path)
                 return False
-
+            
+            # Initialize the Kokoro TTS engine
             return self._initialize_kokoro_engine(voice_path)
+        
+        except Exception as e:
+            logger.error(f"Failed to initialize Kokoro TTS engine: {e}")
+            return False
     
     def _initialize_kokoro_engine(self, voice_path: str) -> bool:
         """
