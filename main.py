@@ -911,7 +911,10 @@ def start_maggie(args: argparse.Namespace) -> int:
     Parameters
     ----------
     args : argparse.Namespace
-        Command-line arguments containing configuration options
+        Command-line arguments containing configuration options and flags
+
+        Valid fields:
+        - config: Path to configuration file
         
     Returns
     -------
