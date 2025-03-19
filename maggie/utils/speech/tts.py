@@ -150,25 +150,6 @@ class KokoroTTS:
 
             # Check if model exists with improved error reporting
             if not os.path.exists(voice_path):
-                # [existing code...]
-                
-            # UPDATED: Fix for Kokoro 0.8.4 API
-            # Check available methods in the kokoro module
-            logger.debug(f"Available kokoro methods: {dir(kokoro)}")
-            
-            # Try the correct API - several alternatives based on common TTS patterns
-            if hasattr(kokoro, 'TTS'):
-                # Method 1: kokoro.TTS(model_path)
-                self.kokoro_instance = kokoro.TTS(voice_path)
-            elif hasattr(kokoro, 'Model'):
-                # Method 2: kokoro.Model.load(model_path)
-                self.kokoro_instance = kokoro.Model.load(voice_path)
-            else:
-                # Method 3: Direct constructor with attributes
-                self.kokoro_instance = kokoro.TTSModel(voice_path, use_cuda=self.gpu_acceleration)
-
-            # Check if model exists with improved error reporting
-            if not os.path.exists(voice_path):
                 error_msg = f"TTS voice model not found: {voice_path}"
                 logger.error(error_msg)
                 
@@ -193,14 +174,28 @@ class KokoroTTS:
                     if os.path.exists(voice_path):
                         return self._initialize_kokoro_engine(voice_path)
                 return False
+                
+            # UPDATED: Fix for Kokoro 0.8.4 API
+            # Check available methods in the kokoro module
+            logger.debug(f"Available kokoro methods: {dir(kokoro)}")
             
+            # Try the correct API - several alternatives based on common TTS patterns
+            if hasattr(kokoro, 'TTS'):
+                # Method 1: kokoro.TTS(model_path)
+                self.kokoro_instance = kokoro.TTS(voice_path)
+            elif hasattr(kokoro, 'Model'):
+                # Method 2: kokoro.Model.load(model_path)
+                self.kokoro_instance = kokoro.Model.load(voice_path)
+            else:
+                # Method 3: Direct constructor with attributes
+                self.kokoro_instance = kokoro.TTSModel(voice_path, use_cuda=self.gpu_acceleration)
+
             # Initialize the Kokoro TTS engine
             return self._initialize_kokoro_engine(voice_path)
         
         except Exception as e:
             logger.error(f"Failed to initialize Kokoro TTS engine: {e}")
             return False
-
     
     def _initialize_kokoro_engine(self, voice_path: str) -> bool:
         """
