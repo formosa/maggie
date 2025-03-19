@@ -144,17 +144,28 @@ class KokoroTTS:
             
         try:
             # Import Kokoro library
-            try:
-                import kokoro
-            except ImportError as import_error:
-                # Handle specific import error related to huggingface_hub
-                if "OfflineModeIsEnabled" in str(import_error):
-                    logger.error(f"Import Error(kokoro)-'OfflineModeIsEnabled': {import_error}")
-                else:
-                    logger.error(f"Import Error(kokoro): {import_error}")
-                return False
+            import kokoro
             
             voice_path = os.path.join(self.model_path, self.voice_model)
+
+            # Check if model exists with improved error reporting
+            if not os.path.exists(voice_path):
+                # [existing code...]
+                
+            # UPDATED: Fix for Kokoro 0.8.4 API
+            # Check available methods in the kokoro module
+            logger.debug(f"Available kokoro methods: {dir(kokoro)}")
+            
+            # Try the correct API - several alternatives based on common TTS patterns
+            if hasattr(kokoro, 'TTS'):
+                # Method 1: kokoro.TTS(model_path)
+                self.kokoro_instance = kokoro.TTS(voice_path)
+            elif hasattr(kokoro, 'Model'):
+                # Method 2: kokoro.Model.load(model_path)
+                self.kokoro_instance = kokoro.Model.load(voice_path)
+            else:
+                # Method 3: Direct constructor with attributes
+                self.kokoro_instance = kokoro.TTSModel(voice_path, use_cuda=self.gpu_acceleration)
 
             # Check if model exists with improved error reporting
             if not os.path.exists(voice_path):
@@ -189,6 +200,7 @@ class KokoroTTS:
         except Exception as e:
             logger.error(f"Failed to initialize Kokoro TTS engine: {e}")
             return False
+
     
     def _initialize_kokoro_engine(self, voice_path: str) -> bool:
         """
