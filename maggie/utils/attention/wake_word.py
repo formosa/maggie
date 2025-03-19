@@ -135,23 +135,40 @@ class WakeWordDetector:
                 
             try:
                 # Initialize Porcupine for wake word detection
-                keywords = ["maggie"]  # Default wake word
+                keywords = []
+                sensitivities = []
                 
-                if self.keyword_path:
-                    if os.path.exists(self.keyword_path):
-                        # Use custom keyword model if specified
-                        keywords = [self.keyword_path]
-                        logger.info(f"Using custom keyword model: {self.keyword_path}")
-                    else:
-                        logger.warning(f"Custom keyword model not found: {self.keyword_path}")
-                        logger.warning("Falling back to default wake word: 'maggie'")
+                # UPDATED: Fix for keyword availability
+                if self.keyword_path and os.path.exists(self.keyword_path):
+                    # Use custom keyword model
+                    keywords = [self.keyword_path]
+                    sensitivities = [self.sensitivity]
+                    logger.info(f"Using custom keyword model: {self.keyword_path}")
+                else:
+                    # Use a default keyword that's available
+                    # Fallback to "computer" which is in the default list
+                    default_keyword = "computer"  # Change to preferred default
+                    keywords = [default_keyword]
+                    sensitivities = [self.sensitivity]
+                    logger.warning(f"Custom keyword not found, using default: '{default_keyword}'")
+                    logger.warning(f"To use 'maggie', create a custom keyword at console.picovoice.ai")
                 
-                # Create Porcupine instance
-                self._porcupine = pvporcupine.create(
-                    access_key=self.access_key,
-                    keywords=keywords,
-                    sensitivities=[self.sensitivity]
-                )
+                # Create Porcupine instance with proper error handling
+                try:
+                    self._porcupine = pvporcupine.create(
+                        access_key=self.access_key,
+                        keywords=keywords,
+                        sensitivities=sensitivities
+                    )
+                except ValueError as e:
+                    # Handle case where keywords aren't available
+                    logger.error(f"Keyword error: {e}")
+                    logger.info("Falling back to 'computer' keyword")
+                    self._porcupine = pvporcupine.create(
+                        access_key=self.access_key,
+                        keywords=["computer"],
+                        sensitivities=[self.sensitivity]
+                    )
                 
                 # Initialize PyAudio
                 self._pyaudio = pyaudio.PyAudio()
