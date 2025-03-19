@@ -958,8 +958,6 @@ def start_maggie(args: argparse.Namespace) -> int:
     else:
         logger.warning(f"Config file not found: {args.config}, using defaults")
 
-    print(f"\n\n--------__--------config-------_____--------\n{config}\n\n")
-    
     # Initialize and start Maggie AI
     maggie = MaggieAI(config)
     

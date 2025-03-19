@@ -226,7 +226,8 @@ class EventBus:
         data : Any, optional
             Event data payload, by default None
         priority : int, optional
-            Event priority (lower is higher priority), by default 0
+            Event priority (lower is higher priority), by default 0            
+
         """
         self.queue.put((priority, (event_type, data)))
         
@@ -356,28 +357,33 @@ class MaggieAI:
         config : Dict[str, Any]
             Configuration dictionary
         """
+        # Set configuration dictionary
         self.config = config
+
+        # Set initial state to IDLE and prepare for state transitions
         self.state = State.IDLE
+
+        # Initialize EventBus for event management
         self.event_bus = EventBus()
+
+        # Initialize extension dictionary for loaded extensions
         self.extensions = {}
         
-        # Component references - will be initialized during startup
+        # Utility References - will be initialized during startup
         self.hardware_manager = None
         self.wake_word_detector = None
         self.stt_processor = None
         self.llm_processor = None
         self.gui = None
         
-        # Worker thread pool - optimized for Ryzen 9 5900X with 12 cores
-        # Using 10 worker threads to leave 2 cores for system and background tasks
+        # Thread management
+        # Worker thread pool
         self.thread_pool = ThreadPoolExecutor(
             max_workers=config.get("threading", {}).get("max_workers", 10),
             thread_name_prefix="maggie_worker"
         )
-        
-        # Thread management
         self.inactivity_timer = None
-        self.inactivity_timeout = config.get("inactivity_timeout", 300)  # 5 minutes
+        self.inactivity_timeout = config.get("threading", {}).get("thread_timeout", 60)
         
         # Setup state transition handlers
         self.transition_handlers = {
@@ -396,7 +402,7 @@ class MaggieAI:
         
     def _setup_gpu_resource_management(self) -> None:
         """
-        Set up GPU resource management for the RTX 3080.
+        GPU Resource Management: Setup for the RTX 3080.
         
         Configures PyTorch for optimal GPU memory management with the 
         RTX 3080's 10GB VRAM, enabling efficient memory allocation and
@@ -405,21 +411,47 @@ class MaggieAI:
         try:
             import torch
             
+            # Check for CUDA availability
             if torch.cuda.is_available():
+
                 # Enable CUDA caching allocator for better memory efficiency
                 torch.cuda.empty_cache()
+                logger.info("SETUP > GPU Resource Management: PyTorch CUDA caching allocator enabled")
                 
-                # Enable anomaly detection in debug mode only
+                # Enable anomaly detection (DEBUG mode only)
                 if self.config.get("logging", {}).get("console_level", "INFO") == "DEBUG":
                     torch.autograd.set_detect_anomaly(True)
+                    logger.info("SETUP > GPU Resource Management: PyTorch anomaly detection enabled")
                 else:
                     torch.autograd.set_detect_anomaly(False)
+                    logger.info("SETUP > GPU Resource Management: PyTorch anomaly detection disabled")
                     
                 # Set optimal memory management for RTX 3080 (10GB VRAM)
                 if hasattr(torch.cuda, 'memory_reserved'):
-                    max_memory = int(torch.cuda.get_device_properties(0).total_memory * 0.9)
-                    torch.cuda.set_per_process_memory_fraction(0.9)  # Use 90% of available VRAM
-                    logger.info(f"GPU memory management configured: {max_memory/1024**3:.2f}GB reserved")
+
+                    # Get total available VRAM
+                    total_vram = torch.cuda.get_device_properties(0).total_memory
+                    logger.info(f"SETUP > GPU Resource Management: Total GPU memory == {total_vram/1024**3:.2f}GB")
+
+                    # Get allocated VRAM
+                    allocated_vram = torch.cuda.memory_reserved(0)
+                    logger.info(f"SETUP > GPU Resource Management: GPU memory allocation == {total_vram/1024**3:.2f}GB")
+
+
+                    # GPU memory management configuration
+                    # (defaults to 90% of available VRAM)
+                    max_percent = self.config.get("gpu", {}).get("max_percent", 90)
+
+                    logger.info(f"SETUP > GPU Resource Management: GPU configuration, max_percent == {max_percent}%")
+
+                    # Update vram allocation
+                    allocated_vram = int(torch.cuda.get_device_properties(0).total_memory * 0.01 * max_percent)
+                    torch.cuda.set_per_process_memory_fraction(max_percent * 0.01)  # Use 90% of available VRAM
+                    
+                     # Get allocated VRAM
+                    allocated_vram = torch.cuda.memory_reserved(0)
+                    logger.info(f"SETUP > GPU Resource Management: GPU memory allocation == {total_vram/1024**3:.2f}GB")
+
                     
                 logger.info(f"GPU resource management set up for {torch.cuda.get_device_name(0)}")
         except ImportError:
