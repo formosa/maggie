@@ -85,13 +85,22 @@ class WakeWordDetector:
             If required configuration parameters are missing or invalid
         """
         self.config = config
+        config_wake_word = self.config.get("stt", {}).get("wake_word", {})
         self.on_detected = None
         self.running = False
+        
+
+        print(f"\n\n-------------------config-------------------\n{config}\n")
+        print(f"\n\n-------------------self.config-------------------\n{self.config}\n")
+        print(f"\n\n-------------------config_wake_word-------------------\n{config_wake_word}\n")
+        print(f"\n\n-------------------self.config.stt-------------------\n{self.config.stt}\n")
+        
+        
         
         # Parse configuration
         self.sensitivity = config.get("sensitivity", 0.5)
         self.keyword_path = config.get("keyword_path", None)  # Uses "maggie" if None
-        self.access_key = config.get("porcupine_access_key", "")
+        self.access_key = self.config.get("stt", {}).get("wake_word",{}).get("porcupine_access_key", None)
         self.cpu_threshold = config.get("cpu_threshold", 5.0)
         
         # Validate configuration
