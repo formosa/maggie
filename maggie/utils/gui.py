@@ -24,12 +24,14 @@ Examples
 # Standard library imports
 import sys
 import time
+from enum import Enum
 from typing import Dict, Any, Optional, List, Callable
 
-# Temporarily adjust PATH to allow PySide6 import
-sys.path.append("C:\\AI\\claude\\fresh\\maggie\\venv\\Lib\\site-packages\\PySide6")
-sys.path.append("C:\\AI\\claude\\fresh\\maggie\\venv\\Lib\\site-packages\\PySide6\\Qt6")
-sys.path.append("C:\\AI\\claude\\fresh\\maggie\\venv\\Lib\\site-packages\\PySide6\\Qt6\\bin")
+# Local application imports
+from main import add_pyside6_paths
+
+# Add PySide6 paths to sys.path
+add_pyside6_paths()
 
 # Third-party imports
 from PySide6.QtWidgets import (
@@ -44,6 +46,36 @@ from loguru import logger
 
 __all__ = ['MainWindow']
 
+class State(Enum):
+    """
+    Enumeration of possible system states.
+    
+    Provides a list of valid states for the Maggie AI system.
+
+    Attributes
+    ----------
+    IDLE : str
+        System is idle and waiting for input
+    STARTUP : str
+        System is starting up
+    READY : str
+        System is avaiable
+    ACTIVE : str
+        System is processing commands
+    BUSY : str
+        System is busy with a task
+    CLEANUP : str
+        System is cleaning up after a task
+    SHUTDOWN : str
+        System is shutting down    
+    """
+    # Define system states
+    IDLE = "idle"
+    STARTING = "starting"
+    RUNNING = "running"
+    PAUSED = "paused"
+    STOPPED = "stopped"
+    ERROR = "error"
 class QVariant:
     """
     Simple variant class for Qt method invocation compatibility.
@@ -335,7 +367,7 @@ class MainWindow(QMainWindow):
         
     def _create_right_panel(self) -> None:
         """
-        Create the contents of the right panel.
+        Create the contents of the right panel, **Current State** and **Extensions**.
         
         Sets up the state display and extension buttons in the right panel.
         """
@@ -349,7 +381,7 @@ class MainWindow(QMainWindow):
         self.right_layout.addWidget(self.state_group)
         
         # Utilities group
-        self.extensions_group = QGroupBox("Utilities")
+        self.extensions_group = QGroupBox("Extensions")
         self.extensions_layout = QVBoxLayout(self.extensions_group)
         
         # Add extension buttons based on loaded extensions
@@ -572,7 +604,7 @@ class MainWindow(QMainWindow):
         except Exception as e:
             logger.error(f"Error cleaning up extension buttons: {e}")
 
-    def update_state(self, state: str) -> None:
+    def update_state(self, state: State) -> None:
         """
         Update the displayed state.
         
