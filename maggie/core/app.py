@@ -447,8 +447,6 @@ class MaggieAI:
                     # Update vram allocation
                     allocated_vram = int(torch.cuda.get_device_properties(0).total_memory * 0.01 * max_percent)
                     torch.cuda.set_per_process_memory_fraction(max_percent * 0.01)  # Use 90% of available VRAM
-                    percent_rev_mem = torch.cuda.percent_reserved_memory(0)  # Reserve 90% of available VRAM
-                    logger.info(f"SETUP > GPU Resource Management: percent_rev_mem == {percent_rev_mem}")
                     logger.info(f"SETUP > GPU Resource Management: allocated_vram == {allocated_vram}")
                     # Get allocated VRAM
                     allocated_vram = torch.cuda.memory_reserved(0)
