@@ -470,7 +470,7 @@ class MaggieAI:
             # Import: Hardware Manager
             from maggie.utils.hardware.manager import HardwareManager
             # Apply hardware optimizations to configuration
-            self.config = self.hardware_manager.optimize_config(self.config)
+            # self.config = self.hardware_manager.optimize_config(self.config)
             # Create hardware manager and provide configuration
             self.hardware_manager = HardwareManager(self.config)
             # Register hardware manager for global access

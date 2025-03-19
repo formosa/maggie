@@ -570,52 +570,52 @@ class HardwareManager:
         # GPU optimizations for RTX 3080
         self._apply_gpu_optimizations(hardware_info.get("gpu", {}))
 
-    def optimize_config(self, config: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Apply hardware-specific optimizations to configuration.
+    # def optimize_config(self, config: Dict[str, Any]) -> Dict[str, Any]:
+    #     """
+    #     Apply hardware-specific optimizations to configuration.
         
-        Parameters
-        ----------
-        config : Dict[str, Any]
-            Current configuration dictionary
+    #     Parameters
+    #     ----------
+    #     config : Dict[str, Any]
+    #         Current configuration dictionary
             
-        Returns
-        -------
-        Dict[str, Any]
-            Optimized configuration dictionary with hardware-specific settings
-        """
-        # Create a copy of the config to avoid modifying the original
-        optimized_config = config.copy()
+    #     Returns
+    #     -------
+    #     Dict[str, Any]
+    #         Optimized configuration dictionary with hardware-specific settings
+    #     """
+    #     # Create a copy of the config to avoid modifying the original
+    #     optimized_config = config.copy()
         
-        # Apply threading optimizations
-        threading_opt = self.optimization_profile["threading"]
-        optimized_config.setdefault("threading", {})
-        optimized_config["threading"].update(threading_opt)
+    #     # Apply threading optimizations
+    #     threading_opt = self.optimization_profile["threading"]
+    #     optimized_config.setdefault("threading", {})
+    #     optimized_config["threading"].update(threading_opt)
         
-        # Apply memory optimizations
-        memory_opt = self.optimization_profile["memory"]
-        optimized_config.setdefault("memory", {})
-        optimized_config["memory"].update(memory_opt)
+    #     # Apply memory optimizations
+    #     memory_opt = self.optimization_profile["memory"]
+    #     optimized_config.setdefault("memory", {})
+    #     optimized_config["memory"].update(memory_opt)
         
-        # Apply LLM optimizations
-        llm_opt = self.optimization_profile["llm"]
-        optimized_config.setdefault("llm", {})
-        optimized_config["llm"].update(llm_opt)
+    #     # Apply LLM optimizations
+    #     llm_opt = self.optimization_profile["llm"]
+    #     optimized_config.setdefault("llm", {})
+    #     optimized_config["llm"].update(llm_opt)
         
-        # Apply audio optimizations
-        audio_opt = self.optimization_profile["audio"]
-        optimized_config.setdefault("speech", {})
-        optimized_config["speech"].setdefault("whisper", {})
-        optimized_config["speech"]["whisper"]["model_size"] = audio_opt["whisper_model"]
-        optimized_config["speech"]["whisper"]["compute_type"] = audio_opt["whisper_compute"]
+    #     # Apply audio optimizations
+    #     audio_opt = self.optimization_profile["audio"]
+    #     optimized_config.setdefault("speech", {})
+    #     optimized_config["speech"].setdefault("whisper", {})
+    #     optimized_config["speech"]["whisper"]["model_size"] = audio_opt["whisper_model"]
+    #     optimized_config["speech"]["whisper"]["compute_type"] = audio_opt["whisper_compute"]
         
-        # Apply GPU optimizations if available
-        if self.hardware_info["gpu"]["available"]:
-            gpu_opt = self.optimization_profile["gpu"]
-            optimized_config.setdefault("gpu", {})
-            optimized_config["gpu"].update(gpu_opt)
+    #     # Apply GPU optimizations if available
+    #     if self.hardware_info["gpu"]["available"]:
+    #         gpu_opt = self.optimization_profile["gpu"]
+    #         optimized_config.setdefault("gpu", {})
+    #         optimized_config["gpu"].update(gpu_opt)
         
-        return optimized_config
+    #     return optimized_config
     
     def start_monitoring(self, interval: float = 5.0) -> bool:
         """
