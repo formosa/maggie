@@ -44,39 +44,44 @@ from maggie.core import MaggieAI
 
 __all__ = ['main', 'parse_arguments', 'setup_logging', 'verify_system']
 
-# Add this at the top of main.py (outside any function)
-class EventBusHandler:
+def create_event_bus_handler(event_bus):
     """
-    Custom loguru handler that forwards error logs to the event bus.
+    Create a loguru handler function that forwards error logs to the event bus.
     
     Parameters
     ----------
     event_bus : EventBus
         The event bus to publish error messages to
         
-    Attributes
-    ----------
-    event_bus : EventBus
-        Reference to the event bus
+    Returns
+    -------
+    callable
+        A function that can be used as a loguru handler
     """
-    def __init__(self, event_bus):
-        self.event_bus = event_bus
-    
-    def emit(self, record):
+    def handler(record):
         """
-        Emit a log record to the event bus if it's an error.
+        Process log records and publish errors to the event bus.
         
         Parameters
         ----------
         record : dict
-            The log record
+            The loguru record dictionary
             
         Returns
         -------
         None
         """
-        if record["level"].name == "ERROR":
-            self.event_bus.publish("error_logged", record["message"])
+        if record["level"].name == "ERROR" or record["level"].name == "CRITICAL":
+            error_data = {
+                "message": record["message"],
+                "source": record["name"],
+                "file": record["file"].name if hasattr(record["file"], "name") else str(record["file"]),
+                "line": record["line"],
+                "level": record["level"].name
+            }
+            event_bus.publish("error_logged", error_data)
+    
+    return handler
 
 def parse_arguments() -> argparse.Namespace:
     """
@@ -933,11 +938,11 @@ def start_maggie(args: argparse.Namespace) -> int:
     # Initialize and start Maggie AI
     maggie = MaggieAI(config)
     
-    # Register the handler after Maggie is initialized
-    logger.add(EventBusHandler(maggie.event_bus))
-
     # Register signal handlers for graceful shutdown
     register_signal_handlers(maggie)
+    
+    # Add error logging handler that publishes to event bus
+    logger.add(create_event_bus_handler(maggie.event_bus))
     
     # Start Maggie core services
     success = maggie.start()
