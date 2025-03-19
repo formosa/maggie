@@ -333,7 +333,7 @@ class MaggieAI:
         Hardware management component
     wake_word_detector : Optional[Any]
         Wake word detection component
-    speech_processor : Optional[Any]
+    stt_processor : Optional[Any]
         Speech processing component
     llm_processor : Optional[Any]
         LLM processing component
@@ -364,7 +364,7 @@ class MaggieAI:
         # Component references - will be initialized during startup
         self.hardware_manager = None
         self.wake_word_detector = None
-        self.speech_processor = None
+        self.stt_processor = None
         self.llm_processor = None
         self.gui = None
         
@@ -442,6 +442,14 @@ class MaggieAI:
     def initialize_components(self) -> bool:
         """
         Initialize all required components.
+
+        The initialization process begins with the application
+        utilities; ServiceLocator, logging, HardwareManager, 
+        WakeWordDetector, SpeechProcessor, STT processing, 
+        and LLMProcessor.
+
+        The process also initializes extensions based on the
+        configuration and registers them for global access.
         
         Returns
         -------
@@ -454,36 +462,52 @@ class MaggieAI:
             If required modules cannot be imported
         """
         try:
-            # Import service locator
+            # Import: Service Locator
             from maggie.utils.service_locator import ServiceLocator
-            
-            # Initialize hardware manager
-            from maggie.utils.hardware.manager import HardwareManager
-            self.hardware_manager = HardwareManager(self.config)
-            ServiceLocator.register("hardware_manager", self.hardware_manager)
-            
-            # Apply hardware optimizations to config
-            self.config = self.hardware_manager.optimize_config(self.config)
-            
-            # Initialize wake word detector
-            from maggie.utils.attention.wake_word import WakeWordDetector
-            self.wake_word_detector = WakeWordDetector(self.config.get("wake_word", "maggie"))
-            self.wake_word_detector.on_detected = lambda: self.event_bus.publish("wake_word_detected")
-            ServiceLocator.register("wake_word_detector", self.wake_word_detector)
-            
-            # Initialize speech processor
-            from maggie.utils.speech.speech_processor import SpeechProcessor
-            self.speech_processor = SpeechProcessor(self.config.get("speech", {}))
-            ServiceLocator.register("speech_processor", self.speech_processor)
-            
-            # Initialize LLM processor
-            from maggie.utils.llm.llm_processor import LLMProcessor
-            self.llm_processor = LLMProcessor(self.config.get("llm", {}))
-            ServiceLocator.register("llm_processor", self.llm_processor)
-            
-            # Register event bus
+            # Register event bus for global access
             ServiceLocator.register("event_bus", self.event_bus)
             
+            # Import: Hardware Manager
+            from maggie.utils.hardware.manager import HardwareManager
+            # Apply hardware optimizations to configuration
+            self.config = self.hardware_manager.optimize_config(self.config)
+            # Create hardware manager and provide configuration
+            self.hardware_manager = HardwareManager(self.config)
+            # Register hardware manager for global access
+            ServiceLocator.register("hardware_manager", self.hardware_manager)
+
+            
+            # Import: WakeWordDetector
+            from maggie.utils.stt.wake_word import WakeWordDetector
+            # Create wake word detector with configured wake word
+            self.wake_word_detector = WakeWordDetector(self.config.get("wake_word", {}))
+            # Set wake word detection callback
+            # to trigger state transition to READY state when wake word is detected
+            self.wake_word_detector.on_detected = lambda: self.event_bus.publish("wake_word_detected")
+            # Register wake word detector for global access
+            ServiceLocator.register("wake_word_detector", self.wake_word_detector)
+            
+            # Import: STTProcessor
+            from maggie.utils.stt.processor import STTProcessor
+            # Create stt processor with configuration 
+            self.stt_processor = STTProcessor(self.config.get("stt", {}))
+            # Register stt processor for global access
+            ServiceLocator.register("stt_processor", self.stt_processor)
+            
+            # Import: TTSProcessor
+            from maggie.utils.tts.processor import TTSProcessor
+            # Create TTS processor with configuration
+            self.tts_processor = TTSProcessor(self.config.get("tts", {}))
+            # Register TTS processor for global access
+            ServiceLocator.register("tts_processor", self.tts_processor)
+
+            # Import: LLMProcessor
+            from maggie.utils.llm.processor import LLMProcessor
+            # Create LLM processor with configuration
+            self.llm_processor = LLMProcessor(self.config.get("llm", {}))
+            # Register LLM processor for global access
+            ServiceLocator.register("llm_processor", self.llm_processor)
+                       
             # Register self in service locator for GUI access
             ServiceLocator.register("maggie_ai", self)
             
@@ -642,8 +666,8 @@ class MaggieAI:
             self.inactivity_timer = None
             
         # Stop speech processor
-        if self.speech_processor:
-            self.speech_processor.stop_listening()
+        if self.stt_processor:
+            self.stt_processor.stop_listening()
             
         # Unload LLM model to save memory
         if self.llm_processor:
@@ -678,9 +702,9 @@ class MaggieAI:
             self.wake_word_detector.stop()
             
         # Start speech processor
-        if self.speech_processor:
-            self.speech_processor.start_listening()
-            self.speech_processor.speak("Ready for your command")
+        if self.stt_processor:
+            self.stt_processor.start_listening()
+            self.stt_processor.speak("Ready for your command")
             
         # Start inactivity timer
         self._start_inactivity_timer()
@@ -722,8 +746,8 @@ class MaggieAI:
         self._stop_all_extensions()
             
         # Stop speech processor
-        if self.speech_processor:
-            self.speech_processor.stop_listening()
+        if self.stt_processor:
+            self.stt_processor.stop_listening()
             
         # Unload LLM model
         if self.llm_processor:
@@ -821,12 +845,12 @@ class MaggieAI:
         
         # Handle system commands
         if command in ["sleep", "go to sleep"]:
-            self.speech_processor.speak("Going to sleep")
+            self.stt_processor.speak("Going to sleep")
             self._transition_to(State.CLEANUP, "sleep_command")
             return
             
         if command in ["shutdown", "turn off"]:
-            self.speech_processor.speak("Shutting down")
+            self.stt_processor.speak("Shutting down")
             self._transition_to(State.CLEANUP, "shutdown_requested")
             return
             
@@ -836,7 +860,7 @@ class MaggieAI:
             return
                 
         # Handle unknown command
-        self.speech_processor.speak("I didn't understand that command")
+        self.stt_processor.speak("I didn't understand that command")
         logger.warning(f"Unknown command: {command}")
         
     def _check_extension_commands(self, command: str) -> bool:
@@ -873,7 +897,7 @@ class MaggieAI:
         """
         if self.state == State.READY:
             logger.info("Inactivity timeout reached")
-            self.speech_processor.speak("Going to sleep due to inactivity")
+            self.stt_processor.speak("Going to sleep due to inactivity")
             self._transition_to(State.CLEANUP, "inactivity_timeout")
             
     def _handle_extension_completed(self, extension_name: str) -> None:
@@ -919,7 +943,7 @@ class MaggieAI:
             
         try:
             logger.debug("Listening for commands...")
-            success, text = self.speech_processor.recognize_speech(timeout=10.0)
+            success, text = self.stt_processor.recognize_speech(timeout=10.0)
             
             if success and text:
                 logger.info(f"Recognized: {text}")
@@ -996,7 +1020,7 @@ class MaggieAI:
         """
         if self.state == State.READY or self.state == State.ACTIVE:
             logger.info("Manual sleep requested")
-            self.speech_processor.speak("Going to sleep")
+            self.stt_processor.speak("Going to sleep")
             self._transition_to(State.CLEANUP, "manual_timeout")
             
     def process_command(self, extension: Any = None) -> bool:

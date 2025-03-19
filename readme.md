@@ -1283,10 +1283,10 @@ To extend Maggie with custom extensions, follow these steps:
                
            try:
                # Acquire component references
-               self.speech_processor = self.get_service("speech_processor")
+               self.stt_processor = self.get_service("stt_processor")
                self.llm_processor = self.get_service("llm_processor")
                
-               if not self.speech_processor or not self.llm_processor:
+               if not self.stt_processor or not self.llm_processor:
                    logger.error("Failed to acquire required services")
                    return False
                

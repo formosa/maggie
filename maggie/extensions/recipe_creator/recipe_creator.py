@@ -159,7 +159,7 @@ class RecipeCreator(ExtensionBase):
         Directory to save recipe documents
     template_path : str
         Path to the recipe document template
-    speech_processor : Any
+    stt_processor : Any
         Reference to the speech processor component
     llm_processor : Any
         Reference to the LLM processor component
@@ -200,7 +200,7 @@ class RecipeCreator(ExtensionBase):
         self._workflow_thread = None
         
         # Component references - will be set during initialize()
-        self.speech_processor = None
+        self.stt_processor = None
         self.llm_processor = None
         
         # Error handling and retry logic
@@ -410,13 +410,13 @@ class RecipeCreator(ExtensionBase):
         recipe creator to work correctly.
         """
         # Get speech processor from service locator
-        self.speech_processor = self.get_service("speech_processor")
+        self.stt_processor = self.get_service("stt_processor")
         
         # Get LLM processor from service locator
         self.llm_processor = self.get_service("llm_processor")
         
         # Check if both services were found
-        return self.speech_processor is not None and self.llm_processor is not None
+        return self.stt_processor is not None and self.llm_processor is not None
 
     def start(self) -> bool:
         """
@@ -585,9 +585,9 @@ class RecipeCreator(ExtensionBase):
             
         finally:
             # Ensure speech processor is stopped if we started it
-            if hasattr(self, 'speech_processor') and self.speech_processor:
+            if hasattr(self, 'stt_processor') and self.stt_processor:
                 try:
-                    self.speech_processor.stop_listening()
+                    self.stt_processor.stop_listening()
                 except:
                     pass
                     
@@ -616,8 +616,8 @@ class RecipeCreator(ExtensionBase):
         can continue even without voice output.
         """
         try:
-            if self.speech_processor:
-                success = self.speech_processor.speak(text)
+            if self.stt_processor:
+                success = self.stt_processor.speak(text)
                 if not success:
                     logger.warning(f"TTS failed, fallback to log: {text}")
                 return success
@@ -704,8 +704,8 @@ class RecipeCreator(ExtensionBase):
         improving reliability and preventing errors.
         """
         # Ensure we're listening before trying to recognize speech
-        if self.speech_processor and not getattr(self.speech_processor, 'listening', False):
-            self.speech_processor.start_listening()
+        if self.stt_processor and not getattr(self.stt_processor, 'listening', False):
+            self.stt_processor.start_listening()
             logger.info("Started speech processor listening")
             
         if not self.recipe_data.name:
@@ -742,17 +742,17 @@ class RecipeCreator(ExtensionBase):
         """
         try:
             # Ensure listening is active
-            if self.speech_processor and not getattr(self.speech_processor, 'listening', False):
+            if self.stt_processor and not getattr(self.stt_processor, 'listening', False):
                 try:
-                    self.speech_processor.start_listening()
+                    self.stt_processor.start_listening()
                     time.sleep(0.5)  # Brief pause to ensure listening is fully started
                     logger.info("Started speech processor listening")
                 except Exception as listen_error:
                     logger.error(f"Error starting listening: {listen_error}")
             
             # Attempt speech recognition
-            if self.speech_processor:
-                return self.speech_processor.recognize_speech(timeout=timeout)
+            if self.stt_processor:
+                return self.stt_processor.recognize_speech(timeout=timeout)
             else:
                 logger.error("Speech processor not available")
                 return False, ""

@@ -9,7 +9,7 @@ idle resource usage while maintaining detection accuracy.
 
 Examples
 --------
->>> from maggie.utils.attention.wake_word import WakeWordDetector
+>>> from maggie.utils.stt.wake_word import WakeWordDetector
 >>> config = {"sensitivity": 0.5, "porcupine_access_key": "YOUR_KEY_HERE"}
 >>> detector = WakeWordDetector(config)
 >>> detector.on_detected = lambda: print("Wake word detected!")

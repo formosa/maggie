@@ -7,5 +7,5 @@ text generation capabilities optimized for AMD Ryzen 9 5900X and NVIDIA
 RTX 3080 hardware.
 """
 
-from maggie.utils.llm.llm_processor import LLMProcessor
+from maggie.utils.llm.processor import LLMProcessor
 __all__ = ['LLMProcessor']

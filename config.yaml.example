@@ -2,28 +2,50 @@
 # Copy this file to config.yaml and modify as needed
 # Optimized for AMD Ryzen 9 5900X and NVIDIA GeForce RTX 3080
 
-# Wake word detection configuration
-wake_word:
-  sensitivity: 0.5
-  keyword_path: null  # Set this to a custom keyword file path or keep null to use default "maggie"
-  porcupine_access_key: "9hQNkT59LV9YLj02ilmzaIg4zqUjX0YycaHTcHPEJuQ1/58G/r4BXA=="  # Your Porcupine access key - REQUIRED
-  cpu_threshold: 5.0  # Maximum CPU usage percentage
-
-# Speech processing configuration
-# Speech processing configuration
-speech:
+# STT configuration
+stt:
+  # Whisper STT configuration
   whisper:
+    # Options: "base", "large"
     model_size: "base"
-    compute_type: "float16"
-  tts:
-    # Changed from en_US-kathleen-medium to af_heart
-    voice_model: "af_heart"
-    model_path: "maggie/models/tts"
-    sample_rate: 22050
+    # NEW: Use float16 for faster inference on RTX 3080
+    compute_type: "float16" 
+    # Path to Whisper model directory
+    model_path: "\\maggie\\models\\stt\\whisper"
+    # Sample rate for audio input 
+    sample_rate: 16000 
+  # DeepSpeech STT configuration
+  deepspeech:
+    # Path to DeepSpeech model
+    model_path: "\\maggie\\models\\stt\\deepspeech"
+    # Path to DeepSpeech scorer file (optional)
+    scorer_path: "\\maggie\\models\\stt\\deepspeech\\deepspeech-0.9.3-models.scorer"
+    # Sample rate for audio input
+    sample_rate: 16000 
+# Wake word detection configuration
+  wake_word:
+    # Options: "porcupine", "snowboy"
+    engine: "porcupine"
+    # Porcupine wake word configuration
+    keyword: "maggie"
+    # Sensitivity for wake word detection
+    sensitivity: 0.5
+    # Custom keyword file path (optional)
+    keyword_path: null
+    # Porcupine access key
+    porcupine_access_key: "9hQNkT59LV9YLj02ilmzaIg4zqUjX0YycaHTcHPEJuQ1/58G/r4BXA=="
+    # Maximum CPU usage percentage for wake word detection
+    cpu_threshold: 5.0
+
+# TTS configuration 
+tts:
+  voice_model: "af_heart.pt"
+  model_path: "\\maggie\\models\\tts"
+  sample_rate: 22050
 
 # LLM configuration
 llm:
-  model_path: "maggie/models/mistral-7b-instruct-v0.3-GPTQ-4bit"
+  model_path: "maggie\\models\\llm\\mistral-7b-instruct-v0.3-GPTQ-4bit"
   model_type: "mistral"
   gpu_layers: 32  # Optimized for RTX 3080 10GB
   gpu_layer_auto_adjust: true  # NEW: Allow automatic adjustment based on available VRAM
@@ -33,22 +55,36 @@ inactivity_timeout: 300  # 5 minutes in seconds
 
 # Logging configuration
 logging:
+  # Path to log directory
   path: "logs"
-  console_level: "INFO"  # Options: DEBUG, INFO, WARNING, ERROR
-  file_level: "DEBUG"    # NEW: Separate level for file logging
+  # Log levels for console and file logging: DEBUG, INFO, WARNING, ERROR
+  console_level: "INFO"
+  # Separate level for file logging
+  file_level: "DEBUG"
 
-# extension modules configuration
+# Extension modules configuration
 extensions:
+  # Enable or disable specific extension modules
   recipe_creator:
+    # Enable or disable the recipe creator module
+    enabled: true
+    # Path to the recipe template file
+    template_path: "templates\\recipe_template.docx"
+    # Output directory for generated recipes
     output_dir: "recipes"
-    template_path: "templates/recipe_template.docx"
+
 
 # Threading configuration for Ryzen 9 5900X
 threading:
-  max_workers: 8  # Using 8 of the 12 available cores
-  thread_timeout: 30  # NEW: Timeout for thread operations in seconds
+  # Number of worker threads for parallel processing
+  # Using 8 of the 12 available cores
+  max_workers: 8
+  # Timeout for thread operations in seconds
+  thread_timeout: 30  
 
 # Memory management for 32GB system
 memory:
+  # Maximum memory usage for the application as a percentage of total system memory
   max_percent: 75  # Use up to 75% of system memory (24GB)
-  model_unload_threshold: 85  # NEW: Unload models if memory usage exceeds this percentage
+  # Threshold for unloading models to free up memory
+  model_unload_threshold: 85  # Unload models if memory usage exceeds 85%

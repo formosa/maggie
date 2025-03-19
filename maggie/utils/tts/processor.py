@@ -33,9 +33,9 @@ import numpy as np
 import soundfile as sf
 from loguru import logger
 
-__all__ = ['KokoroTTS']
+__all__ = ['TTSProcessor']
 
-class KokoroTTS:
+class TTSProcessor:
     """
     Text-to-Speech implementation using Kokoro.
     

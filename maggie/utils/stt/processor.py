@@ -10,15 +10,15 @@ various model sizes and precision options.
 
 Examples
 --------
->>> from maggie.utils.speech.speech_processor import SpeechProcessor
+>>> from maggie.utils.stt.processor import SpeechProcessor
 >>> config = {"whisper": {"model_size": "base", "compute_type": "float16"}}
->>> speech_processor = SpeechProcessor(config)
->>> speech_processor.start_listening()
->>> success, text = speech_processor.recognize_speech(timeout=10.0)
+>>> stt_processor = SpeechProcessor(config)
+>>> stt_processor.start_listening()
+>>> success, text = stt_processor.recognize_speech(timeout=10.0)
 >>> if success:
 ...     print(f"Recognized: {text}")
->>> speech_processor.stop_listening()
->>> speech_processor.speak("I heard what you said")
+>>> stt_processor.stop_listening()
+>>> stt_processor.speak("I heard what you said")
 """
 
 # Standard library imports
@@ -36,9 +36,9 @@ import pyaudio
 from loguru import logger
 
 # Local imports
-from maggie.utils.speech.tts import KokoroTTS
+from maggie.utils.tts.processor import TTSProcessor
 
-class SpeechProcessor:
+class STTProcessor:
     """
     Speech recognition and processing using Faster Whisper models.
     
@@ -103,7 +103,7 @@ class SpeechProcessor:
         
         # Initialize TTS engine with config
         tts_config = config.get("tts", {})
-        self.tts_engine = KokoroTTS(tts_config)
+        self.tts_engine = TTSProcessor(tts_config)
         
         # Audio configuration
         self.sample_rate = 16000  # Whisper expects 16kHz audio

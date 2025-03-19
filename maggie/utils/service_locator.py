@@ -13,10 +13,10 @@ Examples
 --------
 >>> from maggie.utils.service_locator import ServiceLocator
 >>> # Register a service
->>> ServiceLocator.register("speech_processor", speech_processor_instance)
+>>> ServiceLocator.register("stt_processor", stt_processor_instance)
 >>> # Retrieve a service
->>> speech_processor = ServiceLocator.get("speech_processor")
->>> speech_processor.speak("Hello, world!")
+>>> stt_processor = ServiceLocator.get("stt_processor")
+>>> stt_processor.speak("Hello, world!")
 """
 
 from typing import Dict, Any, Optional, List
