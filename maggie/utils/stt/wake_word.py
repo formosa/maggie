@@ -85,7 +85,7 @@ class WakeWordDetector:
             If required configuration parameters are missing or invalid
         """
         self.config = config
-        config_wake_word = self.config.get("stt", {}).get("wake_word", {})
+        config_wake_word = self.config.get("stt", {})
         self.on_detected = None
         self.running = False
         
