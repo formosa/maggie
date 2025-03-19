@@ -44,6 +44,26 @@ from maggie.core import MaggieAI
 
 __all__ = ['main', 'parse_arguments', 'setup_logging', 'verify_system']
 
+
+# At the top of main.py (after imports)
+def error_publisher(message):
+    """
+    Publish error messages to the event bus.
+    
+    Parameters
+    ----------
+    message : str
+        The formatted error message
+        
+    Returns
+    -------
+    None
+    """
+    # Access event_bus through the MaggieAI instance
+    # This function will be called after the instance is created
+    if hasattr(error_publisher, 'event_bus'):
+        error_publisher.event_bus.publish("error_logged", message)
+
 def create_event_bus_handler(event_bus):
     """
     Create a loguru handler function that forwards error logs to the event bus.
@@ -941,8 +961,15 @@ def start_maggie(args: argparse.Namespace) -> int:
     # Register signal handlers for graceful shutdown
     register_signal_handlers(maggie)
     
-    # Add error logging handler that publishes to event bus
-    logger.add(create_event_bus_handler(maggie.event_bus))
+    # Give the error_publisher function access to the event bus
+    error_publisher.event_bus = maggie.event_bus
+    
+    # Add the error publisher as a sink with correct formatting
+    logger.add(
+        error_publisher,
+        format="[{time:%H:%M:%S}] {level.name}: {message}",
+        level="ERROR"  # Only capture ERROR and above
+    )
     
     # Start Maggie core services
     success = maggie.start()
