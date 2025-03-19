@@ -954,7 +954,7 @@ def start_maggie(args: argparse.Namespace) -> int:
                     config = {}
         except Exception as e:
             logger.error(f"Error reading config file: {e}")
-            return 1
+            # Continue with empty config
     else:
         logger.warning(f"Config file not found: {args.config}, using defaults")
 
