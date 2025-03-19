@@ -480,7 +480,7 @@ class MaggieAI:
             # Import: WakeWordDetector
             from maggie.utils.stt.wake_word import WakeWordDetector
             # Create wake word detector with configured wake word
-            self.wake_word_detector = WakeWordDetector(self.config.get("wake_word", {}))
+            self.wake_word_detector = WakeWordDetector(self.config.get("stt", {}).get("wake_word", {}))
             # Set wake word detection callback
             # to trigger state transition to READY state when wake word is detected
             self.wake_word_detector.on_detected = lambda: self.event_bus.publish("wake_word_detected")
