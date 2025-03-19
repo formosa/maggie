@@ -17,7 +17,7 @@ speech:
   tts:
     # Changed from en_US-kathleen-medium to af_heart
     voice_model: "af_heart.pt"
-    model_path: "/maggie/models/tts"
+    model_path: "\\maggie\\models\\tts"
     sample_rate: 22050
 
 # LLM configuration
