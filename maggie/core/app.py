@@ -436,27 +436,6 @@ class MaggieAI:
                     # Get allocated VRAM
                     allocated_vram = torch.cuda.memory_reserved(0)
                     logger.info(f"SETUP > GPU Resource Management: allocated_vram == {total_vram/1024**3:.2f}GB")
-
-
-                    # GPU memory management configuration
-                    # (defaults to 90% of available VRAM)
-                    max_percent = self.config.get("gpu", {}).get("max_percent", 90)
-
-                    logger.info(f"SETUP > GPU Resource Management: GPU configuration, max_percent == {max_percent}%")
-
-                    # Update vram allocation
-                    allocated_vram = int(total_vram * 0.01 * max_percent)
-                    logger.info(f"SETUP > GPU Resource Management: Calculated allocated_vram == {allocated_vram}")
-                    
-                    torch.cuda.set_per_process_memory_fraction(max_percent * 0.01)  # Use 90% of available VRAM
-                    torch.cuda.set_reserved_memory(allocated_vram)
-                    allocated_vram = torch.cuda.memory_reserved(0)
-                    logger.info(f"SETUP > GPU Resource Management: Updated allocated_vram == {allocated_vram}")
-                    
-                    # Get allocated VRAM
-                    
-                    allocated_vram = torch.cuda.memory_reserved(0)
-                    logger.info(f"SETUP > GPU Resource Management: allocated_vram == {allocated_vram/1024**3:.2f}GB")
                     
                 logger.info(f"GPU resource management set up for {torch.cuda.get_device_name(0)}")
         except ImportError:
