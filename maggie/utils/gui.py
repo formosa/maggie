@@ -394,7 +394,7 @@ class MainWindow(QMainWindow):
         """
         if self.maggie_ai.state.name == "IDLE" and requested_state == "ACTIVE":
             # Transition from IDLE to READY when input field is activated
-            self.maggie_ai._transition_to(self.maggie_ai.State.READY, "input_field_activated")
+            self.maggie_ai._transition_to(self.maggie_ai.state.READY, "input_field_activated")
             self.log_event("State transition requested by input field")
 
     def _on_error_logged(self, error_data):
@@ -784,7 +784,7 @@ class MainWindow(QMainWindow):
         # Process the command through the Maggie AI core
         if self.maggie_ai.state.name == "IDLE":
             # If in IDLE state, transition to READY first
-            self.maggie_ai._transition_to(self.maggie_ai.State.READY, "user_input")
+            self.maggie_ai._transition_to(self.maggie_ai.state.READY, "user_input")
             
         # Send the command to be processed
         self.maggie_ai.event_bus.publish("command_detected", text)
