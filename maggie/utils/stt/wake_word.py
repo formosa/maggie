@@ -47,7 +47,7 @@ class WakeWordDetector:
         Configuration dictionary containing wake word settings:
         - sensitivity: float, detection sensitivity (0.0-1.0), default: 0.5
         - keyword_path: str, path to custom keyword model file, default: None (uses "maggie")
-        - porcupine_access_key: str, Picovoice access key (required)
+        - access_key: str, Picovoice access key (required)
         - cpu_threshold: float, maximum CPU usage percentage, default: 5.0
         
     Attributes
@@ -84,23 +84,23 @@ class WakeWordDetector:
         ValueError
             If required configuration parameters are missing or invalid
         """
-        self.config = config
-        config_wake_word = self.config.get("stt", {})
+        # Load global configuration
         self.on_detected = None
         self.running = False
         
+        # Load detector configuration
+        self.access_key = config.get("access_key", None)
 
-        print(f"\n\n-------------------config-------------------\n{config}\n")
-        print(f"\n\n-------------------self.config-------------------\n{self.config}\n")
-        print(f"\n\n-------------------config_wake_word-------------------\n{config_wake_word}\n")
-        print(f"\n\n-------------------self.config.stt-------------------\n{self.config.stt}\n")
-        
-        
-        
-        # Parse configuration
+        # Wake word sensitivity (default: 0.5)
         self.sensitivity = config.get("sensitivity", 0.5)
-        self.keyword_path = config.get("keyword_path", None)  # Uses "maggie" if None
-        self.access_key = self.config.get("stt", {}).get("wake_word",{}).get("porcupine_access_key", None)
+        
+        # Wake word keyword (default: "Maggie")
+        self.keyword = config.get("keyword", "Maggie")
+        
+        # Path to custom keyword model file
+        self.keyword_path = config.get("keyword_path", None)
+        
+        # CPU usage threshold for throttling
         self.cpu_threshold = config.get("cpu_threshold", 5.0)
         
         # Validate configuration
