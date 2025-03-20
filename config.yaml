@@ -46,6 +46,14 @@ tts:
   voice_model: "af_heart.pt"
   model_path: "\\maggie\\models\\tts"
   sample_rate: 22050
+  use_cache: true
+  cache_dir: "\\maggie\\cache\\tts"
+  cache_size: 200
+  gpu_device: 0
+  gpu_acceleration: true
+  gpu_precision: "mixed_float16"
+  max_workers: 4
+  voice_preprocessing: true
 
 # LLM configuration
 llm:

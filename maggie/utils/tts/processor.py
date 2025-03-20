@@ -84,32 +84,63 @@ class TTSProcessor:
             - use_cache: Whether to cache TTS results (default: True)
             - cache_size: Maximum number of cached utterances (default: 100)
         """
-        self.config = config
-        self.voice_model = config.get("voice_model", "af_heart.pt")
-        self.model_path = config.get("model_path", "models/tts")
+        # Initialize attributes from configuration
+        self.voice_model = config.get("voice_model", None)
+        logger.info("TTS voice model: {self.voice_model}")
+
+        # Configure TTS model path
+        self.model_path = config.get("model_path", "")
+        logger.info("TTS model path: {self.model_path}")
+
+        # Configure TTS sample rate
         self.sample_rate = config.get("sample_rate", 22050)
-        self.kokoro_instance = None
-        self.lock = threading.Lock()
-        
-        # Audio caching for repeated phrases (optimized performance)
+        logger.info("TTS sample rate: {self.sample_rate} Hz")
+
+        # Configure TTS caching
         self.use_cache = config.get("use_cache", True)
-        self.cache_dir = config.get("cache_dir", "cache/tts")
-        self.cache_size = config.get("cache_size", 200)  # Increased from 100 to 200
         self.cache = {}
+        logger.info(f"TTS caching: {'enabled' if self.use_cache else 'disabled'}")
+
+        # Configure cache directory for TTS
+        self.cache_dir = config.get("cache_dir", "cache/tts")
+        logger.info(f"TTS cache directory: {self.cache_dir}")
+        
+        # Configure cache size for TTS
+        self.cache_size = config.get("cache_size", 100)  
+        logger.info(f"TTS cache size: {self.cache_size}")
+        
+        # Configure GPU device for TTS
+        self.gpu_device = config.get("gpu_device", 0)
+        logger.info(f"TTS GPU device: {self.gpu_device}")
+        
+        # Configure GPU acceleration
+        self.gpu_acceleration = config.get("gpu_acceleration", 100)
+        logger.info(f"TTS GPU acceloration: {self.gpu_acceleration}")
+        
+        # Configure GPU precision
+        self.gpu_precision = config.get("gpu_precision", "float16")
+        logger.info(f"TTS GPU precision: {self.gpu_precision}")
+
+        # Configure the number of workers for the audio thread pool
+        self.max_workers = config.get("max_workers", 2)
+        logger.info(f"TTS max workers: {self.max_workers}")
+
+        # Voice preprocessing for more natural speech
+        self.voice_preprocessing = config.get("voice_preprocessing", True)
+        logger.info(f"TTS voice preprocessing: {self.voice_preprocessing}")
+
+        # Kokoro TTS model instance
+        self.kokoro_instance = None
+
+        # Thread lock for thread-safe operations
+        self.lock = threading.Lock()
         
         # Enhanced thread pool for audio processing
         self.thread_pool = concurrent.futures.ThreadPoolExecutor(
             max_workers=2,  # 2 workers for audio tasks
-            thread_name_prefix="tts_worker"
+            thread_name_prefix="maggie[tts]_thread_"
         )
-        
-        # Model-specific options for RTX 3080
-        self.gpu_acceleration = config.get("gpu_acceleration", True)
-        self.gpu_precision = config.get("gpu_precision", "float16")
-        
-        # Voice preprocessing for more natural speech
-        self.voice_preprocessing = config.get("voice_preprocessing", True)
-        
+                
         # Create cache directory if needed
         if self.use_cache and not os.path.exists(self.cache_dir):
             try:
