@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Maggie AI Assistant - Main Script
-===============================
+=================================
 Entry point for the Maggie AI Assistant application.
 
 This script initializes and starts the Maggie AI Assistant with optimizations
@@ -9,22 +9,49 @@ for AMD Ryzen 9 5900X and NVIDIA GeForce RTX 3080 hardware.
 It handles command-line arguments, logging configuration, system verification,
 and application startup.
 
+The application architecture follows a modular design pattern with the following components:
+- Core engine (MaggieAI class) that orchestrates all subsystems
+- Event-driven communication using an event bus pattern
+- Hardware-aware optimizations for CPU, memory, and GPU resources
+- Extension system for adding new capabilities
+- Multimodal input/output (speech, text, GUI)
+
+Features
+--------
+- Voice interaction with wake word detection
+- Natural language processing with Mistral 7B LLM
+- Text-to-speech synthesis with customizable voices
+- Graphical user interface (optional, can run headless)
+- Extension system for custom functionality
+- Hardware-optimized performance for Ryzen 9 5900X and RTX 3080
+
 Examples
 --------
 Standard startup:
-$ python main.py
+    $ python main.py
 
 Start with debug logging:
-$ python main.py --debug
+    $ python main.py --debug
 
 Verify system without starting:
-$ python main.py --verify
+    $ python main.py --verify
 
 Create recipe template:
-$ python main.py --create-template
+    $ python main.py --create-template
 
 Apply hardware optimizations:
-$ python main.py --optimize
+    $ python main.py --optimize
+
+Run without GUI (headless mode):
+    $ python main.py --headless
+
+Notes
+-----
+The application requires Python 3.10.x specifically and will not work with
+other Python versions. It is optimized for systems with NVIDIA RTX 3080 GPU
+and AMD Ryzen 9 5900X CPU, but will adapt to other hardware configurations.
+
+See config.yaml for detailed configuration options.
 """
 
 # Standard library imports
@@ -33,6 +60,7 @@ import argparse
 import sys
 import platform
 import multiprocessing
+import time
 import yaml
 from typing import Dict, Any, Optional, List, Tuple
 
@@ -40,7 +68,8 @@ from typing import Dict, Any, Optional, List, Tuple
 from loguru import logger
 
 # Local imports (updated paths)
-from maggie.core import MaggieAI
+# These imports will be available after installation is complete
+# from maggie.core import MaggieAI
 
 __all__ = ['main', 'parse_arguments', 'setup_logging', 'verify_system']
 
@@ -50,46 +79,106 @@ def error_publisher(message):
     """
     Publish error messages to the event bus.
     
+    This function serves as a bridge between the logging system and the event bus,
+    allowing error messages to be published as events that other components can
+    subscribe to. It is used as a loguru sink to capture ERROR and CRITICAL level
+    log messages.
+    
     Parameters
     ----------
-    message : str
-        The formatted error message
+    message : str or dict
+        The formatted error message or error data dictionary containing
+        message, source, file, line, and level information
         
     Returns
     -------
     None
+        This function does not return a value but publishes an event
+        
+    Notes
+    -----
+    This function relies on a global attribute 'event_bus' that must be set
+    after the MaggieAI instance is created. The event bus is accessed through
+    this attribute to publish the "error_logged" event.
+    
+    The event_bus attribute is set in the start_maggie function after
+    initializing the MaggieAI instance.
+    
+    Example
+    -------
+    >>> error_publisher("Critical error in speech recognition")
+    # Publishes "error_logged" event with the message
+    
+    >>> error_publisher({"message": "Init failed", "source": "tts", "level": "ERROR"})
+    # Publishes structured error data
     """
     # Access event_bus through the MaggieAI instance
     # This function will be called after the instance is created
     if hasattr(error_publisher, 'event_bus'):
         error_publisher.event_bus.publish("error_logged", message)
 
+
 def create_event_bus_handler(event_bus):
     """
     Create a loguru handler function that forwards error logs to the event bus.
     
+    This factory function creates a custom handler for the loguru logging system
+    that captures ERROR and CRITICAL level log messages and publishes them to
+    the event bus. This allows for centralized error tracking and enables other
+    components (like the GUI) to subscribe to error events.
+    
     Parameters
     ----------
     event_bus : EventBus
-        The event bus to publish error messages to
+        The event bus instance to publish error messages to. This should be
+        the same event bus that other components use for communication.
         
     Returns
     -------
     callable
-        A function that can be used as a loguru handler
+        A function that can be used as a loguru handler with the signature
+        handler(record) -> None
+        
+    Notes
+    -----
+    The returned handler filters log records to only process ERROR and CRITICAL
+    levels. It extracts relevant information from the log record and publishes
+    a structured data dictionary to the event bus.
+    
+    The published event has the topic "error_logged" and includes metadata
+    about the error source, file, line number, and severity level.
+    
+    Example
+    -------
+    >>> from loguru import logger
+    >>> from maggie.utils.event_bus import EventBus
+    >>> event_bus = EventBus()
+    >>> error_handler = create_event_bus_handler(event_bus)
+    >>> logger.add(error_handler, level="ERROR")
+    >>> logger.error("Database connection failed")  # This will trigger an event
     """
     def handler(record):
         """
         Process log records and publish errors to the event bus.
         
+        This inner function serves as the actual loguru handler. It filters
+        records by log level and transforms them into structured event data.
+        
         Parameters
         ----------
         record : dict
-            The loguru record dictionary
+            The loguru record dictionary containing details about the log event
+            including message, level, file, line, etc.
             
         Returns
         -------
         None
+            This handler does not return a value but may publish an event
+            
+        Notes
+        -----
+        Only ERROR and CRITICAL level messages are processed and published
+        to the event bus as "error_logged" events.
         """
         if record["level"].name == "ERROR" or record["level"].name == "CRITICAL":
             error_data = {
@@ -103,20 +192,53 @@ def create_event_bus_handler(event_bus):
     
     return handler
 
+
 def parse_arguments() -> argparse.Namespace:
     """
-    Parse command line arguments.
+    Parse command line arguments for Maggie AI Assistant.
+    
+    This function sets up the argument parser with all available command line options
+    for configuring and running the Maggie AI Assistant. It defines default values,
+    help text, and argument types.
+    
+    Parameters
+    ----------
+    None
     
     Returns
     -------
     argparse.Namespace
         Parsed command line arguments with the following fields:
-        - config: Path to configuration file
-        - debug: Boolean flag for debug logging
-        - verify: Boolean flag for system verification
-        - create_template: Boolean flag for template creation
-        - optimize: Boolean flag for hardware optimization
-        - headless: Boolean flag for headless mode
+        - config : str
+            Path to configuration file (default: "config.yaml")
+        - debug : bool
+            Boolean flag for enabling debug-level logging (default: False)
+        - verify : bool
+            Boolean flag for running system verification without starting (default: False)
+        - create_template : bool
+            Boolean flag for creating the recipe template file (default: False)
+        - optimize : bool
+            Boolean flag for applying hardware optimizations (default: False)
+        - headless : bool
+            Boolean flag for running without GUI in headless mode (default: False)
+    
+    Notes
+    -----
+    The arguments are processed in order of precedence. For example, if both
+    --verify and --create-template are specified, verification will be performed
+    first, followed by template creation, and then the program will exit.
+    
+    The --config option allows specifying a non-default configuration file path.
+    This is useful for testing different configurations without modifying the
+    main config.yaml file.
+    
+    Example
+    -------
+    >>> args = parse_arguments()
+    >>> if args.debug:
+    ...     # Set up debug logging
+    >>> if args.verify:
+    ...     # Run system verification
     """
     parser = argparse.ArgumentParser(
         description="Maggie AI Assistant",
@@ -158,17 +280,42 @@ def parse_arguments() -> argparse.Namespace:
 
 def setup_logging(debug: bool = False) -> None:
     """
-    Set up logging configuration.
+    Set up logging configuration using loguru.
+    
+    This function configures the loguru logger with console and file handlers
+    using appropriate formatting and log levels. It ensures the logs directory
+    exists and sets up log rotation to prevent excessive disk usage.
     
     Parameters
     ----------
     debug : bool, optional
-        Enable debug logging if True, by default False
+        Enable debug logging if True, showing more detailed logs in both
+        console and file output, by default False
+        
+    Returns
+    -------
+    None
+        This function doesn't return a value but configures the global logger
         
     Notes
     -----
-    This function configures the loguru logger with console and file
-    handlers, and logs system information for diagnostic purposes.
+    This function configures two logging destinations:
+    1. Console output with colored formatting and level-based highlighting
+    2. File output with rotation (10 MB max size) and retention (1 week)
+    
+    The log format includes:
+    - Timestamp in YYYY-MM-DD HH:mm:ss format
+    - Log level (padded to 8 characters)
+    - Source location (module:function:line)
+    - Log message with level-specific coloring (console only)
+    
+    After configuring logging, it calls log_system_info() to record basic
+    system information at startup.
+    
+    Example
+    -------
+    >>> setup_logging(debug=True)  # Enable verbose debug logging
+    >>> setup_logging()  # Use standard INFO level logging
     """
     # Ensure logs directory exists
     os.makedirs("logs", exist_ok=True)
@@ -188,10 +335,53 @@ def setup_logging(debug: bool = False) -> None:
 
 def log_system_info() -> None:
     """
-    Log detailed information about the system.
+    Log detailed information about the system hardware and environment.
     
-    Logs information about the operating system, CPU, RAM, and GPU
-    to help with diagnostics and troubleshooting.
+    This function collects and logs comprehensive information about the system,
+    including operating system, Python version, CPU specifications, RAM capacity,
+    and GPU details. The information is logged at INFO level to help with
+    diagnostics, troubleshooting, and performance optimization.
+    
+    Parameters
+    ----------
+    None
+    
+    Returns
+    -------
+    None
+        This function doesn't return a value but logs information
+        
+    Notes
+    -----
+    The function attempts to gather as much information as possible, but
+    gracefully handles cases where certain information can't be obtained
+    (e.g., if a required package is missing).
+    
+    Information collected includes:
+    - Operating system name and version
+    - Python version
+    - CPU model, core count, and thread count
+    - Total RAM capacity
+    - GPU model, VRAM capacity, and CUDA information (if available)
+    
+    Special detection is included for AMD Ryzen 9 5900X CPU and NVIDIA RTX 3080 GPU
+    to apply specific optimizations for these components.
+    
+    Dependencies:
+    - psutil: For CPU and RAM information
+    - torch: For GPU information and CUDA detection
+    
+    Example
+    -------
+    >>> log_system_info()
+    # INFO: System: Windows 11 Pro 10.0.22621
+    # INFO: Python: 3.10.8
+    # INFO: CPU: AMD Ryzen 9 5900X 12-Core Processor
+    # INFO: CPU Cores: 12 physical, 24 logical
+    # INFO: RAM: 32.00 GB
+    # INFO: GPU 0: NVIDIA GeForce RTX 3080
+    # INFO: GPU Memory: 10.00 GB
+    # INFO: RTX 3080 detected - Tensor Cores available
     """
     try:
         # System and Python info
@@ -215,9 +405,40 @@ def log_system_info() -> None:
 
 def log_cpu_info() -> None:
     """
-    Log information about the CPU.
+    Log detailed information about the CPU.
     
-    Logs CPU model, cores, and other relevant information.
+    This function gathers and logs information about the system's CPU,
+    including model name, physical cores, and logical cores (threads).
+    It uses the psutil package to collect hardware information.
+    
+    Parameters
+    ----------
+    None
+    
+    Returns
+    -------
+    None
+        This function doesn't return a value but logs CPU information
+        
+    Notes
+    -----
+    The function attempts to gather the following CPU information:
+    - CPU model/name (from platform.processor())
+    - Physical core count (excluding hyperthreading/SMT)
+    - Logical core count (including hyperthreading/SMT)
+    
+    If the psutil package is not available, the function logs a warning
+    and fails gracefully without crashing the application.
+    
+    The CPU information is particularly important for optimizing thread usage
+    and parallel processing capabilities in the application. The Maggie AI
+    Assistant has specific optimizations for the AMD Ryzen 9 5900X CPU.
+    
+    Example
+    -------
+    >>> log_cpu_info()
+    # INFO: CPU: AMD Ryzen 9 5900X 12-Core Processor
+    # INFO: CPU Cores: 12 physical, 24 logical
     """
     try:
         import psutil
@@ -236,9 +457,40 @@ def log_cpu_info() -> None:
 
 def log_ram_info() -> None:
     """
-    Log information about system memory.
+    Log information about system memory (RAM).
     
-    Logs total RAM and available RAM.
+    This function collects and logs information about the system's physical
+    memory (RAM) using the psutil package. It provides insight into the total
+    amount of RAM available to the application.
+    
+    Parameters
+    ----------
+    None
+    
+    Returns
+    -------
+    None
+        This function doesn't return a value but logs memory information
+        
+    Notes
+    -----
+    The function logs the total RAM capacity in gigabytes (GB) with 2 decimal
+    precision. This information is valuable for:
+    
+    1. Determining if the system meets minimum memory requirements (16GB)
+    2. Applying optimal configuration for high-memory systems (32GB+)
+    3. Setting appropriate memory allocation limits for AI models
+    
+    Maggie has specific optimizations for systems with 32GB of RAM, allocating
+    memory thresholds appropriately for model loading/unloading.
+    
+    If the psutil package is not available, the function logs a warning and
+    continues execution to maintain application stability.
+    
+    Example
+    -------
+    >>> log_ram_info()
+    # INFO: RAM: 32.00 GB
     """
     try:
         import psutil
@@ -253,9 +505,47 @@ def log_ram_info() -> None:
 
 def log_gpu_info() -> None:
     """
-    Log information about the GPU.
+    Log detailed information about GPU hardware and CUDA capabilities.
     
-    Logs GPU model, VRAM, and CUDA information if available.
+    This function attempts to detect and log information about available GPUs
+    using PyTorch's CUDA interface. It logs GPU models, available VRAM,
+    and detects specific optimizations for the NVIDIA RTX 3080.
+    
+    Parameters
+    ----------
+    None
+    
+    Returns
+    -------
+    None
+        This function doesn't return a value but logs GPU information
+        
+    Notes
+    -----
+    The function collects the following GPU information when available:
+    - GPU detection status and CUDA availability
+    - Each GPU's name/model
+    - VRAM capacity in gigabytes (GB)
+    - Special capabilities for RTX 3080 (Tensor Cores, Ampere architecture)
+    
+    The information is valuable for:
+    1. Determining if GPU acceleration is available
+    2. Applying architecture-specific optimizations (e.g., for RTX 3080)
+    3. Making memory allocation decisions based on available VRAM
+    
+    Maggie has specific optimizations for the NVIDIA RTX 3080 GPU with 10GB VRAM,
+    including tensor core utilization and half-precision (FP16) optimizations.
+    
+    If PyTorch is not installed or CUDA is not available, the function logs
+    appropriate warnings without crashing the application.
+    
+    Example
+    -------
+    >>> log_gpu_info()
+    # INFO: GPU 0: NVIDIA GeForce RTX 3080
+    # INFO: GPU Memory: 10.00 GB
+    # INFO: RTX 3080 detected - Tensor Cores available
+    # INFO: Optimizing for 10GB VRAM and Ampere architecture
     """
     try:
         import torch
@@ -280,21 +570,60 @@ def log_gpu_info() -> None:
 
 def verify_system() -> bool:
     """
-    Verify system meets requirements for Maggie.
+    Verify the system meets all requirements for running Maggie AI Assistant.
+    
+    This function performs a comprehensive verification of system capabilities
+    and requirements before starting the application. It checks Python version,
+    hardware capabilities, directory structure, dependencies, and memory
+    configuration to ensure optimal operation.
+    
+    Parameters
+    ----------
+    None
     
     Returns
     -------
     bool
-        True if system meets requirements, False otherwise
+        True if system meets all critical requirements, False if critical
+        issues are found that would prevent proper operation
         
     Notes
     -----
-    This function performs comprehensive system verification including:
-    - Python version validation (requires exactly 3.10.x)
-    - GPU detection and VRAM capacity verification
-    - Critical dependency checks
-    - Directory structure validation
-    - Memory configuration checks
+    The function performs the following verification steps:
+    
+    1. Python Version Check:
+       - Requires exactly Python 3.10.x
+       - Other versions are incompatible due to dependency requirements
+    
+    2. GPU Verification:
+       - Detects CUDA availability for GPU acceleration
+       - Checks VRAM capacity (minimum 4GB, recommended 8GB+)
+       - Performs specific verification for RTX 3080 (10GB VRAM)
+       - Tests basic CUDA operations to ensure functionality
+    
+    3. Directory Structure Check:
+       - Verifies all required directories exist
+       - Creates missing directories if needed
+    
+    4. Dependency Checks:
+       - Verifies critical dependencies are installed
+       - Checks for PyAudio which is often problematic
+    
+    5. Memory Configuration Check:
+       - Verifies minimum RAM (8GB required, 16GB recommended)
+       - Checks available memory for operation
+    
+    The function returns False only if critical issues are found that would
+    prevent the application from running properly. Warnings about non-critical
+    issues (like suboptimal hardware) are logged but don't cause verification
+    to fail.
+    
+    Example
+    -------
+    >>> if verify_system():
+    ...     start_application()
+    ... else:
+    ...     display_error_and_exit()
     """
     verification_issues = []
     logger.info("Verifying system configuration...")
@@ -337,22 +666,61 @@ def verify_system() -> bool:
 
 def check_gpu_compatibility() -> Tuple[bool, List[str]]:
     """
-    Check if GPU is compatible and properly configured.
+    Check if GPU is compatible and properly configured for Maggie.
+    
+    This function performs comprehensive GPU compatibility checks including
+    CUDA availability, VRAM capacity, compute capability, and functional testing.
+    It has specific optimizations for the NVIDIA RTX 3080 GPU.
+    
+    Parameters
+    ----------
+    None
     
     Returns
     -------
     Tuple[bool, List[str]]
         A tuple containing:
-        - Boolean indicating if GPU is compatible
-        - List of warning messages
+        - Boolean indicating if GPU is compatible (True) or has critical issues (False)
+        - List of warning messages for non-critical issues
         
     Notes
     -----
-    Performs detailed checks for NVIDIA RTX 3080 compatibility:
-    - CUDA availability
-    - VRAM capacity (10GB for RTX 3080)
-    - Driver version
-    - CUDA compute capability
+    The function performs these detailed checks:
+    
+    1. CUDA Availability:
+       - Verifies PyTorch can detect and use CUDA
+       - Logs CUDA version and runtime information
+    
+    2. GPU Hardware Detection:
+       - Identifies GPU model(s)
+       - Measures total and available VRAM
+    
+    3. RTX 3080 Specific Checks (if detected):
+       - Verifies expected 10GB VRAM capacity
+       - Checks compute capability (should be 8.6)
+       - Verifies CUDA version compatibility (11.x recommended)
+       - Ensures CUDA runtime and compiled versions match
+       - Checks for sufficient available VRAM (8GB+ recommended)
+    
+    4. Functional Testing:
+       - Performs a basic CUDA operation (matrix multiplication)
+       - Ensures the operation completes successfully
+       - Cleans up memory after the test
+    
+    The function can run in fallback modes:
+    - Returns True with warnings for non-RTX 3080 GPUs
+    - Returns True with warnings for CPU-only operation if no GPU is available
+    - Only returns False for critical issues that would prevent operation
+    
+    Example
+    -------
+    >>> compatible, warnings = check_gpu_compatibility()
+    >>> if not compatible:
+    ...     print("Critical GPU issues found, cannot continue")
+    ... elif warnings:
+    ...     print(f"GPU will work but with limitations: {warnings}")
+    ... else:
+    ...     print("GPU configuration is optimal")
     """
     warnings = []
     
@@ -441,19 +809,52 @@ def check_gpu_compatibility() -> Tuple[bool, List[str]]:
 
 def check_memory_configuration() -> bool:
     """
-    Check if system memory configuration is sufficient.
+    Check if system memory configuration is sufficient for Maggie.
+    
+    This function verifies that the system has enough physical memory (RAM)
+    to run Maggie AI Assistant effectively. It checks total capacity and
+    available memory against minimum and recommended thresholds.
+    
+    Parameters
+    ----------
+    None
     
     Returns
     -------
     bool
         True if memory configuration is sufficient, False if critical issues found
+        that would prevent proper operation
     
     Notes
     -----
-    Verifies:
-    - Total system RAM (minimum 16GB, recommended 32GB)
-    - Virtual memory configuration on Windows
-    - Memory usage by other applications
+    The function performs these verification steps:
+    
+    1. Total RAM Check:
+       - Critical minimum: 8GB (application will not start with less)
+       - Recommended minimum: 16GB (will work but with limitations)
+       - Optimal: 32GB (full functionality with parallel processing)
+    
+    2. Available Memory Check:
+       - Critical minimum: 2GB available (prevents immediate memory errors)
+       - Warns if available memory is low, suggesting closing other applications
+    
+    Memory requirements are based on:
+    - Large language model (LLM) memory usage (~4-7GB)
+    - Speech processing memory requirements (~1-2GB)
+    - Cache and buffer allocations
+    - Operating system overhead
+    
+    The function uses psutil to gather memory information when available,
+    but will continue execution (returning True) if psutil is not installed,
+    relying on runtime memory errors to catch critical issues.
+    
+    Example
+    -------
+    >>> if check_memory_configuration():
+    ...     proceed_with_startup()
+    ... else:
+    ...     show_error_message("Insufficient system memory")
+    ...     exit(1)
     """
     try:
         import psutil
@@ -498,12 +899,41 @@ def check_memory_configuration() -> bool:
 
 def check_python_version() -> bool:
     """
-    Check if Python version is compatible.
+    Check if Python version is compatible with Maggie AI Assistant.
+    
+    This function verifies that the Python interpreter running the application
+    is exactly version 3.10.x, which is the only supported version. Other versions
+    (including 3.9.x and 3.11.x) are not compatible due to dependency constraints.
+    
+    Parameters
+    ----------
+    None
     
     Returns
     -------
     bool
         True if Python version is 3.10.x, False otherwise
+    
+    Notes
+    -----
+    Maggie AI Assistant requires Python 3.10.x specifically because:
+    
+    1. Some dependencies (like PyTorch with CUDA) have version-specific wheels
+    2. Some libraries use Python 3.10-specific features
+    3. Certain dependencies have not been updated for Python 3.11+
+    4. Python 3.9 lacks some features used by the codebase
+    
+    When an incompatible Python version is detected, the function logs detailed
+    error messages explaining the requirement and pointing to Python 3.10
+    installation resources.
+    
+    Example
+    -------
+    >>> if check_python_version():
+    ...     print("Python version compatible")
+    ... else:
+    ...     print("Please install Python 3.10.x")
+    ...     sys.exit(1)
     """
     python_version = platform.python_version_tuple()
     if int(python_version[0]) != 3 or int(python_version[1]) != 10:
@@ -519,12 +949,51 @@ def check_python_version() -> bool:
 
 def check_cuda_availability() -> bool:
     """
-    Check if CUDA is available and compatible.
+    Check if CUDA is available and compatible for GPU acceleration.
+    
+    This function verifies CUDA availability through PyTorch and logs
+    information about detected GPUs. It performs basic compatibility checking
+    but is less comprehensive than check_gpu_compatibility().
+    
+    Parameters
+    ----------
+    None
     
     Returns
     -------
     bool
-        True if CUDA is available or not required, False on critical issues
+        True if CUDA is available and compatible OR if CPU-only operation
+        is acceptable; False only on critical issues that would prevent
+        even basic operation
+    
+    Notes
+    -----
+    This function serves as a lightweight CUDA check compared to the more
+    comprehensive check_gpu_compatibility() function. It:
+    
+    1. Attempts to import PyTorch and check CUDA availability
+    2. Gets basic information about detected GPU(s)
+    3. Checks for RTX 3080 specifically for optimizations
+    4. Verifies VRAM capacity against minimum requirements
+    
+    Unlike check_gpu_compatibility(), this function:
+    - Does not perform functional testing of CUDA operations
+    - Returns True for both GPU and CPU-only configurations
+    - Only returns False for critical issues, not for suboptimal setups
+    - Provides less detailed diagnostic information
+    
+    This function is used in contexts where a quick check is needed
+    without the full verification suite, or as a fallback when the main
+    verification function encounters issues.
+    
+    Example
+    -------
+    >>> if check_cuda_availability():
+    ...     # CUDA might be available or CPU-only is acceptable
+    ...     proceed_with_configuration()
+    ... else:
+    ...     # Critical issue detected
+    ...     show_error_and_exit()
     """
     try:
         import torch
@@ -562,10 +1031,45 @@ def check_required_directories() -> bool:
     """
     Check if required directories exist and create them if necessary.
     
+    This function verifies that all directories needed by Maggie AI Assistant
+    exist, and attempts to create any missing directories. It ensures the
+    filesystem structure is ready for application operation.
+    
+    Parameters
+    ----------
+    None
+    
     Returns
     -------
     bool
-        True if all directories exist or were created, False otherwise
+        True if all directories exist or were successfully created,
+        False if directory creation failed
+    
+    Notes
+    -----
+    The function checks and creates (if necessary) these directories:
+    - models/ - For storing downloaded AI models
+      - models/tts/ - Text-to-speech voice models
+    - logs/ - Application logs with rotation
+    - recipes/ - Output directory for recipe extension
+    - templates/ - Template files for extensions
+    
+    Directory creation failures are usually caused by:
+    - Permission issues (insufficient write access)
+    - Disk space limitations
+    - Path length limitations (on Windows)
+    - Filesystem corruption
+    
+    Each directory creation is logged for debugging purposes,
+    and detailed error information is provided if creation fails.
+    
+    Example
+    -------
+    >>> if check_required_directories():
+    ...     print("Directory structure is ready")
+    ... else:
+    ...     print("Failed to create required directories")
+    ...     sys.exit(1)
     """
     required_dirs = ["models", "models/tts", "logs", "recipes", "templates"]
     for directory in required_dirs:
@@ -582,12 +1086,49 @@ def check_required_directories() -> bool:
 
 def check_dependencies() -> bool:
     """
-    Check if required dependencies are installed.
+    Check if required Python package dependencies are installed.
+    
+    This function verifies that all critical Python package dependencies
+    required by Maggie AI Assistant are properly installed and importable.
+    It performs specific checks for commonly problematic packages like PyAudio.
+    
+    Parameters
+    ----------
+    None
     
     Returns
     -------
     bool
-        True if all critical dependencies are installed, False otherwise
+        True if all critical dependencies are installed and importable,
+        False if any critical dependency is missing
+    
+    Notes
+    -----
+    The function checks these critical dependencies:
+    
+    1. PyAudio - Audio input capture (checked separately due to common issues)
+    2. pvporcupine - Wake word detection
+    3. faster_whisper - Speech-to-text conversion
+    4. ctransformers - LLM inference
+    5. transitions - State machine for application flow
+    6. docx - Document generation for recipe extension
+    7. PySide6 - GUI framework
+    
+    When missing dependencies are detected, the function:
+    1. Logs detailed error messages
+    2. Provides installation instructions
+    3. Returns False to indicate verification failure
+    
+    These dependency checks help prevent runtime errors by ensuring all
+    required packages are available before attempting to use them.
+    
+    Example
+    -------
+    >>> if check_dependencies():
+    ...     print("All dependencies are installed")
+    ... else:
+    ...     print("Missing dependencies, please run: pip install -r requirements.txt")
+    ...     sys.exit(1)
     """
     # Check for PyAudio (common source of issues)
     pyaudio_installed = check_pyaudio()
@@ -604,7 +1145,6 @@ def check_dependencies() -> bool:
             module_name = dep.replace("-", "_")
             if dep == "PySide6":
                 module_name = "PySide6.QtCore"
-                module_name = "PySide6"
             __import__(module_name)
         except ImportError:
             missing_deps.append(dep)
@@ -620,12 +1160,43 @@ def check_dependencies() -> bool:
 
 def check_pyaudio() -> bool:
     """
-    Check if PyAudio is installed.
+    Check if PyAudio is installed and importable.
+    
+    This function specifically checks for the PyAudio package, which is
+    commonly problematic to install due to its dependency on PortAudio
+    and platform-specific build requirements.
+    
+    Parameters
+    ----------
+    None
     
     Returns
     -------
     bool
-        True if PyAudio is installed, False otherwise
+        True if PyAudio is successfully imported, False otherwise
+    
+    Notes
+    -----
+    PyAudio is required for:
+    - Capturing audio input from microphones
+    - Wake word detection
+    - Voice command recognition
+    
+    Common installation issues:
+    - Windows: Missing C++ build tools or improper wheel
+    - Linux: Missing portaudio19-dev system package
+    - macOS: Missing PortAudio via Homebrew
+    
+    When PyAudio is not found, the function logs platform-specific
+    installation instructions to guide users through proper installation.
+    This helps prevent cryptic import errors during runtime.
+    
+    Example
+    -------
+    >>> if check_pyaudio():
+    ...     print("PyAudio found, audio input will be available")
+    ... else:
+    ...     print("PyAudio not found, voice features will be disabled")
     """
     try:
         import pyaudio
@@ -635,7 +1206,7 @@ def check_pyaudio() -> bool:
         error_msg = "PyAudio not installed"
         logger.error(error_msg)
         if platform.system() == "Windows":
-            logger.error("On Windows, install with: pipwin install pyaudio")
+            logger.error("On Windows, install with: pip install PyAudio")
         else:
             logger.error("On Linux, first install portaudio19-dev, then install pyaudio")
         return False
@@ -645,15 +1216,49 @@ def create_recipe_template() -> bool:
     """
     Create the recipe template file if it doesn't exist.
     
+    This function generates a Microsoft Word (.docx) template document for
+    use with the recipe creator extension. The template provides a standardized
+    structure for recipes with sections for ingredients, instructions, etc.
+    
+    Parameters
+    ----------
+    None
+    
     Returns
     -------
     bool
-        True if template created or already exists, False on error
+        True if template created successfully or already exists,
+        False if template creation failed
         
     Notes
     -----
-    This function creates a Microsoft Word document template for recipes,
-    which is used by the recipe creator extension.
+    The function creates a Word document template with the following structure:
+    
+    1. Recipe Name (Title)
+    2. Recipe Information (Table)
+       - Preparation Time
+       - Cooking Time
+       - Servings
+    3. Ingredients (Bulleted List)
+    4. Instructions (Numbered Steps)
+    5. Notes (Free Text)
+    6. Nutrition Information (Key-Value List)
+    
+    The template is saved to "templates/recipe_template.docx" and is used by
+    the recipe_creator extension to generate properly formatted recipe documents.
+    
+    The function requires python-docx to be installed. If missing, it logs an
+    appropriate error message but doesn't crash the application.
+    
+    The template is only created if it doesn't already exist, allowing users
+    to customize it without overwriting their changes on restart.
+    
+    Example
+    -------
+    >>> if create_recipe_template():
+    ...     print("Recipe template ready at templates/recipe_template.docx")
+    ... else:
+    ...     print("Could not create recipe template")
     """
     template_path = "templates/recipe_template.docx"
     
@@ -718,18 +1323,53 @@ def create_recipe_template() -> bool:
 
 def optimize_system() -> bool:
     """
-    Optimize system settings for best performance.
+    Optimize system settings for best Maggie AI Assistant performance.
+    
+    This function applies various system-level optimizations to improve
+    performance of the Maggie AI Assistant. It applies platform-specific
+    optimizations for Windows and Linux, as well as common optimizations
+    for all platforms.
+    
+    Parameters
+    ----------
+    None
     
     Returns
     -------
     bool
-        True if optimization succeeded, False otherwise
+        True if optimizations succeeded, False if critical optimizations failed
         
     Notes
     -----
-    This function optimizes system settings for running Maggie,
-    including process priority and thread affinity on Windows,
-    and governor settings on Linux.
+    The function applies these platform-specific optimizations:
+    
+    For Windows:
+    - Sets process priority to HIGH_PRIORITY_CLASS
+    - Configures CPU affinity for optimized core usage
+    - For Ryzen 9 5900X: Optimizes for the first 8 physical cores (16 threads)
+    
+    For Linux:
+    - Sets CPU governor to "performance" mode (requires root)
+    - Sets process nice level to -10 (higher priority)
+    - Configures process scheduling parameters
+    
+    Common optimizations for all platforms:
+    - Sets process name for better identification
+    - Configures Python-specific optimizations
+    - Sets int_max_str_digits to limit memory usage in certain operations
+    
+    These optimizations help ensure:
+    - Responsive wake word detection
+    - Faster LLM inference
+    - Improved speech processing performance
+    - Better multitasking capabilities
+    
+    Example
+    -------
+    >>> if optimize_system():
+    ...     print("System optimized for best performance")
+    ... else:
+    ...     print("Could not apply all optimizations")
     """
     try:
         # Apply platform-specific optimizations
@@ -749,10 +1389,48 @@ def optimize_system() -> bool:
 
 def windows_optimizations() -> None:
     """
-    Apply Windows-specific optimizations.
+    Apply Windows-specific optimizations for Maggie AI Assistant.
     
-    Sets process priority and CPU affinity for optimal performance
-    on Windows systems.
+    This function applies Windows-specific performance optimizations by
+    adjusting process priority and CPU affinity. It is particularly optimized
+    for systems with AMD Ryzen 9 5900X processors.
+    
+    Parameters
+    ----------
+    None
+    
+    Returns
+    -------
+    None
+        This function doesn't return a value but applies system optimizations
+    
+    Notes
+    -----
+    The function applies these Windows-specific optimizations:
+    
+    1. Process Priority:
+       - Sets the current process priority to HIGH_PRIORITY_CLASS
+       - This gives the application higher CPU scheduling priority
+       - Improves responsiveness for wake word detection and speech processing
+    
+    2. CPU Affinity Optimization:
+       - For systems with 16+ logical processors (like Ryzen 9 5900X)
+       - Sets affinity to use the first 16 logical processors
+       - Ryzen processors have a CCX (Core Complex) architecture where
+         keeping threads on the same CCX reduces inter-core latency
+       - This improves cache coherency and reduces NUMA effects
+    
+    These optimizations require the psutil package. If it's not available,
+    the function logs a warning but continues execution without crashing.
+    
+    The function also handles exceptions gracefully to prevent application
+    crashes if optimizations cannot be applied.
+    
+    Example
+    -------
+    >>> windows_optimizations()
+    # INFO: Set process priority to high
+    # INFO: Set CPU affinity to first 8 physical cores: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
     """
     try:
         import psutil
@@ -781,10 +1459,50 @@ def windows_optimizations() -> None:
 
 def linux_optimizations() -> None:
     """
-    Apply Linux-specific optimizations.
+    Apply Linux-specific optimizations for Maggie AI Assistant.
     
-    Sets CPU governor and process nice level for optimal performance
-    on Linux systems.
+    This function applies Linux-specific performance optimizations by
+    adjusting CPU governor settings and process priority. Some optimizations
+    require root privileges to apply.
+    
+    Parameters
+    ----------
+    None
+    
+    Returns
+    -------
+    None
+        This function doesn't return a value but applies system optimizations
+    
+    Notes
+    -----
+    The function applies these Linux-specific optimizations:
+    
+    1. CPU Governor Setting (requires root):
+       - Sets the CPU scaling governor to "performance" mode
+       - This disables frequency scaling and keeps CPU at maximum frequency
+       - Improves computational performance for AI inference and speech processing
+       - Increases power consumption and heat generation
+    
+    2. Process Priority:
+       - Sets process nice level to -10 (higher priority)
+       - This gives the application higher CPU scheduling priority
+       - Improves responsiveness for wake word detection
+    
+    The function checks if it's running with root privileges and applies
+    governor settings only if root access is available. Non-root users
+    still get process priority optimizations.
+    
+    These optimizations affect:
+    - AI model inference speed (faster responses)
+    - Speech recognition latency (quicker recognition)
+    - Wake word detection reliability (fewer missed activations)
+    
+    Example
+    -------
+    >>> linux_optimizations()
+    # INFO: Set CPU governor to performance mode  (if running as root)
+    # INFO: Set process nice level to -10
     """
     try:
         # Check if running as root (required for some optimizations)
@@ -806,9 +1524,46 @@ def linux_optimizations() -> None:
 
 def common_optimizations() -> None:
     """
-    Apply common optimizations for all platforms.
+    Apply common optimizations that work across all platforms.
     
-    Sets process name and Python-specific optimizations.
+    This function applies performance and usability optimizations that work
+    consistently across Windows, Linux, and other supported platforms.
+    These optimizations complement the platform-specific ones.
+    
+    Parameters
+    ----------
+    None
+    
+    Returns
+    -------
+    None
+        This function doesn't return a value but applies system optimizations
+    
+    Notes
+    -----
+    The function applies these cross-platform optimizations:
+    
+    1. Process Name Setting:
+       - Sets the visible process name to "maggie-ai-assistant"
+       - Improves identifiability in process lists and monitoring tools
+       - Uses the setproctitle package when available
+    
+    2. Python Integer String Conversion Limit:
+       - Sets sys.set_int_max_str_digits(4096) in Python 3.10+
+       - Limits memory allocation in arbitrary precision integer conversions
+       - Prevents potential memory exhaustion from extreme integer operations
+       - This is particularly useful for cryptographic operations
+    
+    The function handles missing dependencies gracefully by catching ImportError
+    exceptions and continuing with available optimizations.
+    
+    The optimizations are chosen to be safe and beneficial across all platforms
+    without requiring specific hardware or OS capabilities.
+    
+    Example
+    -------
+    >>> common_optimizations()
+    # INFO: Set process title to 'maggie-ai-assistant'
     """
     try:
         # Set process name for better identification
@@ -826,7 +1581,15 @@ def common_optimizations() -> None:
 
 def main() -> int:
     """
-    Main entry point for the application.
+    Main entry point for the Maggie AI Assistant application.
+    
+    This function serves as the primary entry point and orchestrates the
+    entire startup sequence for the Maggie AI Assistant. It handles command
+    line parsing, system verification, configuration, and application startup.
+    
+    Parameters
+    ----------
+    None
     
     Returns
     -------
@@ -835,12 +1598,46 @@ def main() -> int:
         
     Notes
     -----
-    This function handles the main program flow, including:
-    - Parsing command-line arguments
-    - Setting up logging
-    - Verifying system configuration
-    - Creating required directories and templates
-    - Initializing and starting the Maggie AI Assistant
+    The function implements this startup sequence:
+    
+    1. Command-Line Processing:
+       - Parses arguments using parse_arguments()
+       - Handles flags for debug, verify, create-template, optimize, headless
+    
+    2. Directory Setup:
+       - Ensures core directories (logs, models) exist
+    
+    3. Logging Configuration:
+       - Sets up logging with appropriate levels (debug or info)
+       - Logs system information for diagnostics
+    
+    4. Multiprocessing Support:
+       - Configures multiprocessing start method ('spawn')
+       - Ensures proper process isolation
+    
+    5. System Optimization (if --optimize specified):
+       - Applies platform-specific performance optimizations
+    
+    6. Template Creation (if --create-template specified):
+       - Creates recipe template document if not exists
+    
+    7. System Verification (if --verify specified):
+       - Performs comprehensive system compatibility check
+       - Exits with appropriate code after verification
+    
+    8. Application Startup:
+       - Starts Maggie AI Assistant core services
+       - Initializes GUI (unless in headless mode)
+       - Sets up event handlers and signal handlers
+    
+    Critical errors at any stage result in appropriate error logs and
+    non-zero exit codes. The function attempts to provide clear error
+    messages to guide troubleshooting.
+    
+    Example
+    -------
+    >>> exit_code = main()
+    >>> sys.exit(exit_code)
     """
     # Parse arguments
     args = parse_arguments()
@@ -892,9 +1689,44 @@ def main() -> int:
 
 def setup_multiprocessing() -> None:
     """
-    Set up multiprocessing support.
+    Set up Python multiprocessing module with appropriate settings.
     
-    Configures the multiprocessing module with appropriate settings.
+    This function configures the Python multiprocessing module with settings
+    appropriate for Maggie AI Assistant, ensuring stable and efficient
+    parallel processing across multiple components.
+    
+    Parameters
+    ----------
+    None
+    
+    Returns
+    -------
+    None
+        This function doesn't return a value but configures multiprocessing
+    
+    Notes
+    -----
+    The function applies these multiprocessing configurations:
+    
+    1. Start Method Setting:
+       - Sets start method to 'spawn' instead of the default
+       - 'spawn' creates a completely new Python process
+       - This prevents issues with forked processes inheriting resources
+       - Particularly important for processes using GPU resources
+    
+    This configuration is critical for:
+    - Stable operation of speech recognition processes
+    - Proper resource isolation between components
+    - Clean process termination
+    - Avoiding deadlocks and resource leaks
+    
+    The function handles the case where the start method has already been set
+    (RuntimeError) by catching the exception and continuing execution.
+    
+    Example
+    -------
+    >>> setup_multiprocessing()
+    # INFO: Set multiprocessing start method to 'spawn'
     """
     try:
         multiprocessing.set_start_method('spawn')
@@ -908,23 +1740,64 @@ def start_maggie(args: argparse.Namespace) -> int:
     """
     Initialize and start the Maggie AI Assistant.
     
+    This function is responsible for initializing and starting the main
+    Maggie AI Assistant application after verification and setup steps.
+    It handles configuration loading, component initialization, and
+    starts either the GUI or headless mode as specified.
+    
     Parameters
     ----------
     args : argparse.Namespace
-        Command-line arguments containing configuration options and flags
-
-        Valid fields:
-        - config: Path to configuration file
+        Command-line arguments containing configuration options and flags.
+        The relevant fields are:
+        - config : str
+            Path to configuration file (default: "config.yaml")
+        - headless : bool
+            Boolean flag for running without GUI in headless mode
         
     Returns
     -------
     int
         Exit code (0 for success, non-zero for error)
+    
+    Notes
+    -----
+    The function performs these initialization steps:
+    
+    1. Component Import:
+       - Imports necessary modules with error handling
+       - Falls back to headless mode if GUI components fail to import
+    
+    2. Configuration Loading:
+       - Loads YAML configuration from the specified file
+       - Handles missing or empty configuration gracefully
+    
+    3. Core Initialization:
+       - Creates MaggieAI instance with loaded configuration
+       - Sets up signal handlers for graceful shutdown
+       - Configures error logging to event bus
+    
+    4. Application Startup:
+       - GUI Mode: Creates Qt application and main window
+       - Headless Mode: Runs in command-line with event loop
+    
+    5. Error Handling:
+       - Catches and logs exceptions during startup
+       - Returns appropriate error codes
+    
+    The function is designed to fail gracefully with informative error
+    messages when encountering issues, rather than crashing with a
+    traceback.
+    
+    Example
+    -------
+    >>> args = parse_arguments()
+    >>> exit_code = start_maggie(args)
+    >>> sys.exit(exit_code)
     """
     try:
         # Check if in headless mode
         if not args.headless:
-
             # Ensure PySide6 paths are added for GUI components 
             add_pyside6_paths()
 
@@ -998,7 +1871,7 @@ def start_maggie(args: argparse.Namespace) -> int:
             logger.info("Running in headless mode")
             try:
                 # Main thread waits here
-                while maggie.state != State.SHUTDOWN:  # Now State is properly imported
+                while maggie.state != State.SHUTDOWN:
                     time.sleep(1)
                 return 0
             except KeyboardInterrupt:
@@ -1009,12 +1882,54 @@ def start_maggie(args: argparse.Namespace) -> int:
 
 def register_signal_handlers(maggie) -> None:
     """
-    Register signal handlers for graceful shutdown.
+    Register signal handlers for graceful shutdown of Maggie AI Assistant.
+    
+    This function sets up signal handlers for SIGINT (Ctrl+C) and SIGTERM
+    (termination request) to ensure that the Maggie AI Assistant shuts down
+    gracefully when receiving these signals, properly releasing resources
+    and saving state.
     
     Parameters
     ----------
     maggie : MaggieAI
-        Instance of the Maggie AI Assistant
+        Instance of the Maggie AI Assistant that needs to be shutdown
+        gracefully when signals are received
+    
+    Returns
+    -------
+    None
+        This function doesn't return a value but registers signal handlers
+    
+    Notes
+    -----
+    The function sets up handlers for:
+    
+    1. SIGINT Signal:
+       - Sent when user presses Ctrl+C in terminal
+       - Common during development and interactive use
+    
+    2. SIGTERM Signal:
+       - Sent by process managers (systemd, Docker, etc.)
+       - Used for orderly shutdown requests
+    
+    The registered handler:
+    1. Logs the received signal
+    2. Calls maggie.shutdown() to perform orderly cleanup:
+       - Stops active processes
+       - Saves current state if needed
+       - Releases hardware resources (GPU memory, audio devices)
+       - Closes open files and connections
+    3. Exits the application with code 0 (success)
+    
+    The function handles exceptions during registration gracefully,
+    logging warnings but not crashing the application if signal
+    handlers cannot be registered.
+    
+    Example
+    -------
+    >>> maggie_instance = MaggieAI(config)
+    >>> register_signal_handlers(maggie_instance)
+    # INFO: Registered signal handlers for graceful shutdown
     """
     try:
         import signal
@@ -1029,17 +1944,58 @@ def register_signal_handlers(maggie) -> None:
     except Exception as e:
         logger.warning(f"Failed to register signal handlers: {e}")
 
+
 def add_pyside6_paths():
     """
-    Find PySide6 paths dynamically across platforms and
-    adds them to sys.path for PySide6 imports.
+    Find PySide6 paths dynamically across platforms and add them to sys.path.
+    
+    This function attempts to locate PySide6 installation directories using
+    multiple fallback methods across different platforms, then adds them to
+    the Python sys.path to ensure PySide6 modules can be imported correctly.
+    
+    Parameters
+    ----------
+    None
+    
+    Returns
+    -------
+    None
+        This function doesn't return a value but modifies sys.path
     
     Notes
     -----
-    This function attempts to locate PySide6 installation directories
-    using multiple methods across different platforms.
+    The function uses three methods to locate PySide6, in order:
+    
+    1. Pip Package Information:
+       - Uses pip to find the package installation location
+       - Parses the output to extract the base path
+       - Constructs PySide6 paths based on typical directory structure
+    
+    2. Site-Packages Search:
+       - Uses site.getsitepackages() to find potential locations
+       - Checks for PySide6 directory in each site-packages location
+       - Adds relevant subdirectories to the path
+    
+    3. Virtual Environment Detection:
+       - Detects if running in a virtual environment
+       - Checks platform-specific locations within the venv
+       - Handles differences between Windows and Linux paths
+    
+    The function handles errors gracefully at each stage, continuing to
+    the next method if the current one fails. This ensures maximum
+    compatibility across different Python environments and installations.
+    
+    This workaround is necessary because:
+    - PySide6 has a complex directory structure with DLLs/SOs
+    - Some files need to be in PATH/LD_LIBRARY_PATH
+    - Different platforms have different directory structures
+    - Installation methods (pip, conda, system package) vary
+    
+    Example
+    -------
+    >>> add_pyside6_paths()
+    >>> from PySide6.QtWidgets import QApplication  # Now imports successfully
     """
-
     # Method 1: Use pip to find the package location
     try:
         import subprocess
@@ -1076,11 +2032,9 @@ def add_pyside6_paths():
                 if p not in sys.path:
                     sys.path.append(p)
 
-
     except Exception as e:
         print(f"Error finding PySide6 paths using pip: {e}")
-        #continue    
-
+   
     # Method 2: Try to find in site-packages
     try:
         import site
@@ -1102,7 +2056,6 @@ def add_pyside6_paths():
 
     except Exception as e:
         print(f"Error finding PySide6 paths using site-packages: {e}")
-        #continue 
                 
     # Method 3: Check in virtual environment
     try:
@@ -1133,6 +2086,7 @@ def add_pyside6_paths():
         print(f"Error finding PySide6 in virtual environment: {e}")
     
     return 
+
 
 if __name__ == "__main__":
     sys.exit(main())

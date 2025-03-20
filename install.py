@@ -58,8 +58,10 @@ class ColorOutput:
     """
     Utility class for colorized terminal output.
     
-    Provides ANSI color codes and formatting for terminal output,
-    with automatic detection of terminal compatibility.
+    Parameters
+    ----------
+    force_enable : bool, optional
+        Force enable colors even if terminal doesn't support them, by default False
     
     Attributes
     ----------
@@ -67,6 +69,21 @@ class ColorOutput:
         Whether color output is enabled
     colors : Dict[str, str]
         Dictionary mapping color names to ANSI color codes
+        
+    Notes
+    -----
+    Provides ANSI color codes and formatting for terminal output,
+    with automatic detection of terminal compatibility. Available colors:
+    - red: Error messages
+    - green: Success messages
+    - yellow: Warning messages
+    - blue: Information messages
+    - magenta: Prompt messages
+    - cyan: Section headers
+    - white: Normal output
+    
+    Automatically detects color support based on platform and terminal
+    capabilities, with options to force enable or disable colors.
     """
     
     def __init__(self, force_enable: bool = False):
@@ -186,8 +203,12 @@ class ProgressTracker:
     """
     Progress tracking utility with progress bar display.
     
-    Provides utilities for tracking and displaying installation progress,
-    including progress bars, step completion indicators, and timing.
+    Parameters
+    ----------
+    color : ColorOutput
+        Color output utility for formatted console output
+    total_steps : int, optional
+        Total number of installation steps, by default 10
     
     Attributes
     ----------
@@ -196,9 +217,21 @@ class ProgressTracker:
     total_steps : int
         Total number of installation steps
     current_step : int
-        Current installation step
+        Current installation step (0-based)
     start_time : float
-        Start time of the installation
+        Start time of the installation (Unix timestamp)
+    
+    Notes
+    -----
+    Provides utilities for tracking and displaying installation progress,
+    including progress bars, step completion indicators, and timing.
+    
+    The class supports:
+    - Step-by-step progress tracking with numbered steps
+    - Visual progress bars for file downloads and operations
+    - Elapsed time tracking and reporting
+    - Success/failure status indicators with color coding
+    - Installation summary with total time elapsed
     """
     
     def __init__(self, color: ColorOutput, total_steps: int = 10):
@@ -332,10 +365,6 @@ class MaggieInstaller:
     """
     Comprehensive installer for Maggie AI Assistant.
     
-    Handles all aspects of installation including system verification,
-    dependency management, configuration setup, and extension installation.
-    Optimized for AMD Ryzen 9 5900X and NVIDIA RTX 3080 hardware.
-    
     Parameters
     ----------
     verbose : bool
@@ -383,6 +412,24 @@ class MaggieInstaller:
         Detected hardware information
     total_steps : int
         Total number of installation steps
+        
+    Notes
+    -----
+    Handles all aspects of installation including system verification,
+    dependency management, configuration setup, and extension installation.
+    Optimized for AMD Ryzen 9 5900X and NVIDIA RTX 3080 hardware.
+    
+    The installer creates the complete directory structure as defined in
+    self.required_dirs, including all necessary subdirectories for:
+    - Core functionality
+    - Extensions
+    - Models (LLM, STT, TTS)
+    - Utilities (config, hardware, llm, stt, tts)
+    - Templates
+    - Cache directories
+    
+    It handles platform-specific requirements and optimizations for
+    both Windows and Linux operating systems.
     """
     
     def __init__(self, verbose: bool = False, cpu_only: bool = False,
@@ -948,24 +995,33 @@ class MaggieInstaller:
             ├── core/                 # Core functionality
             ├── extensions/           # Extension modules
             ├── models/               # Downloaded model files
-            │   └── LLM/              # Large Language Models
-            │   └── TTS/              # Voice Models
+            │   ├── llm/              # Large Language Models
+            │   ├── stt/              # Speech-to-text models
+            │   └── tts/              # Text-to-speech voice models
             ├── templates/            # Template files
-            │   └── extension         # Extension templates       
+            │   └── extension/        # Extension templates       
             └── utils/                # Utility modules
-                └── config/           # Configuration utilities
-                └── hardware/         # Hardware detection utilities
-                └── speech/           # Speech processing utilities
+                ├── config/           # Configuration utilities
+                ├── hardware/         # Hardware detection utilities
+                ├── llm/              # LLM processing utilities
+                ├── stt/              # Speech-to-text utilities
+                └── tts/              # Text-to-speech utilities
 
-        All paths are created relative to the base installation directory.
-        Missing parent directories are created automatically. Package directories
-        (maggie/, maggie/core/, maggie/extensions/, maggie/utils/, and its submodules)
-        include an __init__.py file to make them importable Python modules.
+        Parameters
+        ----------
+        None
 
         Returns
         -------
         bool
             True if all directories created successfully, False otherwise
+
+        Notes
+        -----
+        All paths are created relative to the base installation directory.
+        Missing parent directories are created automatically. Package directories
+        (maggie/, maggie/core/, maggie/extensions/, maggie/utils/, and its submodules)
+        include an __init__.py file to make them importable Python modules.
         """
         # Create all required directories
         for directory in self.required_dirs:
@@ -987,7 +1043,9 @@ class MaggieInstaller:
             "maggie/utils",
             "maggie/utils/config",
             "maggie/utils/hardware",
-            "maggie/utils/speech",
+            "maggie/utils/llm",
+            "maggie/utils/stt",
+            "maggie/utils/tts",
         ]
         for pkg_dir in package_dirs:
             init_path = os.path.join(self.base_dir, pkg_dir, "__init__.py")
@@ -1137,10 +1195,26 @@ class MaggieInstaller:
         """
         Install all dependencies from requirements file.
         
+        Parameters
+        ----------
+        None
+        
         Returns
         -------
         bool
             True if installation successful, False otherwise
+            
+        Notes
+        -----
+        Performs installation in the following order:
+        1. Basic dependencies (pip, setuptools, wheel, etc.)
+        2. PyTorch with appropriate CUDA support or CPU-only version
+        3. Standard dependencies from requirements.txt (filtering out special cases)
+        4. Specialized dependencies that need custom handling
+           - PyAudio (with platform-specific handling)
+           - Kokoro TTS engine
+           - Faster-Whisper speech recognition
+           - GPU-specific dependencies
         """
         python_cmd = self._get_venv_python()
         
@@ -1214,30 +1288,6 @@ class MaggieInstaller:
         """
         Install specialized dependencies that need special handling.
 
-        Handles installation of packages that cannot be installed with the standard pip
-        process due to platform-specific requirements, binaries, or alternative sources:
-
-        1. PyAudio (0.2.13):
-        - Windows: Requires prebuilt wheel due to compilation dependencies
-        - Linux: Requires portaudio19-dev system package
-
-        2. Kokoro TTS Engine:
-        - Installed from GitHub repository, not PyPI
-        - Requires different installation approaches with/without Git
-        - Has GPU-specific optimizations when CUDA is available
-
-        3. Faster-Whisper (Speech Recognition):
-        - Requires specific version compatibility (0.9.0)
-        - Has specialized optimizations for GPU acceleration 
-
-        4. Whisper-streaming:
-        - Requires copying custom module files to site-packages
-        - Not available as a standard PyPI package
-
-        5. GPU-specific dependencies:
-        - onnxruntime-gpu only installed when GPU is available
-        - Version must be compatible with CUDA runtime
-
         Parameters
         ----------
         python_cmd : str
@@ -1247,6 +1297,32 @@ class MaggieInstaller:
         -------
         bool
             True if installation successful, False otherwise
+            
+        Notes
+        -----
+        Handles installation of packages that cannot be installed with the standard pip
+        process due to platform-specific requirements, binaries, or alternative sources:
+
+        1. PyAudio (0.2.13):
+           - Windows: Requires prebuilt wheel due to compilation dependencies
+           - Linux: Requires portaudio19-dev system package
+
+        2. Kokoro TTS Engine:
+           - Installed from GitHub repository, not PyPI
+           - Requires different installation approaches with/without Git
+           - Has GPU-specific optimizations when CUDA is available
+
+        3. Faster-Whisper (Speech Recognition):
+           - Requires specific version compatibility (0.9.0)
+           - Has specialized optimizations for GPU acceleration 
+
+        4. Whisper-streaming:
+           - Requires copying custom module files to site-packages
+           - Not available as a standard PyPI package
+
+        5. GPU-specific dependencies:
+           - onnxruntime-gpu only installed when GPU is available
+           - Version must be compatible with CUDA runtime
         """
         # 1. Install PyAudio - platform-specific handling
         self._install_pyaudio(python_cmd)
@@ -1551,17 +1627,24 @@ class MaggieInstaller:
     
     def _download_af_heart_model(self) -> bool:
         """
-        Download the af_heart TTS voice model into maggie/models/TTS/.
+        Download the af_heart TTS voice model into maggie/models/tts/.
 
-        Downloads the af_heart.pt file from Hugging Face and places it in the
-        maggie/models/TTS/ directory as specified in the directory structure.
+        Parameters
+        ----------
+        None
 
         Returns
         -------
         bool
             True if download successful, False otherwise
+
+        Notes
+        -----
+        Downloads the af_heart.pt file from Hugging Face and places it in the
+        maggie/models/tts/ directory as specified in the directory structure.
+        This voice model is used by the TTS component for speech synthesis.
         """
-        model_dir = os.path.join(self.base_dir, "maggie", "models", "TTS")
+        model_dir = os.path.join(self.base_dir, "maggie", "models", "tts")
         model_path = os.path.join(model_dir, "af_heart.pt")
         
         # Check if model file already exists
@@ -1583,21 +1666,29 @@ class MaggieInstaller:
     
     def _download_mistral_model(self) -> bool:
         """
-        Download Mistral 7B LLM model into maggie/models/LLM/mistral-7b-instruct-v0.3-GPTQ-4bit/.
+        Download Mistral 7B LLM model into maggie/models/llm/.
 
-        Clones the Mistral 7B Instruct v0.3 GPTQ model repository from Hugging Face into the
-        maggie/models/LLM/mistral-7b-instruct-v0.3-GPTQ-4bit/ directory using Git, if available.
+        Parameters
+        ----------
+        None
 
         Returns
         -------
         bool
             True if download successful or user opts to continue, False otherwise
+
+        Notes
+        -----
+        Clones the Mistral 7B Instruct v0.3 GPTQ model repository from Hugging Face into the
+        maggie/models/llm/mistral-7b-instruct-v0.3-GPTQ-4bit/ directory using Git, if available.
+        This model requires approximately 5GB of storage space and is used for
+        natural language processing and generation tasks.
         """
         if self.skip_models:
             self.color.print("Skipping Mistral model download (--skip-models)", "yellow")
             return True
         
-        mistral_dir = os.path.join(self.base_dir, "maggie", "models", "LLM", "mistral-7b-instruct-v0.3-GPTQ-4bit")
+        mistral_dir = os.path.join(self.base_dir, "maggie", "models", "llm", "mistral-7b-instruct-v0.3-GPTQ-4bit")
         
         # Check if model directory already exists and is not empty
         if os.path.exists(mistral_dir) and os.listdir(mistral_dir):
@@ -1743,12 +1834,30 @@ doc.save("{}")
         """
         Set up configuration file using the virtual environment's Python.
 
-        Creates or updates config.yaml using YAML operations within the virtual environment.
+        Parameters
+        ----------
+        None
 
         Returns
         -------
         bool
             True if configuration set up successfully, False otherwise
+
+        Notes
+        -----
+        Creates or updates config.yaml using YAML operations within the virtual environment.
+        The configuration is optimized for the detected hardware, particularly for
+        AMD Ryzen 9 5900X CPU and NVIDIA RTX 3080 GPU if present.
+
+        The configuration includes settings for:
+        - System-wide parameters like inactivity_timeout
+        - STT (Speech-to-Text) configuration for Whisper and DeepSpeech models
+        - Wake word detection settings including access key and sensitivity
+        - TTS (Text-to-Speech) parameters including voice model and caching
+        - LLM (Large Language Model) settings for model path and GPU usage
+        - Logging configuration
+        - Extensions configuration
+        - Hardware resource allocation (CPU, memory, GPU)
         """
         config_path = os.path.join(self.base_dir, "config.yaml")
         example_path = os.path.join(self.base_dir, "config.yaml.example")
@@ -1808,32 +1917,38 @@ else:
 
 # Set TTS voice model
 if 'tts' in config and 'voice_model' in config['tts']:
-    config['tts']['voice_model'] = 'af_heart'
+    config['tts']['voice_model'] = 'af_heart.pt'
 
 # Optimize for hardware
 if hardware_info['gpu']['is_rtx_3080']:
     if 'llm' in config:
         config['llm']['gpu_layers'] = 32
         config['llm']['gpu_layer_auto_adjust'] = True
-        config['llm']['precision'] = 'float16'
     if 'gpu' not in config:
         config['gpu'] = {{}}
-    config['gpu']['enabled'] = True
-    config['gpu']['compute_type'] = 'float16'
-    config['gpu']['tensor_cores'] = True
-    config['gpu']['reserved_memory_mb'] = 512
+    config['gpu']['max_percent'] = 90
+    config['gpu']['model_unload_threshold'] = 95
+    if 'stt' in config and 'whisper' in config['stt']:
+        config['stt']['whisper']['compute_type'] = 'float16'
+    if 'tts' in config:
+        config['tts']['gpu_acceleration'] = True
+        config['tts']['gpu_precision'] = 'mixed_float16'
 elif {self.cpu_only}:
     if 'llm' in config:
         config['llm']['gpu_layers'] = 0
+        config['llm']['gpu_layer_auto_adjust'] = False
     if 'gpu' not in config:
         config['gpu'] = {{}}
-    config['gpu']['enabled'] = False
+    config['gpu']['max_percent'] = 0
+    config['gpu']['model_unload_threshold'] = 0
+    if 'tts' in config:
+        config['tts']['gpu_acceleration'] = False
 
 if hardware_info['cpu']['is_ryzen_9_5900x']:
-    if 'threading' not in config:
-        config['threading'] = {{}}
-    config['threading']['max_workers'] = 8
-    config['threading']['thread_timeout'] = 30
+    if 'cpu' not in config:
+        config['cpu'] = {{}}
+    config['cpu']['max_threads'] = 8
+    config['cpu']['thread_timeout'] = 30
 
 if hardware_info['memory']['is_32gb']:
     if 'memory' not in config:
@@ -1868,6 +1983,31 @@ os.remove(hardware_file)
         ----------
         config : Dict[str, Any]
             Configuration dictionary to optimize
+
+        Returns
+        -------
+        None
+            Modifies the config dictionary in-place
+            
+        Notes
+        -----
+        Updates configuration dictionary with optimized settings based on
+        detected hardware capabilities, especially for AMD Ryzen 9 5900X 
+        and NVIDIA RTX 3080.
+        
+        For NVIDIA RTX 3080:
+        - Sets LLM gpu_layers to 32 (optimal for 10GB VRAM)
+        - Enables gpu_layer_auto_adjust for dynamic memory management
+        - Sets stt/whisper compute_type to float16 for faster inference
+        - Enables TTS GPU acceleration with mixed_float16 precision
+        - Sets appropriate GPU memory thresholds
+        
+        For AMD Ryzen 9 5900X:
+        - Configures max_threads to 8 (optimal for 12-core processor)
+        - Sets appropriate thread timeout values
+        
+        For 32GB RAM systems:
+        - Sets memory allocation thresholds appropriately
         """
         # GPU optimizations
         if not self.cpu_only and self.hardware_info["gpu"]["is_rtx_3080"]:
@@ -1875,34 +2015,47 @@ os.remove(hardware_file)
             if "llm" in config:
                 config["llm"]["gpu_layers"] = 32  # Optimal for 10GB VRAM
                 config["llm"]["gpu_layer_auto_adjust"] = True
-                config["llm"]["precision"] = "float16"  # Best for tensor cores
             
             # Add GPU section if it doesn't exist
             if "gpu" not in config:
                 config["gpu"] = {}
             
-            config["gpu"]["enabled"] = True
-            config["gpu"]["compute_type"] = "float16"
-            config["gpu"]["tensor_cores"] = True
-            config["gpu"]["reserved_memory_mb"] = 512
+            config["gpu"]["max_percent"] = 90  # Use up to 90% of GPU memory
+            config["gpu"]["model_unload_threshold"] = 95  # Unload at 95%
+            
+            # STT Whisper compute type
+            if "stt" in config and "whisper" in config["stt"]:
+                config["stt"]["whisper"]["compute_type"] = "float16"  # Use float16 for faster inference
+                
+            # TTS GPU acceleration
+            if "tts" in config:
+                config["tts"]["gpu_acceleration"] = True
+                config["tts"]["gpu_precision"] = "mixed_float16"
+                
         elif self.cpu_only:
             # CPU-only settings
             if "llm" in config:
                 config["llm"]["gpu_layers"] = 0
+                config["llm"]["gpu_layer_auto_adjust"] = False
             
             if "gpu" not in config:
                 config["gpu"] = {}
             
-            config["gpu"]["enabled"] = False
+            config["gpu"]["max_percent"] = 0  # Don't use GPU
+            config["gpu"]["model_unload_threshold"] = 0
+            
+            # Disable TTS GPU acceleration
+            if "tts" in config:
+                config["tts"]["gpu_acceleration"] = False
         
         # CPU optimizations for Ryzen 9 5900X
         if self.hardware_info["cpu"]["is_ryzen_9_5900x"]:
-            # Add threading section if it doesn't exist
-            if "threading" not in config:
-                config["threading"] = {}
+            # Add CPU section if it doesn't exist
+            if "cpu" not in config:
+                config["cpu"] = {}
             
-            config["threading"]["max_workers"] = 8  # Using 8 of the 12 available cores
-            config["threading"]["thread_timeout"] = 30
+            config["cpu"]["max_threads"] = 8  # Using 8 of the 12 available cores
+            config["cpu"]["thread_timeout"] = 30
         
         # Memory optimizations for 32GB RAM
         if self.hardware_info["memory"]["is_32gb"]:
@@ -1946,10 +2099,25 @@ os.remove(hardware_file)
         """
         Verify system compatibility for installation.
         
+        Parameters
+        ----------
+        None
+        
         Returns
         -------
         bool
             True if system meets all requirements, False otherwise
+            
+        Notes
+        -----
+        Performs the following compatibility checks:
+        1. Python version verification (must be exactly 3.10.x)
+        2. Hardware detection (CPU, GPU, memory)
+        3. Required external tools (Git, C++ compiler)
+        
+        The verification is the first step in the installation process,
+        and must pass before proceeding with directory creation and 
+        dependency installation.
         """
         self.progress.start_step("Verifying system compatibility")
         
@@ -1973,13 +2141,32 @@ os.remove(hardware_file)
         """
         Run the complete installation process.
         
-        Executes all installation steps, creating the directory structure, installing
-        dependencies, downloading models into maggie/models/, and setting up extensions.
-
+        Parameters
+        ----------
+        None
+        
         Returns
         -------
         bool
             True if installation successful, False otherwise
+            
+        Notes
+        -----
+        Executes the full installation process in the following steps:
+        
+        1. System verification - Check compatibility requirements
+        2. Directory creation - Set up the full directory structure
+        3. Virtual environment - Create Python virtual environment
+        4. Dependencies - Install all required packages
+        5. Configuration - Set up and optimize config.yaml
+        6. Models - Download required model files:
+           - TTS voice model (af_heart.pt)
+           - LLM model (Mistral 7B)
+        7. Extensions - Set up extensions and templates
+        8. Finalization - Complete installation and display instructions
+        
+        Each step is tracked with progress indicators and appropriate
+        error handling for graceful failure recovery.
         """
         self.color.print("\n=== Maggie AI Assistant Installation ===", "cyan", bold=True)
         self.color.print(f"Platform: {self.platform_system} ({platform.platform()})", "cyan")
@@ -2088,12 +2275,28 @@ def main() -> int:
     """
     Main entry point for the installer.
     
-    Parses command-line arguments and runs the installation process.
+    Parameters
+    ----------
+    None
     
     Returns
     -------
     int
         Exit code (0 for success, 1 for failure)
+        
+    Notes
+    -----
+    Parses command-line arguments and runs the installation process.
+    Supported arguments:
+    - --verbose: Enable verbose output
+    - --cpu-only: Install CPU-only version (no GPU acceleration)
+    - --skip-models: Skip downloading large LLM models
+    - --skip-problematic: Skip problematic dependencies
+    - --force-reinstall: Force reinstallation of packages
+    
+    The installer creates all necessary directories, installs dependencies,
+    downloads models, and configures the system optimally for the 
+    detected hardware.
     """
     parser = argparse.ArgumentParser(
         description="Maggie AI Assistant Installer",
