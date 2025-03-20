@@ -1587,7 +1587,7 @@ class MaggieInstaller:
                 # Try to find site-packages directory for Linux
                 venv_site_packages = None
                 for lib_dir in ["lib", "lib64"]:
-                    for py_dir in ["python3.10", "python3"]:
+                    for py_dir in ["python3.10", "python3", "python"]:
                         test_path = os.path.join(self.base_dir, "venv", lib_dir, py_dir, "site-packages")
                         if os.path.exists(test_path):
                             venv_site_packages = test_path
