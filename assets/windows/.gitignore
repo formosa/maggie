@@ -1,6 +1,34 @@
 # File: .assets/windows/.gitignore
 # Ignore everything in this directory
-*
-# Except for this file
-!.gitignore
-!.pvporcupine
+ctransformers/
+CUDA/
+cuDNN/
+faster-whisper/
+git/
+huggingface/
+kokoro/
+llama-cpp-python/
+loguru/
+mammoth/
+numpy/
+onnxruntime-gpu/
+pip/
+psutil/
+# pvporcupine/
+PyAudio/
+PyQt6/
+Python/
+python-docx/
+python-embed/
+PyYAML/
+requests/
+setuptools/
+soundfile/
+speechrecognition/
+torch/
+tqdm/
+transitions/
+VC_redist/
+vs_BuildTools/
+wheel/
+# whisper_streaming/
