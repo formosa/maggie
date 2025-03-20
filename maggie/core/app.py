@@ -523,6 +523,13 @@ class MaggieAI:
             # Import: TTSProcessor
             from maggie.utils.tts.processor import TTSProcessor
             # Create TTS processor with configuration
+
+            logger.info("Initializing components...")
+            logger.info("self.config")
+            logger.info(f"{self.config}")
+            logger.info('self.config.get("tts", {})')
+            logger.info(self.config.get("tts", {}))
+            
             self.tts_processor = TTSProcessor(self.config.get("tts", {}))
             # Register TTS processor for global access
             ServiceLocator.register("tts_processor", self.tts_processor)

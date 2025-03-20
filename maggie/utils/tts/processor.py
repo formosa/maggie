@@ -85,7 +85,7 @@ class TTSProcessor:
             - cache_size: Maximum number of cached utterances (default: 100)
         """
         logger.info(f"TTS config Parameter: {config}")
-        logger.info(f"TTS config Self: {self.config}")
+        # logger.info(f"TTS config Self: {self.config}")
         # Initialize attributes from configuration
         self.voice_model = config.get("voice_model", None)
         logger.info(f"TTS voice model: {self.voice_model}")
