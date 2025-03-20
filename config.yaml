@@ -43,7 +43,7 @@ stt:
     # Porcupine wake word configuration
     keyword: "maggie"
     # Custom keyword file path (optional)
-    keyword_path: "\\maggie\\models\\stt\\porcupine\\maggie_windows.ppn"
+    keyword_path: "\\maggie\\models\\stt\\porcupine\\Hey-Maggie_en_windows_v3_0_0.ppn"
     # Maximum CPU usage percentage for wake word detection
     cpu_threshold: 5.0
 

@@ -1071,7 +1071,6 @@ def check_required_directories() -> bool:
     ...     print("Failed to create required directories")
     ...     sys.exit(1)
     """
-    # required_dirs = ["models", "models/tts", "logs", "recipes", "templates"]
     required_dirs = ["maggie/models", "maggie/models/tts", "logs", "maggie/extensions/recipe_creator/recipes", "maggie/extensions/recipe_creator/templates"]
     for directory in required_dirs:
         if not os.path.exists(directory):
