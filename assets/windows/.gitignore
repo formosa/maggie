@@ -1,5 +1,6 @@
-# File: .assets/.gitignore
+# File: .assets/windows/.gitignore
 # Ignore everything in this directory
 *
 # Except for this file
 !.gitignore
+!.pvporcupine
