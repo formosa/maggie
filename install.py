@@ -1656,7 +1656,7 @@ class MaggieInstaller:
                 site_packages = stdout.strip()
                 
                 # Create whisper_streaming directory in site-packages
-                ws_dir = os.path.join(site_packages, "whisper_streaming")
+                ws_dir = os.path.join(site_packages, "Lib","site-packages", "whisper_streaming")
                 os.makedirs(ws_dir, exist_ok=True)
                 
                 # Copy source files
