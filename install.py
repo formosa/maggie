@@ -1807,8 +1807,8 @@ else:
         config = yaml.safe_load(f)
 
 # Set TTS voice model
-if 'speech' in config and 'tts' in config['speech']:
-    config['speech']['tts']['voice_model'] = 'af_heart'
+if 'tts' in config and 'voice_model' in config['tts']:
+    config['tts']['voice_model'] = '{self.config["tts"]["voice_model"]}'
 
 # Optimize for hardware
 if hardware_info['gpu']['is_rtx_3080']:
