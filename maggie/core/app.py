@@ -484,6 +484,9 @@ class MaggieAI:
         """
         try:
             # Import: Service Locator
+            logger.info("Initializing components...")
+            logger.info("self.config")
+            logger.info(f"{self.config}")
             from maggie.utils.service_locator import ServiceLocator
             # Register event bus for global access
             ServiceLocator.register("event_bus", self.event_bus)
@@ -518,8 +521,6 @@ class MaggieAI:
             # Import: TTSProcessor
             from maggie.utils.tts.processor import TTSProcessor
             # Create TTS processor with configuration
-            print("\n\n========== self.config.get('tts', ) ==========\n\n")
-            print(self.config.get("tts", {}))
             self.tts_processor = TTSProcessor(self.config.get("tts", {}))
             # Register TTS processor for global access
             ServiceLocator.register("tts_processor", self.tts_processor)
