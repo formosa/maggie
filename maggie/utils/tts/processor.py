@@ -177,6 +177,9 @@ class TTSProcessor:
             # Import Kokoro library
             import kokoro
             
+            logger.error(f"_____________self.voice_model = {self.voice_model}")
+            logger.error(f"_____________self.config = {self.config}")
+
             # Check if voice model is set
             if not self.voice_model:
                 logger.error("Voice model not specified in configuration")
