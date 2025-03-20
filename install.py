@@ -1597,20 +1597,6 @@ class MaggieInstaller:
                 python_cmd, "-m", "pip", "install"] + dependencies
             )
             
-            # Install from GitHub if Git is available
-            if self.has_git:
-                returncode, _, stderr = self._run_command([
-                    python_cmd, "-m", "pip", "install", 
-                    "git+https://github.com/ufal/whisper_streaming.git"
-                ])
-                
-                if returncode == 0:
-                    self.color.print("whisper_streaming installed successfully from GitHub", "green")
-                    return True
-                else:
-                    self.color.print(f"Error installing whisper_streaming from GitHub: {stderr}", "red")
-                    # Fall back to local installation
-            
             # Download and extract the package
             whisper_streaming_dir = os.path.join(self.base_dir, "downloads", "whisper_streaming")
             os.makedirs(whisper_streaming_dir, exist_ok=True)
@@ -1632,22 +1618,11 @@ class MaggieInstaller:
                 extracted_dir = os.path.join(os.path.dirname(whisper_streaming_dir), "whisper_streaming-main")
                 if os.path.exists(whisper_streaming_dir):
                     shutil.rmtree(whisper_streaming_dir)
-                shutil.move(extracted_dir, whisper_streaming_dir)
+                    shutil.move(extracted_dir, whisper_streaming_dir)
                 
-                # Install from the local directory
-                returncode, _, stderr = self._run_command([
-                    python_cmd, "-m", "pip", "install", "-e", whisper_streaming_dir
-                ])
-                
-                if returncode == 0:
-                    self.color.print("whisper_streaming installed successfully from local directory", "green")
-                    return True
-                else:
-                    self.color.print(f"Error installing whisper_streaming from local directory: {stderr}", "red")
-                    
                     # As a last resort, copy modules directly
                     self._copy_whisper_streaming_modules(python_cmd)
-                    return True
+                return True
             except Exception as e:
                 self.color.print(f"Error extracting or installing whisper_streaming: {e}", "red")
                 return False
