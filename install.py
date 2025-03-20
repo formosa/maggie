@@ -1661,7 +1661,7 @@ class MaggieInstaller:
                 
                 # Copy source files
                 source_dir = os.path.join(self.base_dir, "downloads", 
-                                        "whisper_streaming", "whisper_streaming")
+                                        "whisper_streaming")
                 
                 if os.path.exists(source_dir):
                     # Copy all .py files
