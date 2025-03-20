@@ -38,6 +38,9 @@ from loguru import logger
 # Local imports
 from maggie.utils.tts.processor import TTSProcessor
 
+
+from whisper_streaming.whisper_live import Client, TranscriptionServer
+
 class STTProcessor:
     """
     Speech recognition and processing using Faster Whisper models.
