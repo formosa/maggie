@@ -86,15 +86,15 @@ class TTSProcessor:
         """
         # Initialize attributes from configuration
         self.voice_model = config.get("voice_model", None)
-        logger.info("TTS voice model: {self.voice_model}")
+        logger.info(f"TTS voice model: {self.voice_model}")
 
         # Configure TTS model path
         self.model_path = config.get("model_path", "")
-        logger.info("TTS model path: {self.model_path}")
+        logger.info(f"TTS model path: {self.model_path}")
 
         # Configure TTS sample rate
         self.sample_rate = config.get("sample_rate", 22050)
-        logger.info("TTS sample rate: {self.sample_rate} Hz")
+        logger.info(f"TTS sample rate: {self.sample_rate} Hz")
 
         # Configure TTS caching
         self.use_cache = config.get("use_cache", True)
