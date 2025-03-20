@@ -173,12 +173,15 @@ class TTSProcessor:
         if self.kokoro_instance is not None:
             return True
             
+        voice_path = os.path.join(self.model_path, self.voice_model)
+        logger.error(f"_____________self.model_path = {self.model_path}")
+        logger.error(f"_____________self.voice_model = {self.voice_model}")
+        logger.error(f"_____________voice_path = {voice_path}")
+
+
         try:
             # Import Kokoro library
             import kokoro
-            
-            logger.error(f"_____________self.voice_model = {self.voice_model}")
-            logger.error(f"_____________self.config = {self.config}")
 
             # Check if voice model is set
             if not self.voice_model:
