@@ -428,15 +428,17 @@ class MaggieInstaller:
             "maggie/core",
             "maggie/extensions",
             "maggie/models",
-            "maggie/models/LLM",
-            "maggie/models/TTS",
+            "maggie/models/llm",
+            "maggie/models/stt",
+            "maggie/models/tts",
             "maggie/templates",
             "maggie/templates/extension",
             "maggie/utils",
-            "maggie/utils/attention",
-            "maggie/utils/config",
             "maggie/utils/hardware",
-            "maggie/utils/speech",
+            "maggie/utils/config",
+            "maggie/utils/llm",
+            "maggie/utils/stt",
+            "maggie/utils/tts",
         ]
         
         # Utilities
