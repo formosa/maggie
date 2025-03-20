@@ -1710,7 +1710,9 @@ class MaggieInstaller:
         """
         model_dir = os.path.join(self.base_dir, "maggie", "models", "tts")
         model_path = os.path.join(model_dir, "af_heart.pt")
-        
+        print(f"\n---___---__--_- model_dir -_--___---____---\n{model_dir}\n")
+        print(f"\n---___---__--_- model_path -_--___---____---\n{model_path}\n")
+
         # Check if model file already exists
         if os.path.exists(model_path):
             self.color.print("af_heart voice model file already exists", "green")
