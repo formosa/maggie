@@ -501,11 +501,6 @@ class MaggieAI:
             # Import: WakeWordDetector
             from maggie.utils.stt.wake_word import WakeWordDetector
             # Create wake word detector with configured wake word
-            logger.info("Initializing components...")
-            logger.info("self.config")
-            logger.info(f"{self.config}")
-            logger.info('self.config.get("stt", {}).get("wake_word", {})')
-            logger.info(self.config.get("stt", {}).get("wake_word", {}))
             self.wake_word_detector = WakeWordDetector(self.config.get("stt", {}).get("wake_word", {}))
             # Set wake word detection callback
             # to trigger state transition to READY state when wake word is detected
@@ -523,13 +518,6 @@ class MaggieAI:
             # Import: TTSProcessor
             from maggie.utils.tts.processor import TTSProcessor
             # Create TTS processor with configuration
-
-            logger.info("Initializing components...")
-            logger.info("self.config")
-            logger.info(f"{self.config}")
-            logger.info('self.config.get("tts", {})')
-            logger.info(self.config.get("tts", {}))
-            
             self.tts_processor = TTSProcessor(self.config.get("tts", {}))
             # Register TTS processor for global access
             ServiceLocator.register("tts_processor", self.tts_processor)

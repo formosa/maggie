@@ -177,7 +177,9 @@ class TTSProcessor:
             # Import Kokoro library
             import kokoro
             
+            # Check if voice model path exists
             voice_path = os.path.join(self.model_path, self.voice_model)
+            logger.info(f"Loading TTS voice model: {voice_path}")
 
             # Check if model exists with improved error reporting
             if not os.path.exists(voice_path):
