@@ -1651,7 +1651,7 @@ class MaggieInstaller:
                 python_cmd, "-c", 
                 "import site; print(site.getsitepackages()[0])"
             ])
-            print(f"\n\n======\nstdout => {stdout}\n")
+
             if returncode == 0:
                 site_packages = stdout.strip()
                 
