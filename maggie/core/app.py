@@ -484,9 +484,6 @@ class MaggieAI:
         """
         try:
             # Import: Service Locator
-            logger.info("Initializing components...")
-            logger.info("self.config")
-            logger.info(f"{self.config}")
             from maggie.utils.service_locator import ServiceLocator
             # Register event bus for global access
             ServiceLocator.register("event_bus", self.event_bus)
@@ -504,6 +501,11 @@ class MaggieAI:
             # Import: WakeWordDetector
             from maggie.utils.stt.wake_word import WakeWordDetector
             # Create wake word detector with configured wake word
+            logger.info("Initializing components...")
+            logger.info("self.config")
+            logger.info(f"{self.config}")
+            logger.info('self.config.get("stt", {}).get("wake_word", {})')
+            logger.info(self.config.get("stt", {}).get("wake_word", {}))
             self.wake_word_detector = WakeWordDetector(self.config.get("stt", {}).get("wake_word", {}))
             # Set wake word detection callback
             # to trigger state transition to READY state when wake word is detected
