@@ -177,6 +177,16 @@ class TTSProcessor:
             # Import Kokoro library
             import kokoro
             
+            # Check if voice model is set
+            if not self.voice_model:
+                logger.error("Voice model not specified in configuration")
+                return False
+                
+            # Check if model path is set
+            if not self.model_path:
+                logger.error("Model path not specified in configuration")
+                return False
+            
             # Check if voice model path exists
             voice_path = os.path.join(self.model_path, self.voice_model)
             logger.info(f"Loading TTS voice model: {voice_path}")

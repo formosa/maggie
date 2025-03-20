@@ -498,11 +498,14 @@ class STTProcessor:
             
         # Concatenate all audio chunks
         audio_data = b''.join(recorded_chunks)
-        
+
         # Convert to numpy array
         audio_array = np.frombuffer(audio_data, dtype=np.int16).astype(np.float32) / 32768.0
         
-        return audio_array
+        if audio_array.size > 0:
+            return audio_array
+        else:
+            return None
     
     def _process_with_whisper(self, audio_data: np.ndarray) -> str:
         """
