@@ -62,7 +62,7 @@ logging:
   # Separate level for file logging
   file_level: "DEBUG"
 
-# Extension modules configuration
+# Extensions configuration
 extensions:
   # Enable or disable specific extension modules
   recipe_creator:
@@ -73,18 +73,28 @@ extensions:
     # Output directory for generated recipes
     output_dir: "recipes"
 
-
-# Threading configuration for Ryzen 9 5900X
-threading:
+# CPU configuration
+cpu:
   # Number of worker threads for parallel processing
-  # Using 8 of the 12 available cores
-  max_workers: 8
+  # (using 8 of the 12 available cores for Ryzen 9 5900X)
+  max_threads: 8
   # Timeout for thread operations in seconds
   thread_timeout: 30  
 
-# Memory management for 32GB system
+# Memory configuration
 memory:
   # Maximum memory usage for the application as a percentage of total system memory
-  max_percent: 75  # Use up to 75% of system memory (24GB)
+  # (using up to 75% of system memory (24GB) from 32GB system)
+  max_percent: 75
   # Threshold for unloading models to free up memory
-  model_unload_threshold: 85  # Unload models if memory usage exceeds 85%
+  # (unload models if memory usage exceeds 85%)
+  model_unload_threshold: 85
+
+# GPU configuration
+gpu:
+  # Maximum GPU memory usage as a percentage of total GPU memory
+  # (using up to 90% of RTX3080 (10 GB VRAM) memory)
+  max_percent: 90
+  # Threshold for unloading models to free up memory
+  # (unload models if memory usage exceeds 95%)
+  model_unload_threshold: 95

@@ -368,7 +368,12 @@ class MaggieAI:
 
         # Initialize extension dictionary for loaded extensions
         self.extensions = {}
-        
+
+        # Inactivity timer for tracking user inactivity
+        self.inactivity_timer = None
+        # Inactivity timeout in seconds (default: 5 minutes)
+        self.inactivity_timeout = self.config.get("inactivity_timeout", 300)
+
         # Utility References - will be initialized during startup
         self.hardware_manager = None
         self.wake_word_detector = None
@@ -376,15 +381,13 @@ class MaggieAI:
         self.llm_processor = None
         self.gui = None
         
-        # Thread management
-        # Worker thread pool
+        # CPU management
+        # Worker thread pool for async tasks (default: 10 workers)
         self.thread_pool = ThreadPoolExecutor(
-            max_workers=config.get("threading", {}).get("max_workers", 10),
-            thread_name_prefix="maggie_worker"
+            max_workers= self.config.get("cpu", {}).get("max_threads", 10),
+            thread_name_prefix="maggie_thread_"
         )
-        self.inactivity_timer = None
-        self.inactivity_timeout = config.get("threading", {}).get("thread_timeout", 60)
-        
+         
         # Setup state transition handlers
         self.transition_handlers = {
             State.IDLE: self._on_enter_idle,
@@ -487,10 +490,10 @@ class MaggieAI:
             
             # Import: Hardware Manager
             from maggie.utils.hardware.manager import HardwareManager
-            # Apply hardware optimizations to configuration
-            # self.config = self.hardware_manager.optimize_config(self.config)
             # Create hardware manager and provide configuration
             self.hardware_manager = HardwareManager(self.config)
+            # Apply hardware optimizations to configuration
+            # self.config = self.hardware_manager.optimize_config(self.config)
             # Register hardware manager for global access
             ServiceLocator.register("hardware_manager", self.hardware_manager)
 
