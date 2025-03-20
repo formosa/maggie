@@ -1333,7 +1333,10 @@ class MaggieInstaller:
         # 3. Install faster-whisper for speech recognition
         self._install_whisper(python_cmd)
         
-        # 4. Install GPU-specific dependencies if using GPU
+        # 4. Install whisper_streaming for real-time transcription
+        self._install_whisper_streaming(python_cmd)
+        
+        # 5. Install GPU-specific dependencies if using GPU
         if not self.cpu_only:
             self.color.print("Installing GPU-specific dependencies...", "cyan")
             self._run_command([
@@ -1565,7 +1568,7 @@ class MaggieInstaller:
     
     def _install_whisper_streaming(self, python_cmd: str) -> bool:
         """
-        Install whisper-streaming package files.
+        Install whisper-streaming package from GitHub.
         
         Parameters
         ----------
@@ -1576,53 +1579,139 @@ class MaggieInstaller:
         -------
         bool
             True if installation successful, False otherwise
+            
+        Notes
+        -----
+        Installs the whisper_streaming package using either direct GitHub 
+        installation or by downloading and installing from a local source.
+        Handles dependencies and ensures proper installation in the virtual
+        environment.
         """
-        self.color.print("Setting up whisper-streaming module...", "cyan")
+        self.color.print("Installing whisper_streaming module...", "cyan")
         
         try:
-            # Find the site-packages directory in the virtual environment
-            if self.platform_system == "Windows":
-                venv_site_packages = os.path.join(self.base_dir, "venv", "Lib", "site-packages")
-            else:
-                # Try to find site-packages directory for Linux
-                venv_site_packages = None
-                for lib_dir in ["lib", "lib64"]:
-                    for py_dir in ["python3.10", "python3", "python"]:
-                        test_path = os.path.join(self.base_dir, "venv", lib_dir, py_dir, "site-packages")
-                        if os.path.exists(test_path):
-                            venv_site_packages = test_path
-                            break
-                    if venv_site_packages:
-                        break
+            # Install dependencies first
+            dependencies = ["pyaudio", "numpy", "websockets", "torch", "transformers"]
+            self.color.print("Installing whisper_streaming dependencies...", "cyan")
+            self._run_command([
+                python_cmd, "-m", "pip", "install"] + dependencies
+            )
             
-            if not venv_site_packages:
-                self.color.print("Could not find site-packages directory in virtual environment", "red")
+            # Install from GitHub if Git is available
+            if self.has_git:
+                returncode, _, stderr = self._run_command([
+                    python_cmd, "-m", "pip", "install", 
+                    "git+https://github.com/ufal/whisper_streaming.git"
+                ])
+                
+                if returncode == 0:
+                    self.color.print("whisper_streaming installed successfully from GitHub", "green")
+                    return True
+                else:
+                    self.color.print(f"Error installing whisper_streaming from GitHub: {stderr}", "red")
+                    # Fall back to local installation
+            
+            # Download and extract the package
+            whisper_streaming_dir = os.path.join(self.base_dir, "downloads", "whisper_streaming")
+            os.makedirs(whisper_streaming_dir, exist_ok=True)
+            
+            # Download the zip file
+            zip_url = "https://github.com/ufal/whisper_streaming/archive/refs/heads/main.zip"
+            zip_path = os.path.join(self.base_dir, "downloads", "whisper_streaming.zip")
+            
+            if not self._download_file(zip_url, zip_path):
+                self.color.print("Failed to download whisper_streaming repository", "red")
                 return False
             
-            # Source files to copy
-            source_files = [
-                "site-packages/whisper_online.py",
-                "site-packages/silero_vad_iterator.py",
-                "site-packages/line_packet.py",
-                "site-packages/whisper_online_server.py"
-            ]
-            
-            # Copy files
-            for file_path in source_files:
-                source = os.path.join(self.base_dir, file_path)
-                if os.path.exists(source):
-                    dest = os.path.join(venv_site_packages, os.path.basename(file_path))
-                    shutil.copy2(source, dest)
-                    if self.verbose:
-                        self.color.print(f"Copied {os.path.basename(file_path)} to site-packages", "green")
+            # Extract the zip file
+            try:
+                with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                    zip_ref.extractall(os.path.dirname(whisper_streaming_dir))
+                
+                # Move to the right location
+                extracted_dir = os.path.join(os.path.dirname(whisper_streaming_dir), "whisper_streaming-main")
+                if os.path.exists(whisper_streaming_dir):
+                    shutil.rmtree(whisper_streaming_dir)
+                shutil.move(extracted_dir, whisper_streaming_dir)
+                
+                # Install from the local directory
+                returncode, _, stderr = self._run_command([
+                    python_cmd, "-m", "pip", "install", "-e", whisper_streaming_dir
+                ])
+                
+                if returncode == 0:
+                    self.color.print("whisper_streaming installed successfully from local directory", "green")
+                    return True
                 else:
-                    self.color.print(f"Source file {file_path} not found", "yellow")
-            
-            self.color.print("whisper-streaming module set up successfully", "green")
-            return True
-            
+                    self.color.print(f"Error installing whisper_streaming from local directory: {stderr}", "red")
+                    
+                    # As a last resort, copy modules directly
+                    self._copy_whisper_streaming_modules(python_cmd)
+                    return True
+            except Exception as e:
+                self.color.print(f"Error extracting or installing whisper_streaming: {e}", "red")
+                return False
+                
         except Exception as e:
-            self.color.print(f"Error setting up whisper-streaming: {e}", "red")
+            self.color.print(f"Error installing whisper_streaming: {e}", "red")
+            return False
+            
+    def _copy_whisper_streaming_modules(self, python_cmd: str) -> bool:
+        """
+        Copy whisper_streaming modules directly to site-packages.
+        
+        Parameters
+        ----------
+        python_cmd : str
+            Path to Python executable in virtual environment
+            
+        Returns
+        -------
+        bool
+            True if copy successful, False otherwise
+        """
+        try:
+            # Find the site-packages directory
+            returncode, stdout, _ = self._run_command([
+                python_cmd, "-c", 
+                "import site; print(site.getsitepackages()[0])"
+            ])
+            
+            if returncode == 0:
+                site_packages = stdout.strip()
+                
+                # Create whisper_streaming directory in site-packages
+                ws_dir = os.path.join(site_packages, "whisper_streaming")
+                os.makedirs(ws_dir, exist_ok=True)
+                
+                # Copy source files
+                source_dir = os.path.join(self.base_dir, "downloads", 
+                                        "whisper_streaming", "whisper_streaming")
+                
+                if os.path.exists(source_dir):
+                    # Copy all .py files
+                    for file in os.listdir(source_dir):
+                        if file.endswith(".py"):
+                            src_file = os.path.join(source_dir, file)
+                            dst_file = os.path.join(ws_dir, file)
+                            shutil.copy2(src_file, dst_file)
+                            
+                    # Create __init__.py if needed
+                    init_py = os.path.join(ws_dir, "__init__.py")
+                    if not os.path.exists(init_py):
+                        with open(init_py, 'w') as f:
+                            f.write("# whisper_streaming package\n")
+                    
+                    self.color.print("Copied whisper_streaming modules to site-packages", "green")
+                    return True
+                else:
+                    self.color.print(f"Source directory not found: {source_dir}", "red")
+                    return False
+            else:
+                self.color.print("Could not determine site-packages directory", "red")
+                return False
+        except Exception as e:
+            self.color.print(f"Error copying whisper_streaming modules: {e}", "red")
             return False
     
     def _download_af_heart_model(self) -> bool:

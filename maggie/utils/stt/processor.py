@@ -103,6 +103,12 @@ class STTProcessor:
         self.whisper_model = None
         self.audio_stream = None
         self.pyaudio_instance = None
+
+        # Whisper streaming configuration
+        self.streaming_config = config.get("whisper_streaming", {})
+        self.use_streaming = self.streaming_config.get("enabled", False)
+        self.streaming_server = None
+        self.streaming_client = None
         
         # Initialize TTS engine with config
         tts_config = config.get("tts", {})
@@ -226,6 +232,131 @@ class STTProcessor:
                 logger.error(f"Error loading Whisper model: {e}")
                 return False
     
+    def _init_streaming(self) -> bool:
+        """
+        Initialize whisper_streaming components for real-time speech recognition.
+        
+        Returns
+        -------
+        bool
+            True if initialization successful, False otherwise
+        """
+        if self.streaming_server is not None and self.streaming_client is not None:
+            return True
+            
+        try:
+            from whisper_streaming.whisper_live import Client, TranscriptionServer
+            
+            # Initialize the transcription server
+            model_name = self.streaming_config.get("model_name", self.model_size)
+            language = self.streaming_config.get("language", "en")
+            
+            # Use compute_type from config if available
+            compute_type = self.streaming_config.get("compute_type", self.compute_type)
+            
+            # Create server with optimized settings for RTX 3080
+            server_options = {
+                "language": language,
+                "use_gpu": self.use_gpu,
+                "compute_type": compute_type
+            }
+            
+            # RTX 3080 specific optimizations
+            if self.use_gpu:
+                try:
+                    import torch
+                    if "3080" in torch.cuda.get_device_name(0):
+                        logger.info("Applying RTX 3080 optimizations for whisper_streaming")
+                        server_options["gpu_thread_count"] = 2
+                        server_options["buffer_size_seconds"] = 30.0
+                        server_options["vad_threshold"] = 0.6
+                except:
+                    pass
+            
+            # Create server
+            self.streaming_server = TranscriptionServer(
+                model=model_name,
+                **server_options
+            )
+            
+            # Start server in a background thread
+            server_thread = threading.Thread(
+                target=self.streaming_server.run, 
+                daemon=True
+            )
+            server_thread.start()
+            
+            # Wait a moment for server to start
+            time.sleep(2)
+            
+            # Create client
+            self.streaming_client = Client()
+            
+            logger.info(f"Whisper streaming initialized with model: {model_name}")
+            return True
+            
+        except ImportError as e:
+            logger.error(f"Failed to import whisper_streaming: {e}")
+            logger.error("Please install with: pip install git+https://github.com/ufal/whisper_streaming.git")
+            return False
+            
+        except Exception as e:
+            logger.error(f"Error initializing whisper_streaming: {e}")
+            return False
+
+    def _process_with_streaming(self, audio_data: np.ndarray) -> str:
+        """
+        Process audio data with whisper_streaming for real-time transcription.
+        
+        Parameters
+        ----------
+        audio_data : np.ndarray
+            Audio data as float32 numpy array
+            
+        Returns
+        -------
+        str
+            Recognized text
+            
+        Notes
+        -----
+        This method uses whisper_streaming to transcribe speech in real-time,
+        which provides lower latency compared to batch processing.
+        Optimized for RTX 3080 GPUs when available.
+        """
+        try:
+            if not self._init_streaming():
+                logger.error("Failed to initialize whisper_streaming")
+                return ""
+                
+            # Log start time for performance measurement
+            start_time = time.time()
+            
+            # Convert audio data to required format (int16)
+            audio_int16 = (audio_data * 32768).astype(np.int16)
+            
+            # Send audio to the streaming client
+            self.streaming_client.add_frames(audio_int16)
+            
+            # Get transcription result with timeout
+            timeout = self.streaming_config.get("result_timeout", 5.0)
+            result = self.streaming_client.get_transcription(timeout=timeout)
+            
+            # Log performance metrics
+            processing_time = time.time() - start_time
+            logger.debug(f"Whisper streaming processing took {processing_time:.2f}s")
+            
+            # Clean up the transcription result
+            if result:
+                cleaned_text = self._clean_recognized_text(result)
+                logger.info(f"Streaming transcription: {cleaned_text}")
+                return cleaned_text
+            return ""
+            
+        except Exception as e:
+            logger.error(f"Error processing with whisper_streaming: {e}")
+            return ""
+
     def start_listening(self) -> bool:
         """
         Start listening for audio input.
@@ -397,11 +528,6 @@ class STTProcessor:
             logger.warning("Not listening - start_listening() must be called first")
             return False, ""
         
-        # Load whisper model if needed
-        if not self._load_whisper_model():
-            logger.error("Failed to load Whisper model")
-            return False, ""
-        
         try:
             logger.debug(f"Recording speech for up to {timeout} seconds")
             
@@ -411,9 +537,18 @@ class STTProcessor:
                 logger.warning("No audio data recorded")
                 return False, ""
             
-            # Process with Whisper
-            logger.debug("Processing audio with Whisper")
-            text = self._process_with_whisper(audio_data)
+            # Process with appropriate method based on configuration
+            if self.use_streaming:
+                logger.debug("Processing audio with whisper_streaming")
+                text = self._process_with_streaming(audio_data)
+            else:
+                # Load whisper model if needed
+                if not self._load_whisper_model():
+                    logger.error("Failed to load Whisper model")
+                    return False, ""
+                    
+                logger.debug("Processing audio with Whisper model")
+                text = self._process_with_whisper(audio_data)
             
             if text:
                 logger.debug(f"Speech recognized: {text}")
@@ -758,12 +893,28 @@ class STTProcessor:
         all resources used by the speech processor.
         """
         logger.debug("Cleaning up speech processor resources")
-        
+    
         # Stop listening if active
         self.stop_listening()
         
-        # Unload model
+        # Unload whisper model
         self.unload_model()
+        
+        # Stop streaming server if active
+        if hasattr(self, 'streaming_server') and self.streaming_server:
+            try:
+                self.streaming_server.stop()
+            except:
+                pass
+            self.streaming_server = None
+            
+        # Clean up streaming client if active
+        if hasattr(self, 'streaming_client') and self.streaming_client:
+            try:
+                self.streaming_client.close()
+            except:
+                pass
+            self.streaming_client = None
         
         # Release PyAudio resources
         if self.pyaudio_instance:

@@ -18,14 +18,20 @@ stt:
     model_path: "\\maggie\\models\\stt\\whisper"
     # Sample rate for audio input 
     sample_rate: 16000 
-  # DeepSpeech STT configuration
-  deepspeech:
-    # Path to DeepSpeech model
-    model_path: "\\maggie\\models\\stt\\deepspeech"
-    # Path to DeepSpeech scorer file (optional)
-    scorer_path: "\\maggie\\models\\stt\\deepspeech\\deepspeech-0.9.3-models.scorer"
-    # Sample rate for audio input
-    sample_rate: 16000 
+  # NEW: Whisper streaming configuration
+  whisper_streaming:
+    # Enable streaming mode for real-time transcription
+    enabled: true
+    # Model name (same as whisper model_size if not specified)
+    model_name: "base"
+    # Language code
+    language: "en"
+    # Compute type (float16 for RTX 3080)
+    compute_type: "float16"
+    # Timeout for getting streaming results (seconds)
+    result_timeout: 5.0
+    # Buffer size in seconds
+    buffer_size_seconds: 30.0
 # Wake word detection configuration
   wake_word:
     # Options: "porcupine", "snowboy"
