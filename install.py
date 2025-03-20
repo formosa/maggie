@@ -1808,7 +1808,7 @@ else:
 
 # Set TTS voice model
 if 'tts' in config and 'voice_model' in config['tts']:
-    config['tts']['voice_model'] = '{self.config["tts"]["voice_model"]}'
+    config['tts']['voice_model'] = 'af_heart'
 
 # Optimize for hardware
 if hardware_info['gpu']['is_rtx_3080']:
