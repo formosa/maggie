@@ -35,6 +35,7 @@ dependencies = [
     "PyAudio>=0.2.14",
     "faster-whisper>=0.9.0",
     "soundfile>=0.12.1",
+    "librosa==0.10.0",
     "kokoro==0.8.4",
     "huggingface_hub==0.15.1", 
     

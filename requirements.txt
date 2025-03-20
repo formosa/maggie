@@ -17,8 +17,9 @@ faster-whisper==0.9.0
 kokoro==0.8.4  # TTS engine
 huggingface_hub==0.15.1  # Compatible with Kokoro 0.8.4
 soundfile==0.12.1
+librosa==0.10.0
 
-# ===== Language Model =====
+# ===== llm =====
 ctransformers==0.2.27
 transformers==4.27.4
 llama-cpp-python==0.2.11
