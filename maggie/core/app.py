@@ -414,30 +414,32 @@ class MaggieAI:
             # Check for CUDA availability
             if torch.cuda.is_available():
 
+                # Set up GPU resource management for RTX 3080
+                logger.info(f"GPU Resource Management: Setup for the {torch.cuda.get_device_name(0)}")
+
                 # Enable CUDA caching allocator for better memory efficiency
                 torch.cuda.empty_cache()
-                logger.info("SETUP > GPU Resource Management: PyTorch CUDA caching allocator enabled")
+                logger.info("PyTorch CUDA caching allocator enabled")
                 
                 # Enable anomaly detection (DEBUG mode only)
                 if self.config.get("logging", {}).get("console_level", "INFO") == "DEBUG":
                     torch.autograd.set_detect_anomaly(True)
-                    logger.info("SETUP > GPU Resource Management: PyTorch anomaly detection enabled")
+                    logger.info("PyTorch anomaly detection enabled")
                 else:
                     torch.autograd.set_detect_anomaly(False)
-                    logger.info("SETUP > GPU Resource Management: PyTorch anomaly detection disabled")
+                    logger.info("PyTorch anomaly detection disabled")
                     
                 # Set optimal memory management for RTX 3080 (10GB VRAM)
                 if hasattr(torch.cuda, 'memory_reserved'):
 
-                    # Get total available VRAM
-                    total_vram = torch.cuda.get_device_properties(0).total_memory
-                    logger.info(f"SETUP > GPU Resource Management: Total GPU memory == {total_vram/1024**3:.2f}GB")
+                    # Get total VRAM
+                    total_memory = torch.cuda.get_device_properties(0).total_memory
+                    logger.info(f"Total GPU memory == {total_memory/1024**3:.2f}GB")
 
-                    # Get allocated VRAM
-                    allocated_vram = torch.cuda.memory_reserved(0)
-                    logger.info(f"SETUP > GPU Resource Management: allocated_vram == {total_vram/1024**3:.2f}GB")
-                    
-                logger.info(f"GPU resource management set up for {torch.cuda.get_device_name(0)}")
+                    # Get reserved VRAM
+                    memory_reserved = torch.cuda.memory_reserved(0)
+                    logger.info(f"memory_reserved == {memory_reserved/1024**3:.2f}GB")
+
         except ImportError:
             logger.debug("PyTorch not available for GPU resource management")
         except Exception as e:
