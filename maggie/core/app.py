@@ -279,8 +279,19 @@ class EventBus:
         """
         Process events from the queue and dispatch to subscribers.
         
-        Optimized for efficient event processing with better queue handling
-        for Ryzen 9 5900X.
+        Retrieves events from the queue with priority handling and dispatches
+        them to the appropriate subscribers. Implements error handling to prevent
+        event processing failures from crashing the application.
+        
+        Returns
+        -------
+        None
+        
+        Notes
+        -----
+        This method runs in its own thread and continues processing until
+        the `running` flag is set to False. It handles exceptions in event
+        callbacks to ensure robustness.
         """
         while self.running:
             try:
@@ -297,7 +308,15 @@ class EventBus:
                         try:
                             callback(data)
                         except Exception as e:
-                            logger.error(f"Error in event handler for {event_type}: {e}")
+                            # Improved error message with more context
+                            error_msg = f"Error in event handler for {event_type}: {e}"
+                            logger.error(error_msg)
+                            # Publish error event for monitoring
+                            self.publish("error_logged", {
+                                "message": error_msg,
+                                "event_type": event_type,
+                                "source": "event_bus"
+                            })
                             
                 self.queue.task_done()
                 
@@ -464,18 +483,14 @@ class MaggieAI:
         """
         Initialize all required components.
 
-        The initialization process begins with the application
-        utilities; ServiceLocator, logging, HardwareManager, 
-        WakeWordDetector, SpeechProcessor, STT processing, 
-        and LLMProcessor.
-
-        The process also initializes extensions based on the
-        configuration and registers them for global access.
+        This method sets up and initializes all core system components including
+        the event bus, hardware manager, wake word detector, speech processors (STT and TTS),
+        and LLM processor. It also initializes and registers extensions.
         
         Returns
         -------
         bool
-            True if all components initialized successfully
+            True if all components initialized successfully, False otherwise
             
         Raises
         ------
@@ -492,35 +507,33 @@ class MaggieAI:
             from maggie.utils.hardware.manager import HardwareManager
             # Create hardware manager and provide configuration
             self.hardware_manager = HardwareManager(self.config)
-            # Apply hardware optimizations to configuration
-            # self.config = self.hardware_manager.optimize_config(self.config)
             # Register hardware manager for global access
             ServiceLocator.register("hardware_manager", self.hardware_manager)
-
             
             # Import: WakeWordDetector
             from maggie.utils.stt.wake_word import WakeWordDetector
             # Create wake word detector with configured wake word
             self.wake_word_detector = WakeWordDetector(self.config.get("stt", {}).get("wake_word", {}))
             # Set wake word detection callback
-            # to trigger state transition to READY state when wake word is detected
             self.wake_word_detector.on_detected = lambda: self.event_bus.publish("wake_word_detected")
             # Register wake word detector for global access
             ServiceLocator.register("wake_word_detector", self.wake_word_detector)
             
-            # Import: STTProcessor
-            from maggie.utils.stt.processor import STTProcessor
-            # Create stt processor with configuration 
-            self.stt_processor = STTProcessor(self.config.get("stt", {}))
-            # Register stt processor for global access
-            ServiceLocator.register("stt_processor", self.stt_processor)
-            
-            # Import: TTSProcessor
+            # Import: TTSProcessor - INITIALIZE BEFORE STT
             from maggie.utils.tts.processor import TTSProcessor
             # Create TTS processor with configuration
             self.tts_processor = TTSProcessor(self.config.get("tts", {}))
             # Register TTS processor for global access
             ServiceLocator.register("tts_processor", self.tts_processor)
+            
+            # Import: STTProcessor
+            from maggie.utils.stt.processor import STTProcessor
+            # Create STT processor with configuration 
+            self.stt_processor = STTProcessor(self.config.get("stt", {}))
+            # Set the TTS processor for the STT processor to use
+            self.stt_processor.tts_processor = self.tts_processor
+            # Register STT processor for global access
+            ServiceLocator.register("stt_processor", self.stt_processor)
 
             # Import: LLMProcessor
             from maggie.utils.llm.processor import LLMProcessor
@@ -528,7 +541,7 @@ class MaggieAI:
             self.llm_processor = LLMProcessor(self.config.get("llm", {}))
             # Register LLM processor for global access
             ServiceLocator.register("llm_processor", self.llm_processor)
-                       
+                    
             # Register self in service locator for GUI access
             ServiceLocator.register("maggie_ai", self)
             
@@ -868,10 +881,25 @@ class MaggieAI:
         """
         Handle detected command.
         
+        Processes user commands, including system commands (sleep, shutdown) 
+        and extension-specific commands. For system commands, appropriate responses
+        are spoken and state transitions are triggered. For other commands,
+        extensions are checked for matching triggers.
+        
         Parameters
         ----------
         command : str
-            Detected command
+            Detected command string
+            
+        Returns
+        -------
+        None
+            This method doesn't return a value but may trigger state transitions
+            
+        Notes
+        -----
+        Commands are only processed in the READY state. System commands like
+        "sleep" and "shutdown" trigger state transitions to CLEANUP or SHUTDOWN.
         """
         # Only process commands in READY state
         if self.state != State.READY:
@@ -880,14 +908,23 @@ class MaggieAI:
         command = command.lower().strip()
         logger.info(f"Command detected: {command}")
         
+        # Get TTS processor for speaking responses
+        tts_processor = self.tts_processor
+        
         # Handle system commands
         if command in ["sleep", "go to sleep"]:
-            self.stt_processor.speak("Going to sleep")
+            if tts_processor:
+                tts_processor.speak("Going to sleep")
+            else:
+                logger.warning("No TTS processor available for speech output")
             self._transition_to(State.CLEANUP, "sleep_command")
             return
             
         if command in ["shutdown", "turn off"]:
-            self.stt_processor.speak("Shutting down")
+            if tts_processor:
+                tts_processor.speak("Shutting down")
+            else:
+                logger.warning("No TTS processor available for speech output")
             self._transition_to(State.CLEANUP, "shutdown_requested")
             return
             
@@ -897,7 +934,10 @@ class MaggieAI:
             return
                 
         # Handle unknown command
-        self.stt_processor.speak("I didn't understand that command")
+        if tts_processor:
+            tts_processor.speak("I didn't understand that command")
+        else:
+            logger.warning("No TTS processor available for speech output")
         logger.warning(f"Unknown command: {command}")
         
     def _check_extension_commands(self, command: str) -> bool:

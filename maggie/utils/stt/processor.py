@@ -68,8 +68,8 @@ class STTProcessor:
         PyAudio stream for audio capture
     pyaudio_instance : Optional[Any]
         PyAudio instance
-    tts_engine : TTSProcessor
-        Text-to-speech engine for voice output
+    tts_processor : Optional[Any]
+        Reference to the TTS processor for speech output
     listening : bool
         Whether currently listening for speech
     streaming_active : bool
@@ -87,7 +87,14 @@ class STTProcessor:
     """
     
     def __init__(self, config: Dict[str, Any]):
-        """Initialize the enhanced speech processor with configuration."""
+        """
+        Initialize the enhanced speech processor with configuration.
+        
+        Parameters
+        ----------
+        config : Dict[str, Any]
+            Configuration dictionary containing speech processing settings
+        """
         # Existing initialization code...
         self.config = config
         self.whisper_config = config.get("whisper", {})
@@ -105,9 +112,10 @@ class STTProcessor:
         self.streaming_server = None
         self.streaming_client = None
         
-        # Initialize TTS engine with config
-        tts_config = config.get("tts", {})
-        self.tts_engine = TTSProcessor(tts_config)
+        # REMOVED: Initialize TTS engine with config
+        # We should not be creating a TTS processor here
+        # This will be provided by the ServiceLocator
+        self.tts_processor = None
         
         # Audio configuration
         self.sample_rate = 16000  # Whisper expects 16kHz audio
@@ -122,7 +130,7 @@ class STTProcessor:
         self._stream_thread = None
         self._stop_event = threading.Event()
         
-        # New attributes for real-time streaming
+        # Real-time streaming attributes
         self.on_intermediate_result = None
         self.on_final_result = None
         self._streaming_thread = None
@@ -146,7 +154,45 @@ class STTProcessor:
         # Initialize in a lazy manner
         logger.info(f"Enhanced speech processor initialized with model: {self.model_size}, compute type: {self.compute_type}")
         logger.info(f"Streaming mode: {'enabled' if self.use_streaming else 'disabled'}")
-    
+
+    def speak(self, text: str) -> bool:
+        """
+        Text-to-speech synthesis via TTS processor.
+        
+        This is a delegation method that forwards speak requests to the TTS processor.
+        It retrieves the TTS processor from the ServiceLocator if not already provided.
+        
+        Parameters
+        ----------
+        text : str
+            Text to be spoken
+            
+        Returns
+        -------
+        bool
+            True if speech was successfully generated and played, False otherwise
+            
+        Notes
+        -----
+        This method facilitates proper separation of concerns by delegating
+        text-to-speech functionality to the appropriate component.
+        """
+        try:
+            # If tts_processor not set, try to get it from ServiceLocator
+            if self.tts_processor is None:
+                from maggie.utils.service_locator import ServiceLocator
+                self.tts_processor = ServiceLocator.get("tts_processor")
+                
+                if self.tts_processor is None:
+                    logger.error("TTS processor not found in ServiceLocator")
+                    return False
+            
+            # Delegate the speech task to the TTS processor
+            return self.tts_processor.speak(text)
+        except Exception as e:
+            logger.error(f"Error in STTProcessor.speak(): {e}")
+            return False
+        
     def start_streaming(self, on_intermediate: Optional[Callable[[str], None]] = None, 
                         on_final: Optional[Callable[[str], None]] = None) -> bool:
         """
