@@ -158,7 +158,8 @@ class TTSProcessor:
         Initialize the Kokoro TTS model.
         
         Loads the Kokoro TTS voice model with CUDA acceleration
-        for RTX 3080 if available.
+        for RTX 3080 if available. Ensures paths are properly normalized
+        for cross-platform compatibility.
         
         Returns
         -------
@@ -168,20 +169,75 @@ class TTSProcessor:
         Notes
         -----
         This method is called automatically when needed. It's thread-safe
-        and will only initialize the model once.
+        and will only initialize the model once. It handles path normalization,
+        file existence checking, and model download if needed.
         """
         if self.kokoro_instance is not None:
             return True
             
-        voice_path = os.path.join(self.model_path, self.voice_model)
-        logger.error(f"_____________self.model_path = {self.model_path}")
-        logger.error(f"_____________self.voice_model = {self.voice_model}")
-        logger.error(f"_____________voice_path = {voice_path}")
-
-
         try:
-            # Import Kokoro library
+            # Normalize paths for cross-platform compatibility
+            model_dir = os.path.normpath(self.model_path)
+            if not os.path.isabs(model_dir):
+                model_dir = os.path.abspath(model_dir)
+                
+            # Check if voice model is set
+            if not self.voice_model:
+                logger.error("Voice model not specified in configuration")
+                return False
+                
+            # Check if model path is set
+            if not model_dir:
+                logger.error("Model path not specified in configuration")
+                return False
+            
+            # Construct voice path and normalize it
+            voice_path = os.path.join(model_dir, self.voice_model)
+            voice_path = os.path.normpath(voice_path)
+            
+            logger.info(f"Loading TTS voice model: {voice_path}")
+
+            # Check if model exists with improved error reporting
+            if not os.path.exists(voice_path):
+                error_msg = f"TTS voice model not found: {voice_path}"
+                logger.error(error_msg)
+                
+                # Publish detailed error to event bus
+                try:
+                    from maggie.utils.service_locator import ServiceLocator
+                    event_bus = ServiceLocator.get("event_bus")
+                    if event_bus:
+                        event_bus.publish("error_logged", {
+                            "source": "tts",
+                            "message": f"Voice model not found: {voice_path}",
+                            "path": voice_path
+                        })
+                except ImportError:
+                    pass  # Service locator not available
+                    
+                # Attempt to download the model
+                logger.info(f"Attempting to download missing voice model...")
+                if self._download_voice_model():
+                    logger.info(f"Successfully downloaded voice model")
+                    # Verify file exists after download
+                    if os.path.exists(voice_path) and os.path.getsize(voice_path) > 0:
+                        logger.info(f"Downloaded voice model verified at: {voice_path}")
+                        # Try again with the downloaded model
+                        return self._initialize_kokoro_engine(voice_path)
+                    else:
+                        logger.error(f"Downloaded file verification failed at: {voice_path}")
+                else:
+                    logger.error("Voice model download failed")
+                    
+                return False
+                
+            # Import Kokoro and initialize with the voice model
             import kokoro
+            
+            voice_path = os.path.join(self.model_path, self.voice_model)
+            logger.error(f"_____________self.model_path = {self.model_path}")
+            logger.error(f"_____________self.voice_model = {self.voice_model}")
+            logger.error(f"_____________voice_path = {voice_path}")
 
             # Check if voice model is set
             if not self.voice_model:
@@ -353,38 +409,102 @@ class TTSProcessor:
         """
         Download the TTS voice model if missing.
         
+        Downloads the voice model file from the Hugging Face repository and
+        saves it to the configured model directory. Handles path construction
+        properly for cross-platform compatibility.
+        
+        Parameters
+        ----------
+        None
+        
         Returns
         -------
         bool
             True if download was successful, False otherwise
+        
+        Notes
+        -----
+        This method creates the necessary directories, handles Windows/Unix
+        path differences, provides detailed logging, and includes robust
+        error handling for network and filesystem operations.
+        
+        The method works on both absolute and relative path configurations,
+        normalizing paths appropriately for the current platform.
+        
+        Examples
+        --------
+        >>> success = self._download_voice_model()
+        >>> if success:
+        ...     print("Voice model downloaded successfully")
+        ... else:
+        ...     print("Failed to download voice model")
         """
         try:
-            # Ensure model directory exists
-            os.makedirs(self.model_path, exist_ok=True)
+            # Create normalized absolute path for model directory
+            model_dir = os.path.normpath(self.model_path)
+            if not os.path.isabs(model_dir):
+                # If path is relative, make it absolute from current directory
+                model_dir = os.path.abspath(model_dir)
+                
+            # Ensure model directory exists with proper permissions
+            os.makedirs(model_dir, exist_ok=True)
+            logger.info(f"Ensuring model directory exists: {model_dir}")
             
+            # Set target path for downloaded file
             model_filename = self.voice_model
-            target_path = os.path.join(self.model_path, model_filename)
+            target_path = os.path.join(model_dir, model_filename)
+            logger.info(f"Target path for downloaded model: {target_path}")
             
-            # URL for the voice model
+            # URL for the voice model (using known valid URL)
             model_url = "https://huggingface.co/hexgrad/Kokoro-82M/resolve/main/voices/af_heart.pt"
-            
             logger.info(f"Downloading voice model from {model_url}")
             
-            # Use requests to download the file
+            # Use requests with timeout and error handling
             import requests
-            response = requests.get(model_url, stream=True)
+            response = requests.get(
+                model_url, 
+                stream=True,
+                timeout=30  # 30 second timeout
+            )
             response.raise_for_status()
             
-            # Write the file
+            # Check if response is valid (contains data)
+            if response.status_code != 200:
+                logger.error(f"Download failed with status code: {response.status_code}")
+                return False
+                
+            # Get content length if available
+            total_size = int(response.headers.get('content-length', 0))
+            downloaded = 0
+            
+            # Write the file with progress tracking
             with open(target_path, 'wb') as f:
                 for chunk in response.iter_content(chunk_size=8192):
-                    f.write(chunk)
-                    
-            logger.info(f"Voice model downloaded to {target_path}")
-            return True
-        
+                    if chunk:  # Filter out keep-alive chunks
+                        f.write(chunk)
+                        downloaded += len(chunk)
+                        if total_size > 0:
+                            # Log progress for larger files
+                            progress = (downloaded / total_size) * 100
+                            if downloaded % (1024*1024) == 0:  # Log every MB
+                                logger.debug(f"Download progress: {progress:.1f}% ({downloaded/(1024*1024):.1f}MB)")
+            
+            # Verify the file was created and has content
+            if os.path.exists(target_path) and os.path.getsize(target_path) > 0:
+                logger.info(f"Voice model successfully downloaded to {target_path}")
+                return True
+            else:
+                logger.error("Downloaded file is empty or does not exist")
+                return False
+                
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Network error downloading voice model: {e}")
+            return False
+        except (IOError, OSError) as e:
+            logger.error(f"File system error saving voice model: {e}")
+            return False
         except Exception as e:
-            logger.error(f"Failed to download voice model: {e}")
+            logger.error(f"Unexpected error downloading voice model: {e}")
             return False
 
     def _get_cache_key(self, text: str) -> str:
