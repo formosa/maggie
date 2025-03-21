@@ -676,6 +676,9 @@ class MaggieAI:
         """
         Handle entering IDLE state.
         
+        In IDLE state, we stop speech processor and streaming,
+        unload LLM model, and activate wake word detection.
+        
         Parameters
         ----------
         transition : StateTransition
@@ -686,15 +689,16 @@ class MaggieAI:
             self.inactivity_timer.cancel()
             self.inactivity_timer = None
             
-        # Stop speech processor
+        # Stop speech processor and streaming
         if self.stt_processor:
-            self.stt_processor.stop_listening()
+            self.stt_processor.stop_streaming()  # Stop streaming first
+            self.stt_processor.stop_listening()  # Then stop listening
             
         # Unload LLM model to save memory
         if self.llm_processor:
             self.llm_processor.unload_model()
             
-        # Start wake word detector
+        # Start wake word detector - only active in IDLE state
         if self.wake_word_detector:
             self.wake_word_detector.start()
             
@@ -713,18 +717,30 @@ class MaggieAI:
         """
         Handle entering READY state.
         
+        In READY state, we stop wake word detector, start speech processor,
+        and initialize streaming for real-time transcription.
+        
         Parameters
         ----------
         transition : StateTransition
             State transition information
         """
-        # Stop wake word detector
+        # Stop wake word detector - not needed in READY state
         if self.wake_word_detector:
             self.wake_word_detector.stop()
             
-        # Start speech processor
+        # Start speech processor with streaming
         if self.stt_processor:
+            # Start listening for audio
             self.stt_processor.start_listening()
+            
+            # Start streaming with callbacks to update UI
+            self.stt_processor.start_streaming(
+                on_intermediate=lambda text: self.event_bus.publish("intermediate_transcription", text),
+                on_final=lambda text: self.event_bus.publish("final_transcription", text)
+            )
+            
+            # Provide audio feedback
             self.stt_processor.speak("Ready for your command")
             
         # Start inactivity timer
@@ -733,7 +749,7 @@ class MaggieAI:
         # Start listening for commands
         self.thread_pool.submit(self._listen_for_commands)
         
-        logger.info("Entered READY state - listening for commands")
+        logger.info("Entered READY state - listening for commands with real-time transcription")
             
     def _on_enter_active(self, transition: StateTransition) -> None:
         """

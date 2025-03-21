@@ -97,17 +97,18 @@ class QVariant:
 
 class InputField(QLineEdit):
     """
-    Custom input field with speech-to-text awareness.
+    Enhanced input field with speech-to-text awareness and visual feedback.
     
-    Provides an input field that can operate in two modes:
-    manual typing or speech-to-text input display.
+    This class extends QLineEdit to provide real-time transcription visualization,
+    with intermediate transcription results shown in gray text and final results
+    in black. It automatically pauses transcription when focused for manual typing.
     
     Parameters
     ----------
-    parent : QWidget
-        Parent widget
-    submit_callback : Callable
-        Function to call when input is submitted
+    parent : QWidget, optional
+        Parent widget, by default None
+    submit_callback : Callable, optional
+        Function to call when input is submitted, by default None
     
     Attributes
     ----------
@@ -115,6 +116,8 @@ class InputField(QLineEdit):
         Whether in speech-to-text mode
     submit_callback : Callable
         Function to call when input is submitted
+    intermediate_text : str
+        Current intermediate transcription text
     """
     
     # Add a signal
@@ -122,7 +125,7 @@ class InputField(QLineEdit):
 
     def __init__(self, parent=None, submit_callback=None):
         """
-        Initialize the input field.
+        Initialize the enhanced input field.
         
         Parameters
         ----------
@@ -136,6 +139,9 @@ class InputField(QLineEdit):
         self.submit_callback = submit_callback
         self.setPlaceholderText("Speak or type your message here...")
         
+        # Store intermediate text separately
+        self.intermediate_text = ""
+        
         # Connect events
         self.returnPressed.connect(self.on_return_pressed)
     
@@ -143,8 +149,8 @@ class InputField(QLineEdit):
         """
         Handle focus in event.
         
-        When input field gains focus, switch to manual input mode and
-        request state transition if needed.
+        When input field gains focus, switch to manual input mode,
+        pause transcription, and request state transition if needed.
         
         Parameters
         ----------
@@ -153,16 +159,22 @@ class InputField(QLineEdit):
         """
         super().focusInEvent(event)
         self.stt_mode = False
-        self.setStyleSheet("background-color: white;")
+        self.setStyleSheet("background-color: white; color: black;")
         
         # Signal the MainWindow to check for state transition
         self.state_change_requested.emit("ACTIVE")
+        
+        # Publish event to pause transcription
+        main_window = self.window()
+        if hasattr(main_window, "maggie_ai") and main_window.maggie_ai:
+            main_window.maggie_ai.event_bus.publish("pause_transcription")
     
     def focusOutEvent(self, event: QFocusEvent) -> None:
         """
         Handle focus out event.
         
-        When input field loses focus, switch back to STT mode.
+        When input field loses focus, switch back to STT mode
+        and resume transcription if appropriate.
         
         Parameters
         ----------
@@ -172,16 +184,23 @@ class InputField(QLineEdit):
         super().focusOutEvent(event)
         self.stt_mode = True
         self.update_appearance_for_state("IDLE")  # Will be overridden if state changes
+        
+        # Publish event to resume transcription if field is empty
+        if not self.text().strip():
+            main_window = self.window()
+            if hasattr(main_window, "maggie_ai") and main_window.maggie_ai:
+                main_window.maggie_ai.event_bus.publish("resume_transcription")
     
     def on_return_pressed(self) -> None:
         """
         Handle return key press.
         
-        Submits the input text and clears the field.
+        Submits the input text to the callback function and clears the field.
         """
         if self.submit_callback and self.text().strip():
             self.submit_callback(self.text())
             self.clear()
+            self.intermediate_text = ""  # Clear intermediate text as well
     
     def update_appearance_for_state(self, state: str) -> None:
         """
@@ -199,6 +218,57 @@ class InputField(QLineEdit):
             self.setReadOnly(False)
             if not self.hasFocus():  # Don't change style if user is typing
                 self.setStyleSheet("background-color: white;")
+                         
+    def update_intermediate_text(self, text: str) -> None:
+        """
+        Update the intermediate transcription text.
+        
+        This method displays intermediate transcription results in gray text
+        within the input field without finalizing them.
+        
+        Parameters
+        ----------
+        text : str
+            Intermediate transcription text to display
+            
+        Notes
+        -----
+        This method updates the displayed text without affecting the actual input
+        value. The text is shown in gray to indicate it's an intermediate result.
+        When the user focuses on the field, it will switch to the actual input value.
+        """
+        if self.stt_mode and not self.hasFocus():
+            self.intermediate_text = text
+            self.setText(text)
+            self.setStyleSheet("background-color: white; color: gray;")
+            
+    def set_final_text(self, text: str) -> None:
+        """
+        Set the final transcription text.
+        
+        This method sets the input field text to the final transcription result
+        in black text, ready for submission.
+        
+        Parameters
+        ----------
+        text : str
+            Final transcription text
+            
+        Notes
+        -----
+        This method updates both the displayed text and the actual input value.
+        It uses black text to indicate it's a final result.
+        """
+        if self.stt_mode and not self.hasFocus():
+            self.setText(text)
+            self.setStyleSheet("background-color: white; color: black;")
+            
+            # Automatically submit if configured
+            auto_submit = self.window().maggie_ai.config.get("stt", {}).get("auto_submit", False)
+            if auto_submit and self.submit_callback and text.strip():
+                self.submit_callback(text)
+                self.clear()
+                self.intermediate_text = ""
 
 class MainWindow(QMainWindow):
     """
@@ -267,7 +337,7 @@ class MainWindow(QMainWindow):
         
         # Initialize UI
         self.update_state("IDLE")
-        self.log_event("Maggie AI Assistant started")
+        self.log_event("Maggie AI Assistant UI initialized...")
 
         # Subscribe to events from MaggieAI
         self.maggie_ai.event_bus.subscribe("state_changed", self._on_state_changed)
@@ -275,9 +345,115 @@ class MainWindow(QMainWindow):
         self.maggie_ai.event_bus.subscribe("extension_error", self._on_extension_error)
         self.maggie_ai.event_bus.subscribe("error_logged", self._on_error_logged)
 
+        # Connect to STT events
+        # TODO: the stt_events should be considered for unification with maggie_ai.event_bus
+        self._connect_stt_events()
+
         # Set keyboard shortcuts
         self.setup_shortcuts()
+
+    def _connect_stt_events(self) -> None:
+        """
+        Connect to speech-to-text events for real-time transcription updates.
         
+        This method subscribes to events from the STT processor to update
+        the input field with intermediate and final transcription results.
+        """
+        # Subscribe to transcription events
+        self.maggie_ai.event_bus.subscribe(
+            "intermediate_transcription", 
+            self._on_intermediate_transcription,
+            priority=0  # High priority for UI updates
+        )
+        
+        self.maggie_ai.event_bus.subscribe(
+            "final_transcription", 
+            self._on_final_transcription,
+            priority=0  # High priority for UI updates
+        )
+        
+        # Subscribe to focus-related events
+        self.maggie_ai.event_bus.subscribe(
+            "pause_transcription",
+            self._on_pause_transcription
+        )
+        
+        self.maggie_ai.event_bus.subscribe(
+            "resume_transcription",
+            self._on_resume_transcription
+        )
+
+ 
+    def _on_intermediate_transcription(self, text: str) -> None:
+        """
+        Handle intermediate transcription results.
+        
+        This method updates the input field with intermediate transcription
+        results in gray text as they are received.
+        
+        Parameters
+        ----------
+        text : str
+            Intermediate transcription text
+        """
+        # Update input field with intermediate text
+        self.safe_update_gui(self.input_field.update_intermediate_text, text)
+    
+    def _on_final_transcription(self, text: str) -> None:
+        """
+        Handle final transcription results.
+        
+        This method updates the input field with the final transcription
+        result in black text and optionally submits it.
+        
+        Parameters
+        ----------
+        text : str
+            Final transcription text
+        """
+        # Update input field with final text
+        self.safe_update_gui(self.input_field.set_final_text, text)
+    
+    def _on_pause_transcription(self, _=None) -> None:
+        """
+        Handle pause transcription request.
+        
+        This method is called when transcription should be paused,
+        typically when the user focuses on the input field.
+        
+        Parameters
+        ----------
+        _ : Any, optional
+            Unused parameter for compatibility with event bus, by default None
+        """
+        # Get STT processor from service locator
+        from maggie.utils.service_locator import ServiceLocator
+        stt_processor = ServiceLocator.get("stt_processor")
+        
+        if stt_processor:
+            # Pause streaming if active
+            stt_processor.pause_streaming()
+            
+    def _on_resume_transcription(self, _=None) -> None:
+        """
+        Handle resume transcription request.
+        
+        This method is called when transcription should be resumed,
+        typically when the user removes focus from the input field.
+        
+        Parameters
+        ----------
+        _ : Any, optional
+            Unused parameter for compatibility with event bus, by default None
+        """
+        # Get STT processor from service locator
+        from maggie.utils.service_locator import ServiceLocator
+        stt_processor = ServiceLocator.get("stt_processor")
+        
+        if stt_processor:
+            # Resume streaming if paused
+            stt_processor.resume_streaming()
+
     def _create_main_layout(self) -> None:
         """
         Create the main window layout.

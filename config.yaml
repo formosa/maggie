@@ -28,8 +28,12 @@ stt:
     language: "en"
     # Compute type (float16 for RTX 3080)
     compute_type: "float16"
-    # Timeout for getting streaming results (seconds)
-    result_timeout: 5.0
+    # Seconds to wait for intermediate results
+    result_timeout: 0.5
+    # Seconds of silence before finalizing result
+    result_timeout: 2.0
+    # Whether to auto-submit final results
+    auto_submit: false
     # Buffer size in seconds
     buffer_size_seconds: 30.0
 # Wake word detection configuration
