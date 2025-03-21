@@ -84,6 +84,8 @@ class WakeWordDetector:
         ValueError
             If required configuration parameters are missing or invalid
         """
+        logger.info('Initializing Wake Word Detection...')
+        
         # Load global configuration
         self.on_detected = None
         self.running = False
