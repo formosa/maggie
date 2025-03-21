@@ -112,9 +112,7 @@ class STTProcessor:
         self.streaming_server = None
         self.streaming_client = None
         
-        # REMOVED: Initialize TTS engine with config
-        # We should not be creating a TTS processor here
-        # This will be provided by the ServiceLocator
+        # Reference to TTS processor
         self.tts_processor = None
         
         # Audio configuration
@@ -127,7 +125,6 @@ class STTProcessor:
         self.streaming_active = False
         self.streaming_paused = False
         self.lock = threading.Lock()
-        self._stream_thread = None
         self._stop_event = threading.Event()
         
         # Real-time streaming attributes
