@@ -28,6 +28,10 @@ import tempfile
 import threading
 import time
 import wave
+import argparse
+import numpy as np
+import threading
+import time
 from typing import Dict, Any, Optional, Tuple, List, Union, Callable
 
 # Third-party imports
@@ -690,68 +694,79 @@ class STTProcessor:
         """
         Initialize whisper_streaming components for real-time speech recognition.
         
+        This method sets up the necessary components from the whisper_streaming
+        package for real-time transcription, using the appropriate ASR backend
+        and configuration parameters.
+        
         Returns
         -------
         bool
             True if initialization successful, False otherwise
+            
+        Notes
+        -----
+        Uses the appropriate classes from whisper_streaming package:
+        - FasterWhisperASR, WhisperTimestampedASR, or MLXWhisper for ASR
+        - OnlineASRProcessor or VACOnlineASRProcessor for processing
         """
         if self.streaming_server is not None and self.streaming_client is not None:
             return True
             
         try:
-            from whisper_streaming.whisper_live import Client, TranscriptionServer
+            # Import proper components from whisper_streaming
+            from whisper_streaming import (
+                FasterWhisperASR, WhisperTimestampedASR, MLXWhisper, 
+                OnlineASRProcessor, VACOnlineASRProcessor, 
+                asr_factory
+            )
             
-            # Initialize the transcription server
+            # Get configuration parameters
             model_name = self.streaming_config.get("model_name", self.model_size)
             language = self.streaming_config.get("language", "en")
-            
-            # Use compute_type from config if available
             compute_type = self.streaming_config.get("compute_type", self.compute_type)
             
-            # Create server with optimized settings for RTX 3080
-            server_options = {
-                "language": language,
-                "use_gpu": self.use_gpu,
-                "compute_type": compute_type
-            }
+            # Prepare arguments for ASR initialization
+            args = argparse.Namespace()
+            args.backend = self.streaming_config.get("backend", "faster-whisper")
+            args.model = model_name
+            args.lan = language
+            args.model_cache_dir = None
+            args.model_dir = None
+            args.vad = self.streaming_config.get("vad_enabled", True)
+            args.vac = self.streaming_config.get("vac_enabled", False)
+            args.vac_chunk_size = self.streaming_config.get("vac_chunk_size", 0.04)
+            args.min_chunk_size = self.streaming_config.get("min_chunk_size", 1.0)
+            args.buffer_trimming = self.streaming_config.get("buffer_trimming", "segment")
+            args.buffer_trimming_sec = self.streaming_config.get("buffer_trimming_sec", 15)
+            args.task = self.streaming_config.get("task", "transcribe")
+            args.log_level = "INFO"
             
-            # RTX 3080 specific optimizations
+            # Configure GPU options based on system detection
             if self.use_gpu:
                 try:
                     import torch
-                    if torch.cuda.is_available() and "3080" in torch.cuda.get_device_name(0):
-                        logger.info("Applying RTX 3080 optimizations for whisper_streaming")
-                        server_options["gpu_thread_count"] = 2
-                        server_options["buffer_size_seconds"] = 30.0
-                        server_options["vad_threshold"] = 0.6
+                    if torch.cuda.is_available():
+                        if "3080" in torch.cuda.get_device_name(0):
+                            logger.info("Applying RTX 3080 optimizations for whisper_streaming")
+                            # Use optimized settings for RTX 3080
+                            args.buffer_trimming_sec = 30.0
+                            # Faster-whisper specific optimizations will be handled by that class
                 except:
                     pass
             
-            # Create server
-            self.streaming_server = TranscriptionServer(
-                model=model_name,
-                **server_options
-            )
+            # Create ASR and processor instances using factory function
+            self.streaming_asr, self.streaming_processor = asr_factory(args)
             
-            # Start server in a background thread
-            server_thread = threading.Thread(
-                target=self.streaming_server.run, 
-                daemon=True
-            )
-            server_thread.start()
+            # For compatibility with existing code
+            self.streaming_server = self.streaming_asr
+            self.streaming_client = self.streaming_processor
             
-            # Wait a moment for server to start
-            time.sleep(2)
-            
-            # Create client
-            self.streaming_client = Client()
-            
-            logger.info(f"Whisper streaming initialized with model: {model_name}")
+            logger.info(f"Whisper streaming initialized with model: {model_name}, backend: {args.backend}")
             return True
             
         except ImportError as e:
             logger.error(f"Failed to import whisper_streaming: {e}")
-            logger.error("Please install with: pip install git+https://github.com/ufal/whisper_streaming.git")
+            logger.error("Please install whisper_streaming package: pip install git+https://github.com/ufal/whisper_streaming.git")
             return False
             
         except Exception as e:
@@ -768,7 +783,7 @@ class STTProcessor:
         Notes
         -----
         This method runs in a separate thread and processes audio chunks from
-        the buffer, sending them to the whisper_streaming client for transcription.
+        the buffer, sending them to the whisper_streaming processor for transcription.
         It calls the appropriate callback functions for intermediate and final
         transcription results.
         """
@@ -794,42 +809,43 @@ class STTProcessor:
                         self.audio_buffer = []
                 
                 if audio_data is not None:
-                    # Convert to int16 for streaming
-                    audio_int16 = np.frombuffer(audio_data, dtype=np.int16)
+                    # Convert to float32 for whisper_streaming
+                    audio_float32 = np.frombuffer(audio_data, dtype=np.int16).astype(np.float32) / 32768.0
                     
-                    # Add to streaming client
-                    self.streaming_client.add_frames(audio_int16)
+                    # Add to streaming processor
+                    self.streaming_processor.insert_audio_chunk(audio_float32)
                     
-                    # Get current transcription
-                    current_result = self.streaming_client.get_transcription(timeout=intermediate_timeout)
+                    # Process the audio chunk
+                    result = self.streaming_processor.process_iter()
                     current_time = time.time()
                     
-                    # If we have a new result, send it as intermediate
-                    if current_result and current_result != last_result:
-                        last_result = current_result
+                    # result is a tuple of (start_time, end_time, text)
+                    if result and result[2]:  # If we have text
+                        current_result = result[2]
                         
-                        # Call intermediate result callback
-                        if self.on_intermediate_result:
-                            cleaned_text = self._clean_recognized_text(current_result)
-                            self.on_intermediate_result(cleaned_text)
+                        # If we have a new result, send it as intermediate
+                        if current_result and current_result != last_result:
+                            last_result = current_result
                             
-                        # Reset commit timer when we get new content
-                        last_commit_time = current_time
-                    
-                    # Check if we should commit the current result as final
-                    # This happens when no new content has been received for commit_timeout seconds
-                    if current_result and (current_time - last_commit_time) > commit_timeout:
-                        # Call final result callback
-                        if self.on_final_result:
-                            final_text = self._clean_recognized_text(current_result)
-                            self.on_final_result(final_text)
-                            
-                        # Reset last result after committing
-                        last_result = ""
-                        last_commit_time = current_time
+                            # Call intermediate result callback
+                            if self.on_intermediate_result:
+                                cleaned_text = current_result.strip()
+                                self.on_intermediate_result(cleaned_text)
+                                
+                            # Reset commit timer when we get new content
+                            last_commit_time = current_time
                         
-                        # Clear client buffer after committing
-                        self.streaming_client.clear_buffer()
+                        # Check if we should commit the current result as final
+                        # This happens when no new content has been received for commit_timeout seconds
+                        if current_result and (current_time - last_commit_time) > commit_timeout:
+                            # Call final result callback
+                            if self.on_final_result:
+                                final_text = current_result.strip()
+                                self.on_final_result(final_text)
+                                
+                            # Reset last result after committing
+                            last_result = ""
+                            last_commit_time = current_time
                 
                 # Small sleep to prevent tight loop
                 time.sleep(0.05)
