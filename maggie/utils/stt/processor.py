@@ -192,7 +192,308 @@ class STTProcessor:
         except Exception as e:
             logger.error(f"Error in STTProcessor.speak(): {e}")
             return False
+
+    def start_listening(self) -> bool:
+        """
+        Start listening for audio input.
         
+        This method initializes audio capture and begins listening for user speech.
+        It must be called before streaming or speech recognition can work.
+        
+        Returns
+        -------
+        bool
+            True if listening started successfully, False otherwise
+            
+        Notes
+        -----
+        This method initializes the PyAudio instance and audio stream for
+        capturing microphone input. It sets the listening flag to True,
+        which allows other components to check if audio capture is active.
+        
+        The method uses a thread lock to prevent race conditions when
+        starting audio capture from multiple threads.
+        
+        Example
+        -------
+        >>> processor.start_listening()
+        >>> # Now the processor is listening for audio input
+        >>> success, text = processor.recognize_speech()
+        """
+        with self.lock:
+            # Check if already listening
+            if self.listening:
+                logger.debug("Already listening")
+                return True
+                
+            try:
+                # Initialize PyAudio if not already initialized
+                if self.pyaudio_instance is None:
+                    self.pyaudio_instance = pyaudio.PyAudio()
+                    
+                # Open audio stream with optimal settings
+                self.audio_stream = self.pyaudio_instance.open(
+                    format=pyaudio.paInt16,
+                    channels=self.channels,
+                    rate=self.sample_rate,
+                    input=True,
+                    frames_per_buffer=self.chunk_size,
+                    stream_callback=self._audio_callback
+                )
+                
+                # Reset stop event
+                self._stop_event.clear()
+                
+                # Set listening flag
+                self.listening = True
+                
+                # Clear audio buffer
+                with self.buffer_lock:
+                    self.audio_buffer = []
+                    
+                logger.info("Audio listening started")
+                return True
+                
+            except Exception as e:
+                logger.error(f"Error starting audio listening: {e}")
+                self._cleanup_audio_resources()
+                return False
+                
+    def _audio_callback(self, in_data, frame_count, time_info, status):
+        """
+        PyAudio callback for audio stream data.
+        
+        Parameters
+        ----------
+        in_data : bytes
+            Raw audio data
+        frame_count : int
+            Number of frames
+        time_info : dict
+            Timing information
+        status : int
+            Status flag
+            
+        Returns
+        -------
+        tuple
+            (data, flag) tuple for PyAudio
+        """
+        if self._stop_event.is_set():
+            return (in_data, pyaudio.paComplete)
+            
+        try:
+            # Add audio data to buffer with lock
+            with self.buffer_lock:
+                self.audio_buffer.append(in_data)
+                
+        except Exception as e:
+            logger.error(f"Error in audio callback: {e}")
+            
+        return (in_data, pyaudio.paContinue)
+        
+    def stop_listening(self) -> bool:
+        """
+        Stop listening for audio input.
+        
+        This method stops audio capture and releases audio resources.
+        
+        Returns
+        -------
+        bool
+            True if listening stopped successfully, False otherwise
+            
+        Notes
+        -----
+        This method stops the audio stream, releases PyAudio resources,
+        and sets the listening flag to False. It uses a thread lock to
+        prevent race conditions when stopping audio capture from multiple
+        threads.
+        
+        Example
+        -------
+        >>> processor.stop_listening()
+        >>> # Audio capture is now stopped
+        """
+        with self.lock:
+            # Check if not listening
+            if not self.listening:
+                logger.debug("Not listening")
+                return True
+                
+            try:
+                # Signal stop
+                self._stop_event.set()
+                
+                # Clean up audio resources
+                self._cleanup_audio_resources()
+                
+                # Set listening flag
+                self.listening = False
+                
+                logger.info("Audio listening stopped")
+                return True
+                
+            except Exception as e:
+                logger.error(f"Error stopping audio listening: {e}")
+                return False
+                
+    def _cleanup_audio_resources(self) -> None:
+        """
+        Clean up audio resources.
+        
+        This method releases PyAudio and audio stream resources
+        to prevent resource leaks.
+        
+        Returns
+        -------
+        None
+        """
+        # Stop and close audio stream
+        if self.audio_stream is not None:
+            try:
+                if self.audio_stream.is_active():
+                    self.audio_stream.stop_stream()
+                self.audio_stream.close()
+            except:
+                pass
+            self.audio_stream = None
+            
+        # Release PyAudio
+        if self.pyaudio_instance is not None:
+            try:
+                self.pyaudio_instance.terminate()
+            except:
+                pass
+            self.pyaudio_instance = None
+            
+    def recognize_speech(self, timeout: float = 10.0) -> Tuple[bool, str]:
+        """
+        Recognize speech from audio input.
+        
+        This method listens for speech and returns the recognized text.
+        
+        Parameters
+        ----------
+        timeout : float, optional
+            Maximum time to listen for speech in seconds, by default 10.0
+            
+        Returns
+        -------
+        Tuple[bool, str]
+            Tuple containing success flag and recognized text
+            
+        Notes
+        -----
+        This method uses the Whisper model to recognize speech from
+        the audio buffer. It returns a tuple with a success flag and
+        the recognized text if successful.
+        
+        The method requires that listening is already started with
+        start_listening() before it can recognize speech.
+        
+        Example
+        -------
+        >>> processor.start_listening()
+        >>> success, text = processor.recognize_speech(timeout=5.0)
+        >>> if success:
+        ...     print(f"Recognized: {text}")
+        ... else:
+        ...     print("Recognition failed")
+        """
+        if not self.listening:
+            logger.error("Cannot recognize speech - not listening")
+            return False, ""
+            
+        try:
+            # Get start time
+            start_time = time.time()
+            
+            # Wait for audio data with timeout
+            audio_data = None
+            while time.time() - start_time < timeout:
+                # Get audio data from buffer with lock
+                with self.buffer_lock:
+                    if self.audio_buffer:
+                        audio_data = b''.join(self.audio_buffer)
+                        self.audio_buffer = []
+                        break
+                
+                # Sleep briefly to prevent tight loop
+                time.sleep(0.05)
+                
+            # Check if we have audio data
+            if audio_data is None:
+                logger.warning("No audio data received within timeout")
+                return False, ""
+                
+            # Convert to numpy array
+            audio_np = np.frombuffer(audio_data, dtype=np.int16).astype(np.float32) / 32768.0
+            
+            # Initialize whisper model if needed
+            if self.whisper_model is None:
+                self._load_whisper_model()
+                
+            # Use Whisper model for transcription
+            if self.whisper_model is not None:
+                result = self.whisper_model.transcribe(audio_np)
+                if isinstance(result, dict) and "text" in result:
+                    return True, result["text"].strip()
+                elif hasattr(result, "text"):
+                    return True, result.text.strip()
+                else:
+                    logger.warning("Unexpected result format from Whisper model")
+                    return False, ""
+            else:
+                logger.error("Whisper model not initialized")
+                return False, ""
+                
+        except Exception as e:
+            logger.error(f"Error recognizing speech: {e}")
+            return False, ""
+            
+    def _load_whisper_model(self) -> bool:
+        """
+        Load the Whisper model for speech recognition.
+        
+        Returns
+        -------
+        bool
+            True if model loaded successfully, False otherwise
+            
+        Notes
+        -----
+        This method loads the Whisper model based on the configuration
+        settings. It supports different backend implementations and
+        compute types.
+        """
+        try:
+            from faster_whisper import WhisperModel
+            
+            # Get model parameters from config
+            model_size = self.model_size
+            compute_type = self.compute_type
+            
+            # Determine device based on GPU availability
+            device = "cuda" if self.use_gpu else "cpu"
+            
+            # Load model with appropriate settings
+            logger.info(f"Loading Whisper model: {model_size} on {device} with {compute_type}")
+            self.whisper_model = WhisperModel(
+                model_size,
+                device=device,
+                compute_type=compute_type
+            )
+            
+            return True
+            
+        except ImportError as e:
+            logger.error(f"Error importing WhisperModel: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"Error loading Whisper model: {e}")
+            return False
+
     def start_streaming(self, on_intermediate: Optional[Callable[[str], None]] = None, 
                         on_final: Optional[Callable[[str], None]] = None) -> bool:
         """

@@ -617,7 +617,7 @@ class RecipeCreator(ExtensionBase):
         """
         try:
             if self.stt_processor:
-                success = self.stt_processor.speak(text)
+                success = self.tT_processor.speak(text)
                 if not success:
                     logger.warning(f"TTS failed, fallback to log: {text}")
                 return success
