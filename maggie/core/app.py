@@ -806,7 +806,7 @@ class MaggieAI:
             )
             
             # Provide audio feedback
-            self.tT_processor.speak("Ready for your command")
+            self.tts_processor.speak("Ready for your command")
             
         # Start inactivity timer
         self._start_inactivity_timer()
@@ -1026,7 +1026,7 @@ class MaggieAI:
         """
         if self.state == State.READY:
             logger.info("Inactivity timeout reached")
-            self.tT_processor.speak("Going to sleep due to inactivity")
+            self.tts_processor.speak("Going to sleep due to inactivity")
             self._transition_to(State.CLEANUP, "inactivity_timeout")
             
     def _handle_extension_completed(self, extension_name: str) -> None:
@@ -1149,7 +1149,7 @@ class MaggieAI:
         """
         if self.state == State.READY or self.state == State.ACTIVE:
             logger.info("Manual sleep requested")
-            self.tT_processor.speak("Going to sleep")
+            self.tts_processor.speak("Going to sleep")
             self._transition_to(State.CLEANUP, "manual_timeout")
             
     def process_command(self, extension: Any = None) -> bool:
