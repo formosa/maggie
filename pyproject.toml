@@ -41,6 +41,7 @@ dependencies = [
     
     # LLM processing
     "ctransformers>=0.2.27",
+    "transformers==4.27.4"
     "llama-cpp-python>=0.2.11",
 
     # UI and document processing
