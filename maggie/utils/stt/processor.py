@@ -714,7 +714,7 @@ class STTProcessor:
             
         try:
             # Import proper components from whisper_streaming
-            from whisper_streaming import (
+            from maggie.utils.stt.whisper_streaming import (
                 FasterWhisperASR, WhisperTimestampedASR, MLXWhisper, 
                 OnlineASRProcessor, VACOnlineASRProcessor, 
                 asr_factory
