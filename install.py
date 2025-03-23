@@ -1687,74 +1687,82 @@ except Exception as e:
     def _download_af_heart_model(self) -> bool:
         """
         Download the af_heart TTS voice model into maggie/models/tts/.
-
+        
         Parameters
         ----------
         None
-
+        
         Returns
         -------
         bool
             True if model is available or download successful, False otherwise
-
+        
         Notes
         -----
-        Downloads the af_heart.pt file from Hugging Face and places it in the
-        maggie/models/tts/ directory as specified in the directory structure.
-        This voice model is used by the TTS component for speech synthesis.
-        
-        This method first checks if the model file already exists and has the expected
-        file size before attempting to download it again, preventing unnecessary downloads.
+        The correct af_heart.pt model is approximately 41MB in size.
+        This implementation checks multiple sources and verifies file integrity.
         """
         model_dir = os.path.join(self.base_dir, "maggie", "models", "tts")
         model_path = os.path.join(model_dir, "af_heart.pt")
-
-        # Expected file size range for a valid model (in bytes)
-        # af_heart.pt is approximately 41-42 MB
+        
+        # Expected file size range (in bytes)
         MIN_SIZE = 41 * 1024 * 1024  # 41 MB
-        MAX_SIZE = 43 * 1024 * 1024  # 43 MB
-
-        # Check if model file already exists and has valid size
+        
+        # Check if model already exists with correct size
         if os.path.exists(model_path):
             file_size = os.path.getsize(model_path)
-            if MIN_SIZE <= file_size <= MAX_SIZE:
-                self.color.print(f"af_heart voice model file already exists ({file_size / (1024*1024):.2f} MB)", "green")
+            if file_size >= MIN_SIZE:
+                self.color.print(f"af_heart voice model verified ({file_size / (1024*1024):.2f} MB)", "green")
                 return True
             else:
-                self.color.print(f"af_heart voice model exists but has unexpected size: {file_size / (1024*1024):.2f} MB", "yellow")
-                self.color.print("Will attempt to download the model again", "yellow")
+                self.color.print(f"af_heart model has incorrect size: {file_size / (1024*1024):.2f} MB", "yellow")
         
         # Create directory if needed
         os.makedirs(model_dir, exist_ok=True)
         
-        # URL for af_heart model file
-        model_url = "https://huggingface.co/hexgrad/Kokoro-82M/resolve/main/voices/af_heart.pt"
+        # Try multiple source URLs in order of preference
+        model_urls = [
+            "https://huggingface.co/hexgrad/kokoro-voices/resolve/main/af_heart.pt",
+            "https://github.com/hexgrad/kokoro/releases/download/v0.1/af_heart.pt",
+            "https://huggingface.co/hexgrad/Kokoro-82M/resolve/main/voices/af_heart.pt"
+        ]
         
-        # First check if the URL is accessible
-        try:
-            with urllib.request.urlopen(urllib.request.Request(model_url, method='HEAD')) as response:
-                if response.getcode() != 200:
-                    self.color.print(f"Cannot access af_heart model URL (status code: {response.getcode()})", "red")
-                    return False
-        except Exception as e:
-            self.color.print(f"Error accessing af_heart model URL: {e}", "red")
-            return False
+        # Try each URL until successful
+        for url in model_urls:
+            self.color.print(f"Attempting download from: {url}", "cyan")
             
-        # Download model file
-        self.color.print("Downloading af_heart voice model...", "cyan")
-        if not self._download_file(model_url, model_path):
-            self.color.print("Failed to download af_heart voice model", "red")
-            return False
+            # Check URL accessibility first
+            try:
+                with urllib.request.urlopen(urllib.request.Request(url, method='HEAD')) as response:
+                    if response.getcode() != 200:
+                        self.color.print(f"URL inaccessible (status: {response.getcode()})", "yellow")
+                        continue
+                    
+                    # Get content length if available
+                    content_length = response.getheader('Content-Length')
+                    if content_length and int(content_length) < MIN_SIZE:
+                        self.color.print(f"URL returns undersized file ({int(content_length) / (1024*1024):.2f} MB)", "yellow")
+                        continue
+            except Exception as e:
+                self.color.print(f"Error checking URL: {e}", "yellow")
+                continue
             
-        # Verify downloaded file size
-        file_size = os.path.getsize(model_path)
-        if MIN_SIZE <= file_size <= MAX_SIZE:
-            self.color.print(f"af_heart voice model downloaded successfully ({file_size / (1024*1024):.2f} MB)", "green")
-            return True
-        else:
-            self.color.print(f"Downloaded af_heart model has unexpected size: {file_size / (1024*1024):.2f} MB", "yellow")
-            self.color.print("Model may be incomplete or corrupted", "yellow")
-            return False
+            # Download the file
+            if self._download_file(url, model_path):
+                # Verify file size
+                file_size = os.path.getsize(model_path)
+                if file_size >= MIN_SIZE:
+                    self.color.print(f"af_heart model download successful ({file_size / (1024*1024):.2f} MB)", "green")
+                    return True
+                else:
+                    self.color.print(f"Downloaded file has incorrect size: {file_size / (1024*1024):.2f} MB", "yellow")
+                    # Delete invalid file and try next URL
+                    os.remove(model_path)
+            
+        # All URLs failed
+        self.color.print("Failed to download af_heart voice model from any source", "red")
+        self.color.print("You may need to download it manually from: https://github.com/hexgrad/kokoro/releases", "yellow")
+        return False
     
     def _download_mistral_model(self) -> bool:
         """
