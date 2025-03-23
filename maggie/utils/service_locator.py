@@ -1,4 +1,4 @@
-# maggie/utils/service_locator.py
+# In maggie/utils/service_locator.py
 """
 Maggie AI Assistant - Service Locator
 ====================================
@@ -19,8 +19,11 @@ Examples
 >>> stt_processor.speak("Hello, world!")
 """
 
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Callable, Type, TypeVar, Generic, cast
 from loguru import logger
+
+# Type variable for generic service types
+T = TypeVar('T')
 
 class ServiceLocator:
     """
@@ -35,7 +38,7 @@ class ServiceLocator:
         Dictionary mapping service names to their instances
     """
     
-    _services = {}
+    _services: Dict[str, Any] = {}
     
     @classmethod
     def register(cls, name: str, service: Any) -> None:
@@ -71,6 +74,48 @@ class ServiceLocator:
         if service is None:
             logger.warning(f"Service not found: {name}")
         return service
+    
+    @classmethod
+    def get_typed(cls, name: str, service_type: Type[T]) -> Optional[T]:
+        """
+        Get a service by name with type checking.
+        
+        Parameters
+        ----------
+        name : str
+            Name of the service
+        service_type : Type[T]
+            Expected type of the service
+            
+        Returns
+        -------
+        Optional[T]
+            Service instance if found and of correct type, None otherwise
+            
+        Notes
+        -----
+        This method provides additional type safety by ensuring the
+        retrieved service is of the expected type.
+        
+        Examples
+        --------
+        >>> from maggie.utils.stt.processor import STTProcessor
+        >>> stt_processor = ServiceLocator.get_typed("stt_processor", STTProcessor)
+        >>> if stt_processor:
+        ...     stt_processor.speak("Hello")
+        """
+        service = cls.get(name)
+        if service is None:
+            return None
+            
+        if not isinstance(service, service_type):
+            logger.error(
+                f"Service type mismatch: {name} is {type(service).__name__}, "
+                f"expected {service_type.__name__}"
+            )
+            return None
+            
+        return cast(T, service)
     
     @classmethod
     def has_service(cls, name: str) -> bool:
