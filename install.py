@@ -1315,11 +1315,7 @@ class MaggieInstaller:
            - Requires specific version compatibility (0.9.0)
            - Has specialized optimizations for GPU acceleration 
 
-        4. Whisper-streaming:
-           - Requires copying custom module files to site-packages
-           - Not available as a standard PyPI package
-
-        5. GPU-specific dependencies:
+        4. GPU-specific dependencies:
            - onnxruntime-gpu only installed when GPU is available
            - Version must be compatible with CUDA runtime
         """
@@ -1330,12 +1326,12 @@ class MaggieInstaller:
         self._install_kokoro(python_cmd)
         
         # 3. Install faster-whisper for speech recognition
-        self._install_whisper(python_cmd)
+        if not self._install_whisper(python_cmd):
+            self.color.print("Warning: Failed to install faster-whisper", "yellow")
+            self.color.print("Speech recognition functionality may be limited", "yellow")
+            return False
         
-        # 4. Install whisper_streaming for real-time transcription
-        self._install_whisper_streaming(python_cmd)
-        
-        # 5. Install GPU-specific dependencies if using GPU
+        # 4. Install GPU-specific dependencies if using GPU
         if not self.cpu_only:
             self.color.print("Installing GPU-specific dependencies...", "cyan")
             self._run_command([
@@ -1564,973 +1560,80 @@ class MaggieInstaller:
         
         self.color.print("faster-whisper installed successfully", "green")
         return True
-    
-    def _install_whisper_streaming(self, python_cmd: str) -> bool:
+
+    def _download_whisper_model(self) -> bool:
         """
-        Install whisper-streaming package from GitHub.
+        Download the Whisper base.en model from Hugging Face.
         
-        Parameters
-        ----------
-        python_cmd : str
-            Path to Python executable in virtual environment
-            
+        Downloads the default Whisper model 'whisper-base.en' from Hugging Face
+        repository and saves it to the maggie/models/stt/whisper-base.en directory.
+        This model is used for speech recognition tasks.
+        
         Returns
         -------
         bool
-            True if installation successful, False otherwise
+            True if download successful, False otherwise
             
         Notes
         -----
-        Installs the whisper_streaming package using either direct GitHub 
-        installation or by downloading and installing from a local source.
-        Handles dependencies and ensures proper installation in the virtual
-        environment.
+        The Whisper base.en model is a specialized English-only model that provides
+        a good balance between accuracy and resource requirements. It's well-suited for
+        the RTX 3080 hardware and provides fast inference even without quantization.
+        The model requires approximately 500MB of storage space.
         """
-        self.color.print("Installing whisper_streaming module...", "cyan")
+        # Define model directory path
+        model_dir = os.path.join(self.base_dir, "maggie", "models", "stt", "whisper-base.en")
+        
+        # Check if model directory already exists and contains files
+        if os.path.exists(model_dir) and os.listdir(model_dir):
+            self.color.print("Whisper base.en model already exists", "green")
+            return True
+        
+        # Create model directory
+        os.makedirs(model_dir, exist_ok=True)
         
         try:
-            # Install dependencies first
-            dependencies = ["pyaudio", "numpy", "websockets", "torch", "transformers"]
-            self.color.print("Installing whisper_streaming dependencies...", "cyan")
+            # Install huggingface_hub to download the model
+            python_cmd = self._get_venv_python()
             self._run_command([
-                python_cmd, "-m", "pip", "install"] + dependencies
-            )
-            
-            # Download and extract the package
-            whisper_streaming_dir = os.path.join(self.base_dir, "downloads", "whisper_streaming")
-            os.makedirs(whisper_streaming_dir, exist_ok=True)
-            
-            # Download the zip file
-            zip_url = "https://github.com/ufal/whisper_streaming/archive/refs/heads/main.zip"
-            zip_path = os.path.join(self.base_dir, "downloads", "whisper_streaming.zip")
-            
-            if not self._download_file(zip_url, zip_path):
-                self.color.print("Failed to download whisper_streaming repository", "red")
-                return False
-            
-            # Extract the zip file
-            try:
-                with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-                    zip_ref.extractall(os.path.dirname(whisper_streaming_dir))
-                
-                # Move to the right location
-                extracted_dir = os.path.join(os.path.dirname(whisper_streaming_dir), "whisper_streaming-main")
-                if os.path.exists(whisper_streaming_dir):
-                    shutil.rmtree(whisper_streaming_dir)
-                    shutil.move(extracted_dir, whisper_streaming_dir)
-                
-                    # As a last resort, copy modules directly
-                    self._copy_whisper_streaming_modules(python_cmd)
-                return True
-            except Exception as e:
-                self.color.print(f"Error extracting or installing whisper_streaming: {e}", "red")
-                return False
-                
-        except Exception as e:
-            self.color.print(f"Error installing whisper_streaming: {e}", "red")
-            return False
-            
-    def _copy_whisper_streaming_modules(self, python_cmd: str) -> bool:
-        """
-        Copy whisper_streaming modules directly to site-packages.
-        
-        Parameters
-        ----------
-        python_cmd : str
-            Path to Python executable in virtual environment
-            
-        Returns
-        -------
-        bool
-            True if copy successful, False otherwise
-        """
-        try:
-            # Find the site-packages directory
-            returncode, stdout, _ = self._run_command([
-                python_cmd, "-c", 
-                "import site; print(site.getsitepackages()[0])"
+                python_cmd, "-m", "pip", "install", "huggingface_hub"
             ])
+            
+            # Use huggingface_hub to download model files
+            self.color.print("Downloading Whisper base.en model from Hugging Face (this may take a while)...", "cyan")
+            
+            # Python script to download the model
+            download_script = f"""
+import os
+from huggingface_hub import snapshot_download
 
-            if returncode == 0:
-                site_packages = stdout.strip()
-                
-                # Create whisper_streaming directory in site-packages
-                ws_dir = os.path.join(site_packages, "Lib","site-packages", "whisper_streaming")
-                os.makedirs(ws_dir, exist_ok=True)
-                
-                # Copy source files
-                source_dir = os.path.join(self.base_dir, "downloads", 
-                                        "whisper_streaming")
-                
-                if os.path.exists(source_dir):
-                    # Copy all .py files
-                    for file in os.listdir(source_dir):
-                        if file.endswith(".py"):
-                            src_file = os.path.join(source_dir, file)
-                            dst_file = os.path.join(ws_dir, file)
-                            shutil.copy2(src_file, dst_file)
-                            
-                    # Create __init__.py if needed
-                    init_py = os.path.join(ws_dir, "__init__.py")
-                    if not os.path.exists(init_py):
-                        with open(init_py, 'w') as f:
-                            f.write(
-'''
+try:
+    snapshot_download(
+        repo_id="openai/whisper-base.en",
+        local_dir="{model_dir.replace(os.sep, '/')}",
+        ignore_patterns=["*.safetensors", "*.ot", "*.h5", "flax_model.*"],
+        local_dir_use_symlinks=False
+    )
+    print("Model downloaded successfully")
+except Exception as e:
+    print(f"Error downloading model: {{e}}")
+    exit(1)
 """
-Whisper Streaming Package
-=========================
-
-A package for real-time audio transcription using OpenAI's Whisper model with support
-for various backends, streaming processing, and networked operation.
-
-This package provides tools for streaming audio transcription with various backends,
-including real-time processing, voice activity detection, and server-client communication.
-
-Features
---------
-* Multiple ASR backends (faster-whisper, whisper_timestamped, MLX Whisper, OpenAI API)
-* Voice Activity Detection using Silero VAD
-* Real-time audio streaming and processing
-* Networked client-server communication
-* Support for multiple languages
-* Support for transcription and translation
-
-Components
----------
-* ASR Base Classes:
-  - ASRBase: Abstract base class for all ASR implementations
-  - WhisperTimestampedASR: Implementation using whisper_timestamped
-  - FasterWhisperASR: Implementation using faster-whisper (recommended)
-  - MLXWhisper: Implementation optimized for Apple Silicon
-  - OpenaiApiASR: Implementation using OpenAI's Whisper API
-
-* Processing:
-  - OnlineASRProcessor: Handles real-time audio processing and transcription
-  - VACOnlineASRProcessor: Adds Voice Activity Control to OnlineASRProcessor
-  - HypothesisBuffer: Manages transcription hypotheses
-
-* Voice Activity Detection:
-  - VADIterator: Base iterator for voice activity detection
-  - FixedVADIterator: Extended VAD iterator supporting variable-length inputs
-
-* Networking:
-  - Connection: Wrapper for socket connections
-  - ServerProcessor: Processes audio chunks in server context
-
-* Utilities:
-  - load_audio: Load an audio file
-  - load_audio_chunk: Load a specific segment of an audio file
-  - create_tokenizer: Create a language-specific sentence tokenizer
-  - asr_factory: Create ASR and processor instances
-  - add_shared_args: Add common command-line arguments
-  - set_logging: Configure logging
-"""
-
-# Package version
-__version__ = "0.1.0"
-
-# Import from line_packet.py
-from .line_packet import PACKET_SIZE, send_one_line, receive_one_line, receive_lines
-
-# Import from silero_vad_iterator.py
-from .silero_vad_iterator import VADIterator, FixedVADIterator
-
-# Import from whisper_online.py
-from .whisper_online import (
-    # ASR Classes
-    ASRBase, WhisperTimestampedASR, FasterWhisperASR, MLXWhisper, OpenaiApiASR,
-    
-    # Processing Classes
-    HypothesisBuffer, OnlineASRProcessor, VACOnlineASRProcessor,
-    
-    # Utility Functions
-    load_audio, load_audio_chunk, create_tokenizer, asr_factory, add_shared_args, set_logging,
-    
-    # Constants
-    WHISPER_LANG_CODES
-)
-
-# Import from whisper_online_server.py
-from .whisper_online_server import Connection, ServerProcessor
-
-# Define public exports
-__all__ = [
-    # Package metadata
-    "__version__",
-    
-    # line_packet
-    "PACKET_SIZE", "send_one_line", "receive_one_line", "receive_lines",
-    
-    # silero_vad_iterator
-    "VADIterator", "FixedVADIterator",
-    
-    # whisper_online - ASR Classes
-    "ASRBase", "WhisperTimestampedASR", "FasterWhisperASR", "MLXWhisper", "OpenaiApiASR",
-    
-    # whisper_online - Processing Classes
-    "HypothesisBuffer", "OnlineASRProcessor", "VACOnlineASRProcessor",
-    
-    # whisper_online - Utility Functions
-    "load_audio", "load_audio_chunk", "create_tokenizer", "asr_factory", 
-    "add_shared_args", "set_logging",
-    
-    # whisper_online - Constants
-    "WHISPER_LANG_CODES",
-    
-    # whisper_online_server
-    "Connection", "ServerProcessor",
-]
-
-# Add detailed docstrings to the imported objects
-ASRBase.__doc__ = """
-Base class for ASR (Automatic Speech Recognition) implementations.
-
-Parameters
-----------
-lan : str
-    Language code for transcription.
-modelsize : str, optional
-    Size of the model (e.g., 'tiny', 'base', 'small', 'medium', 'large').
-cache_dir : str, optional
-    Directory for caching models.
-model_dir : str, optional
-    Directory containing a pre-downloaded model.
-logfile : file, optional
-    File for logging, default is sys.stderr.
-
-Methods
--------
-load_model(modelsize, cache_dir, model_dir)
-    Load the ASR model.
-    
-    Parameters
-    ----------
-    modelsize : str
-        Size of the model to load.
-    cache_dir : str or None
-        Directory for caching models.
-    model_dir : str or None
-        Directory containing a pre-downloaded model.
-        
-    Returns
-    -------
-    model
-        The loaded model object.
-        
-transcribe(audio, init_prompt="")
-    Transcribe audio with optional initial prompt.
-    
-    Parameters
-    ----------
-    audio : numpy.ndarray
-        Audio data as float32 array.
-    init_prompt : str, optional
-        Initial prompt to guide transcription.
-        
-    Returns
-    -------
-    object
-        Transcription result object.
-        
-use_vad()
-    Enable Voice Activity Detection.
-"""
-
-WhisperTimestampedASR.__doc__ = """
-ASR implementation using whisper_timestamped library.
-
-This class provides timestamped transcription using the whisper_timestamped backend.
-Initially tested with this backend, but slower than faster-whisper.
-
-Parameters
-----------
-lan : str
-    Language code for transcription.
-modelsize : str, optional
-    Size of the model (e.g., 'tiny', 'base', 'small', 'medium', 'large').
-cache_dir : str, optional
-    Directory for caching models.
-model_dir : str, optional
-    Directory containing a pre-downloaded model.
-logfile : file, optional
-    File for logging, default is sys.stderr.
-
-Methods
--------
-load_model(modelsize, cache_dir, model_dir)
-    Load the whisper_timestamped model.
-    
-transcribe(audio, init_prompt="")
-    Transcribe audio with optional initial prompt.
-    
-    Parameters
-    ----------
-    audio : numpy.ndarray
-        Audio data as float32 array.
-    init_prompt : str, optional
-        Initial prompt to guide transcription.
-        
-    Returns
-    -------
-    dict
-        Transcription result dictionary.
-        
-ts_words(r)
-    Convert transcription result to timestamped words.
-    
-    Parameters
-    ----------
-    r : dict
-        Transcription result from transcribe method.
-        
-    Returns
-    -------
-    list
-        List of tuples (start_time, end_time, text).
-        
-segments_end_ts(res)
-    Get end timestamps of segments.
-    
-    Parameters
-    ----------
-    res : dict
-        Transcription result from transcribe method.
-        
-    Returns
-    -------
-    list
-        List of segment end timestamps.
-        
-use_vad()
-    Enable Voice Activity Detection.
-    
-set_translate_task()
-    Set the task to translation instead of transcription.
-"""
-
-FasterWhisperASR.__doc__ = """
-ASR implementation using faster-whisper library.
-
-This class provides transcription using the faster-whisper backend,
-which offers significantly improved performance (approximately 4x faster).
-For GPU usage, requires specific CUDNN version.
-
-Parameters
-----------
-lan : str
-    Language code for transcription.
-modelsize : str, optional
-    Size of the model (e.g., 'tiny', 'base', 'small', 'medium', 'large').
-cache_dir : str, optional
-    Directory for caching models.
-model_dir : str, optional
-    Directory containing a pre-downloaded model.
-logfile : file, optional
-    File for logging, default is sys.stderr.
-
-Methods
--------
-load_model(modelsize, cache_dir, model_dir)
-    Load the faster-whisper model.
-    
-transcribe(audio, init_prompt="")
-    Transcribe audio with optional initial prompt.
-    
-    Parameters
-    ----------
-    audio : numpy.ndarray
-        Audio data as float32 array.
-    init_prompt : str, optional
-        Initial prompt to guide transcription.
-        
-    Returns
-    -------
-    list
-        List of segment objects.
-        
-ts_words(segments)
-    Convert transcription segments to timestamped words.
-    
-    Parameters
-    ----------
-    segments : list
-        Segments from transcribe method.
-        
-    Returns
-    -------
-    list
-        List of tuples (start_time, end_time, text).
-        
-segments_end_ts(res)
-    Get end timestamps of segments.
-    
-    Parameters
-    ----------
-    res : list
-        Segments from transcribe method.
-        
-    Returns
-    -------
-    list
-        List of segment end timestamps.
-        
-use_vad()
-    Enable Voice Activity Detection.
-    
-set_translate_task()
-    Set the task to translation instead of transcription.
-"""
-
-MLXWhisper.__doc__ = """
-ASR implementation using MLX Whisper library for Apple Silicon.
-
-This class provides optimized transcription for Apple Silicon processors.
-Significantly faster than faster-whisper (without CUDA) on Apple M1.
-
-Parameters
-----------
-lan : str
-    Language code for transcription.
-modelsize : str, optional
-    Size of the model (e.g., 'tiny', 'base', 'small', 'medium', 'large').
-cache_dir : str, optional
-    Directory for caching models (not used by MLX Whisper).
-model_dir : str, optional
-    Directory containing a pre-downloaded model.
-logfile : file, optional
-    File for logging, default is sys.stderr.
-
-Methods
--------
-load_model(modelsize, cache_dir, model_dir)
-    Load the MLX Whisper model.
-    
-    Parameters
-    ----------
-    modelsize : str
-        Size of the model to load.
-    cache_dir : str or None
-        Directory for caching models.
-    model_dir : str or None
-        Directory containing a pre-downloaded model.
-        
-    Returns
-    -------
-    function
-        The transcribe function from MLX Whisper.
-        
-translate_model_name(model_name)
-    Translate model name to MLX-compatible format.
-    
-    Parameters
-    ----------
-    model_name : str
-        Name of the model to translate.
-        
-    Returns
-    -------
-    str
-        MLX-compatible model path.
-        
-transcribe(audio, init_prompt="")
-    Transcribe audio with optional initial prompt.
-    
-    Parameters
-    ----------
-    audio : numpy.ndarray
-        Audio data as float32 array.
-    init_prompt : str, optional
-        Initial prompt to guide transcription.
-        
-    Returns
-    -------
-    list
-        List of segment dictionaries.
-        
-ts_words(segments)
-    Extract timestamped words from segments.
-    
-    Parameters
-    ----------
-    segments : list
-        Segments from transcribe method.
-        
-    Returns
-    -------
-    list
-        List of tuples (start_time, end_time, text).
-        
-segments_end_ts(res)
-    Get end timestamps of segments.
-    
-    Parameters
-    ----------
-    res : list
-        Segments from transcribe method.
-        
-    Returns
-    -------
-    list
-        List of segment end timestamps.
-        
-use_vad()
-    Enable Voice Activity Detection.
-    
-set_translate_task()
-    Set the task to translation instead of transcription.
-"""
-
-OpenaiApiASR.__doc__ = """
-ASR implementation using OpenAI's Whisper API.
-
-Parameters
-----------
-lan : str, optional
-    ISO-639-1 language code for transcription.
-temperature : float, optional
-    Temperature for sampling. Default is 0.
-logfile : file, optional
-    File for logging, default is sys.stderr.
-
-Methods
--------
-load_model()
-    Initialize the OpenAI client.
-    
-transcribe(audio_data, prompt=None, *args, **kwargs)
-    Transcribe audio using OpenAI API.
-    
-    Parameters
-    ----------
-    audio_data : numpy.ndarray
-        Audio data as float32 array.
-    prompt : str, optional
-        Prompt to guide transcription.
-    *args, **kwargs
-        Additional arguments for OpenAI API.
-        
-    Returns
-    -------
-    object
-        OpenAI API response object.
-        
-ts_words(segments)
-    Convert API response to timestamped words.
-    
-    Parameters
-    ----------
-    segments : object
-        API response from transcribe method.
-        
-    Returns
-    -------
-    list
-        List of tuples (start_time, end_time, text).
-        
-segments_end_ts(res)
-    Get end timestamps of words.
-    
-    Parameters
-    ----------
-    res : object
-        API response from transcribe method.
-        
-    Returns
-    -------
-    list
-        List of word end timestamps.
-        
-use_vad()
-    Enable Voice Activity Detection filtering.
-    
-set_translate_task()
-    Set the task to translation instead of transcription.
-"""
-
-HypothesisBuffer.__doc__ = """
-Buffer for managing transcription hypotheses.
-
-This class maintains and processes interim transcription outputs.
-
-Parameters
-----------
-logfile : file, optional
-    File for logging, default is sys.stderr.
-
-Methods
--------
-insert(new, offset)
-    Insert new transcription hypotheses with time offset.
-    
-    Parameters
-    ----------
-    new : list
-        List of tuples (start_time, end_time, text).
-    offset : float
-        Time offset to apply to timestamps.
-        
-flush()
-    Flush and return confirmed transcription chunks.
-    
-    Returns
-    -------
-    list
-        List of confirmed chunks as tuples (start_time, end_time, text).
-        
-pop_commited(time)
-    Remove committed chunks up to the specified time.
-    
-    Parameters
-    ----------
-    time : float
-        Time threshold for removal.
-        
-complete()
-    Return the complete buffer content.
-    
-    Returns
-    -------
-    list
-        List of buffer content as tuples (start_time, end_time, text).
-"""
-
-OnlineASRProcessor.__doc__ = """
-Processor for online (real-time) audio transcription.
-
-This class manages the audio buffer and transcription process for streaming audio.
-
-Parameters
-----------
-asr : ASRBase
-    ASR implementation to use for transcription.
-tokenizer : object, optional
-    Sentence tokenizer for the target language.
-buffer_trimming : tuple, optional
-    Tuple of (strategy, seconds) for buffer trimming.
-    Strategy can be 'sentence' or 'segment'. Default is ("segment", 15).
-logfile : file, optional
-    File for logging, default is sys.stderr.
-
-Attributes
-----------
-SAMPLING_RATE : int
-    Audio sampling rate, fixed at 16000 Hz.
-
-Methods
--------
-init(offset=None)
-    Initialize or reset the processor.
-    
-    Parameters
-    ----------
-    offset : float, optional
-        Initial time offset.
-        
-insert_audio_chunk(audio)
-    Add an audio chunk to the buffer.
-    
-    Parameters
-    ----------
-    audio : numpy.ndarray
-        Audio data as float32 array.
-        
-prompt()
-    Generate prompt from committed text.
-    
-    Returns
-    -------
-    tuple
-        (prompt, context) where prompt is for ASR and context is for debugging.
-        
-process_iter()
-    Process the current audio buffer and return transcription.
-    
-    Returns
-    -------
-    tuple
-        (start_time, end_time, text) or (None, None, "").
-        
-chunk_at(time)
-    Trim the buffer at the specified time.
-    
-    Parameters
-    ----------
-    time : float
-        Time threshold for trimming.
-        
-finish()
-    Finalize processing and return any remaining transcription.
-    
-    Returns
-    -------
-    tuple
-        (start_time, end_time, text) or (None, None, "").
-"""
-
-VACOnlineASRProcessor.__doc__ = """
-Online ASR processor with Voice Activity Control.
-
-This class wraps OnlineASRProcessor with VAC (Voice Activity Controller),
-detecting speech segments and processing them in real-time.
-
-Parameters
-----------
-online_chunk_size : float
-    Size of online chunks in seconds.
-*a : positional arguments
-    Arguments to pass to OnlineASRProcessor.
-**kw : keyword arguments
-    Keyword arguments to pass to OnlineASRProcessor.
-
-Methods
--------
-init()
-    Initialize the processor.
-    
-insert_audio_chunk(audio)
-    Add an audio chunk and process it with VAD.
-    
-    Parameters
-    ----------
-    audio : numpy.ndarray
-        Audio data as float32 array.
-        
-process_iter()
-    Process the current audio buffer and return transcription.
-    
-    Returns
-    -------
-    tuple
-        (start_time, end_time, text) or (None, None, "").
-        
-finish()
-    Finalize processing and return any remaining transcription.
-    
-    Returns
-    -------
-    tuple
-        (start_time, end_time, text) or (None, None, "").
-"""
-
-load_audio.__doc__ = """
-Load an audio file into memory.
-
-Parameters
-----------
-fname : str
-    Path to the audio file.
-
-Returns
--------
-numpy.ndarray
-    Audio data as a float32 array sampled at 16kHz.
-
-Notes
------
-Results are cached using lru_cache for efficiency.
-"""
-
-load_audio_chunk.__doc__ = """
-Load a specific chunk of an audio file.
-
-Parameters
-----------
-fname : str
-    Path to the audio file.
-beg : float
-    Beginning time in seconds.
-end : float
-    Ending time in seconds.
-
-Returns
--------
-numpy.ndarray
-    Audio chunk data as a float32 array.
-"""
-
-create_tokenizer.__doc__ = """
-Create a sentence tokenizer for a specific language.
-
-Parameters
-----------
-lan : str
-    Language code (must be in WHISPER_LANG_CODES).
-
-Returns
--------
-object
-    A tokenizer object with a 'split' method for sentence segmentation.
-    
-Notes
------
-Depending on the language, uses MosesTokenizer, WtP, or a custom tokenizer.
-"""
-
-asr_factory.__doc__ = """
-Create ASR and OnlineASR instances based on command-line arguments.
-
-Parameters
-----------
-args : argparse.Namespace
-    Command-line arguments including:
-    - backend: ASR backend to use
-    - model: Model size/name
-    - lan: Language code
-    - model_cache_dir: Optional cache directory
-    - model_dir: Optional model directory
-    - vad: Whether to use VAD
-    - vac: Whether to use VAC
-    - vac_chunk_size: VAC sample size
-    - min_chunk_size: Minimum chunk size
-    - buffer_trimming: Buffer trimming strategy
-    - buffer_trimming_sec: Buffer trimming threshold
-    - task: 'transcribe' or 'translate'
-logfile : file, optional
-    File for logging, default is sys.stderr.
-
-Returns
--------
-tuple
-    (asr, online) - ASR backend and online processor instances.
-"""
-
-add_shared_args.__doc__ = """
-Add shared command-line arguments to an argument parser.
-
-Parameters
-----------
-parser : argparse.ArgumentParser
-    The argument parser to add arguments to.
-    
-Notes
------
-Adds arguments for model size, language, ASR backend, chunk size,
-buffer trimming, VAD/VAC settings, and logging.
-"""
-
-set_logging.__doc__ = """
-Configure logging for the whisper_streaming package.
-
-Parameters
-----------
-args : argparse.Namespace
-    Command-line arguments containing log_level.
-logger : logging.Logger
-    Logger instance to configure.
-other : str, optional
-    Additional string for logger name, default is "_server".
-"""
-
-Connection.__doc__ = """
-Wrapper for socket connections in the transcription server.
-
-This class handles sending and receiving text lines over sockets.
-
-Parameters
-----------
-conn : socket.socket
-    Socket connection object.
-
-Attributes
-----------
-PACKET_SIZE : int
-    Size of the packet buffer (32000*5*60).
-
-Methods
--------
-send(line)
-    Send a line of text, avoiding duplicates.
-    
-    Parameters
-    ----------
-    line : str
-        Line of text to send.
-        
-receive_lines()
-    Receive multiple lines of text.
-    
-    Returns
-    -------
-    list or None
-        List of received lines or None.
-        
-non_blocking_receive_audio()
-    Receive audio data without blocking.
-    
-    Returns
-    -------
-    bytes or None
-        Received audio data or None.
-"""
-
-ServerProcessor.__doc__ = """
-Processor for audio chunks in server context.
-
-This class handles receiving audio, processing it, and sending
-transcription results to clients.
-
-Parameters
-----------
-c : Connection
-    Connection wrapper for socket communication.
-online_asr_proc : OnlineASRProcessor
-    Processor for online audio transcription.
-min_chunk : float
-    Minimum chunk size in seconds.
-
-Methods
--------
-receive_audio_chunk()
-    Receive and process audio chunks from the client.
-    
-    Returns
-    -------
-    numpy.ndarray or None
-        Audio data as float32 array or None.
-        
-format_output_transcript(o)
-    Format transcription output for sending to client.
-    
-    Parameters
-    ----------
-    o : tuple
-        (start_time, end_time, text) from ASR processor.
-        
-    Returns
-    -------
-    str or None
-        Formatted output string or None.
-        
-send_result(o)
-    Send transcription result to the client.
-    
-    Parameters
-    ----------
-    o : tuple
-        (start_time, end_time, text) from ASR processor.
-        
-process()
-    Handle one client connection lifecycle.
-"""
-
-WHISPER_LANG_CODES.__doc__ = """
-List of language codes supported by Whisper models.
-
-This is a comma-separated string of all supported language codes.
-"""
-'''
-                                    )
-                    
-                    self.color.print("Copied whisper_streaming modules to site-packages", "green")
-                    return True
-                else:
-                    self.color.print(f"Source directory not found: {source_dir}", "red")
-                    return False
-            else:
-                self.color.print("Could not determine site-packages directory", "red")
+            
+            # Run the download script
+            returncode, stdout, stderr = self._run_command([
+                python_cmd, "-c", download_script
+            ])
+            
+            if returncode != 0:
+                self.color.print(f"Error downloading Whisper model: {stderr}", "red")
                 return False
+            
+            self.color.print("Whisper base.en model downloaded successfully", "green")
+            return True
+        
         except Exception as e:
-            self.color.print(f"Error copying whisper_streaming modules: {e}", "red")
+            self.color.print(f"Error downloading Whisper model: {e}", "red")
             return False
     
     def _download_af_heart_model(self) -> bool:
@@ -2827,6 +1930,10 @@ else:
 if 'tts' in config and 'voice_model' in config['tts']:
     config['tts']['voice_model'] = 'af_heart.pt'
 
+# Set STT model path for Whisper
+if 'speech' in config and 'whisper' in config['speech']:
+    config['speech']['whisper']['model_path'] = 'models/stt/whisper-base.en'
+
 # Optimize for hardware
 if hardware_info['gpu']['is_rtx_3080']:
     if 'llm' in config:
@@ -2836,8 +1943,8 @@ if hardware_info['gpu']['is_rtx_3080']:
         config['gpu'] = {{}}
     config['gpu']['max_percent'] = 90
     config['gpu']['model_unload_threshold'] = 95
-    if 'stt' in config and 'whisper' in config['stt']:
-        config['stt']['whisper']['compute_type'] = 'float16'
+    if 'speech' in config and 'whisper' in config['speech']:
+        config['speech']['whisper']['compute_type'] = 'float16'
     if 'tts' in config:
         config['tts']['gpu_acceleration'] = True
         config['tts']['gpu_precision'] = 'mixed_float16'
@@ -2932,8 +2039,8 @@ os.remove(hardware_file)
             config["gpu"]["model_unload_threshold"] = 95  # Unload at 95%
             
             # STT Whisper compute type
-            if "stt" in config and "whisper" in config["stt"]:
-                config["stt"]["whisper"]["compute_type"] = "float16"  # Use float16 for faster inference
+            if "speech" in config and "whisper" in config["speech"]:
+                config["speech"]["whisper"]["compute_type"] = "float16"  # Use float16 for faster inference
                 
             # TTS GPU acceleration
             if "tts" in config:
@@ -3069,6 +2176,7 @@ os.remove(hardware_file)
         5. Configuration - Set up and optimize config.yaml
         6. Models - Download required model files:
            - TTS voice model (af_heart.pt)
+           - STT model (Whisper base.en)
            - LLM model (Mistral 7B)
         7. Extensions - Set up extensions and templates
         8. Finalization - Complete installation and display instructions
@@ -3124,6 +2232,11 @@ os.remove(hardware_file)
             self.color.print("Warning: Failed to download TTS voice model", "yellow")
             self.color.print("Text-to-speech functionality may be limited", "yellow")
         
+        # Download Whisper model for speech recognition
+        if not self._download_whisper_model():
+            self.color.print("Warning: Failed to download Whisper model", "yellow")
+            self.color.print("Speech recognition functionality may be limited", "yellow")
+        
         # Download LLM model
         if not self.skip_models:
             self._download_mistral_model()
@@ -3166,6 +2279,9 @@ os.remove(hardware_file)
         if not self.has_git:
             self.color.print("2. Git is not installed - some features may be limited", "yellow")
             self.color.print("   Install Git for full functionality", "yellow")
+            
+        self.color.print("3. The Whisper speech recognition model is now included in the project", "green")
+        self.color.print("   No need to install whisper_streaming separately", "green")
         
         # Ask if user wants to start Maggie
         self.progress.complete_step(True)
