@@ -421,7 +421,81 @@ class MaggieAI:
         
         # Create GPU resource management
         self._setup_gpu_resource_management()
+
+    def _handle_state_transition(self, new_state: State, trigger: str) -> None:
+        """
+        Handle state transition with centralized logic.
         
+        This method centralizes all state transition logic to ensure consistent
+        behavior and resource management across different state changes.
+        
+        Parameters
+        ----------
+        new_state : State
+            The target state to transition to
+        trigger : str
+            The event that triggered this transition
+            
+        Returns
+        -------
+        None
+        
+        Notes
+        -----
+        This method handles:
+        1. State validation (preventing invalid transitions)
+        2. Resource management during transitions
+        3. Event publication
+        4. Handler invocation
+        """
+        # Don't transition to the same state
+        if new_state == self.state:
+            logger.debug(f"Already in state {new_state.name}, ignoring transition")
+            return
+            
+        # Check for valid transitions (state machine rules)
+        valid_transitions = {
+            State.IDLE: [State.READY, State.CLEANUP, State.SHUTDOWN],
+            State.READY: [State.ACTIVE, State.CLEANUP, State.SHUTDOWN],
+            State.ACTIVE: [State.READY, State.CLEANUP, State.SHUTDOWN],
+            State.CLEANUP: [State.IDLE, State.SHUTDOWN],
+            State.SHUTDOWN: []  # Terminal state, no valid transitions from here
+        }
+        
+        if new_state not in valid_transitions.get(self.state, []):
+            logger.warning(
+                f"Invalid transition from {self.state.name} to {new_state.name} (trigger: {trigger})"
+            )
+            return
+        
+        # Store old state and update current state
+        old_state = self.state
+        self.state = new_state
+        
+        # Log the transition
+        logger.info(f"State transition: {old_state.name} -> {new_state.name} (trigger: {trigger})")
+        
+        # Perform state-independent resource management
+        # Clear GPU resources if appropriate
+        from maggie.utils.hardware.gpu_utils import clear_gpu_cache
+        if new_state in [State.IDLE, State.CLEANUP, State.SHUTDOWN]:
+            clear_gpu_cache()
+        
+        # Create transition event
+        transition = StateTransition(
+            from_state=old_state,
+            to_state=new_state,
+            trigger=trigger,
+            timestamp=time.time()
+        )
+        
+        # Publish state transition event
+        self.event_bus.publish("state_changed", transition)
+        
+        # Call state entry handler
+        if new_state in self.transition_handlers:
+            self.transition_handlers[new_state](transition)
+
     def _setup_gpu_resource_management(self) -> None:
         """
         GPU Resource Management: Setup for the RTX 3080.
@@ -661,29 +735,7 @@ class MaggieAI:
         trigger : str
             Event that triggered the transition
         """
-        if new_state == self.state:
-            return
-            
-        old_state = self.state
-        self.state = new_state
-        
-        # Log the transition
-        logger.info(f"State transition: {old_state.name} -> {new_state.name} (trigger: {trigger})")
-        
-        # Create transition event
-        transition = StateTransition(
-            from_state=old_state,
-            to_state=new_state,
-            trigger=trigger,
-            timestamp=time.time()
-        )
-        
-        # Publish state transition event
-        self.event_bus.publish("state_changed", transition)
-        
-        # Call state entry handler
-        if new_state in self.transition_handlers:
-            self.transition_handlers[new_state](transition)
+        self._handle_state_transition(new_state, trigger)
             
     def _on_enter_idle(self, transition: StateTransition) -> None:
         """
