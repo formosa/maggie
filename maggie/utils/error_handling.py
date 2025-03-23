@@ -1,4 +1,4 @@
-# New file: maggie/utils/error_handling.py
+# Updated maggie/utils/error_handling.py
 """
 Maggie AI Assistant - Error Handling Utilities
 =============================================
@@ -6,13 +6,13 @@ Maggie AI Assistant - Error Handling Utilities
 Standardized error handling utilities for Maggie AI Assistant.
 
 This module provides consistent patterns for error handling, logging,
-and recovery to improve robustness across the application.
+recovery, and event publication to improve robustness across the application.
 """
 
 import sys
 import traceback
 import logging
-from typing import Any, Callable, Optional, TypeVar, Dict
+from typing import Any, Callable, Optional, TypeVar, Dict, Union, List, Tuple, cast
 
 # Type variable for generic function return type
 T = TypeVar('T')
@@ -25,7 +25,7 @@ def safe_execute(func: Callable[..., T],
                  default_return: Optional[T] = None,
                  error_message: str = "Error executing function",
                  critical: bool = False,
-                 event_bus=None,
+                 event_bus: Any = None,
                  **kwargs: Any) -> T:
     """
     Execute a function with standardized error handling.
@@ -46,7 +46,7 @@ def safe_execute(func: Callable[..., T],
     critical : bool, optional
         Whether this is a critical operation where errors should be elevated,
         by default False
-    event_bus : EventBus, optional
+    event_bus : Any, optional
         Event bus to publish errors to, by default None
     **kwargs : Any
         Keyword arguments to pass to the function
@@ -64,10 +64,21 @@ def safe_execute(func: Callable[..., T],
     
     Examples
     --------
+    >>> # Simple usage
     >>> result = safe_execute(
     ...     complex_function, arg1, arg2, 
     ...     default_return=[], 
     ...     error_message="Error in data processing"
+    ... )
+    >>> 
+    >>> # With event bus publication
+    >>> from maggie.utils.service_locator import ServiceLocator
+    >>> event_bus = ServiceLocator.get("event_bus")
+    >>> result = safe_execute(
+    ...     api_call, payload,
+    ...     default_return={"status": "error"},
+    ...     error_message="API call failed",
+    ...     event_bus=event_bus
     ... )
     """
     try:
@@ -78,34 +89,44 @@ def safe_execute(func: Callable[..., T],
         
         # Extract source file and line number
         tb = traceback.extract_tb(exc_traceback)
-        filename, line, func_name, text = tb[-1]
-        
-        # Log the error with context
-        error_detail = f"{error_message}: {e} in {filename}:{line} (function: {func_name})"
-        
-        if critical:
-            logger.critical(error_detail)
+        if tb:
+            filename, line, func_name, text = tb[-1]
+            
+            # Log the error with context
+            error_detail = f"{error_message}: {e} in {filename}:{line} (function: {func_name})"
+            
+            if critical:
+                logger.critical(error_detail)
+            else:
+                logger.error(error_detail)
+            
+            # Publish error event if event bus provided
+            if event_bus:
+                error_data = {
+                    "message": str(e),
+                    "source": filename,
+                    "line": line,
+                    "function": func_name,
+                    "type": exc_type.__name__,
+                    "context": error_message
+                }
+                try:
+                    event_bus.publish("error_logged", error_data)
+                except Exception as event_error:
+                    logger.error(f"Failed to publish error event: {event_error}")
         else:
-            logger.error(error_detail)
+            # Simplified error logging if stack trace unavailable
+            if critical:
+                logger.critical(f"{error_message}: {e}")
+            else:
+                logger.error(f"{error_message}: {e}")
         
-        # Publish error event if event bus provided
-        if event_bus:
-            error_data = {
-                "message": str(e),
-                "source": filename,
-                "line": line,
-                "function": func_name,
-                "type": exc_type.__name__,
-                "context": error_message
-            }
-            event_bus.publish("error_logged", error_data)
-        
-        return default_return
+        return default_return if default_return is not None else cast(T, None)
 
 def retry_operation(max_attempts: int = 3, 
                    retry_delay: float = 1.0,
                    exponential_backoff: bool = True,
-                   allowed_exceptions: tuple = (Exception,)) -> Callable:
+                   allowed_exceptions: Tuple[Exception, ...] = (Exception,)) -> Callable:
     """
     Decorator for retrying operations that may fail temporarily.
     
@@ -117,7 +138,7 @@ def retry_operation(max_attempts: int = 3,
         Base delay between retries in seconds, by default 1.0
     exponential_backoff : bool, optional
         Whether to use exponential backoff for delays, by default True
-    allowed_exceptions : tuple, optional
+    allowed_exceptions : Tuple[Exception, ...], optional
         Exception types to catch and retry, by default (Exception,)
         
     Returns
@@ -132,17 +153,26 @@ def retry_operation(max_attempts: int = 3,
     
     Examples
     --------
-    >>> @retry_operation(max_attempts=3)
-    >>> def download_model(url):
+    >>> @retry_operation(max_attempts=3, retry_delay=2.0)
+    >>> def download_model(url: str) -> bytes:
     ...     # Function that might fail temporarily
-    ...     return requests.get(url)
+    ...     return requests.get(url).content
+    >>>
+    >>> @retry_operation(
+    ...     max_attempts=5,
+    ...     exponential_backoff=True,
+    ...     allowed_exceptions=(ConnectionError, TimeoutError)
+    ... )
+    >>> def api_request(endpoint: str, data: Dict[str, Any]) -> Dict[str, Any]:
+    ...     response = requests.post(endpoint, json=data, timeout=10)
+    ...     response.raise_for_status()
+    ...     return response.json()
     """
-    def decorator(func):
-        def wrapper(*args, **kwargs):
-            attempt = 1
+    def decorator(func: Callable) -> Callable:
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
             last_exception = None
             
-            while attempt <= max_attempts:
+            for attempt in range(1, max_attempts + 1):
                 try:
                     return func(*args, **kwargs)
                 except allowed_exceptions as e:
@@ -165,7 +195,45 @@ def retry_operation(max_attempts: int = 3,
                     
                     import time
                     time.sleep(delay)
-                    attempt += 1
-                    
+            
+            # This should never happen, but just in case
+            if last_exception:
+                raise last_exception
+            return None
+                
         return wrapper
     return decorator
+
+def get_event_bus() -> Optional[Any]:
+    """
+    Get the event bus from ServiceLocator.
+    
+    This utility function provides a convenient way to get the event bus
+    for error reporting from anywhere in the codebase.
+    
+    Returns
+    -------
+    Optional[Any]
+        Event bus instance or None if not available
+        
+    Notes
+    -----
+    This function uses the ServiceLocator pattern to find the event bus
+    instance, avoiding circular imports by importing the ServiceLocator
+    only when the function is called.
+    
+    Examples
+    --------
+    >>> event_bus = get_event_bus()
+    >>> if event_bus:
+    ...     event_bus.publish("error_logged", {"message": "Something went wrong"})
+    """
+    try:
+        from maggie.utils.service_locator import ServiceLocator
+        return ServiceLocator.get("event_bus")
+    except ImportError:
+        logger.warning("ServiceLocator not available, can't get event_bus")
+        return None
+    except Exception as e:
+        logger.error(f"Error getting event_bus: {e}")
+        return None
