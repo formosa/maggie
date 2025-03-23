@@ -15,14 +15,13 @@ import numpy as np
 from typing import Dict, Tuple, Optional, List
 
 # Import whisper_streaming package
-from whisper_streaming import (
+from maggie.utils.stt.whisper_streaming import (
     asr_factory, Connection, ServerProcessor, set_logging, add_shared_args
 )
 
 class TranscriptionServer:
     """
     Asynchronous server for real-time speech transcription using whisper_streaming.
-    
     
     This class manages client connections and processes audio streams to generate
     transcriptions in real-time, with results classified as 'partial' or 'final'.

@@ -17,13 +17,12 @@ from typing import Dict, List, Optional, Tuple, Any
 
 import numpy as np
 import pyaudio
-from whisper_streaming import receive_one_line, send_one_line
+from maggie.utils.stt.whisper_streaming import receive_one_line, send_one_line
 
 class TranscriptionClient:
     """
     Client for capturing audio from a microphone and streaming it to a 
     transcription server for real-time processing.
-    
     
     Parameters
     ----------
