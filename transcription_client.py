@@ -24,6 +24,7 @@ class TranscriptionClient:
     Client for capturing audio from a microphone and streaming it to a 
     transcription server for real-time processing.
     
+    
     Parameters
     ----------
     host : str

@@ -23,6 +23,7 @@ class TranscriptionServer:
     """
     Asynchronous server for real-time speech transcription using whisper_streaming.
     
+    
     This class manages client connections and processes audio streams to generate
     transcriptions in real-time, with results classified as 'partial' or 'final'.
     

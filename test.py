@@ -24,6 +24,7 @@ class WhisperStreamingApp:
     """
     Main application class for the whisper_streaming example.
     
+    
     This class provides methods to start and manage the transcription server
     and client components, either individually or together.
     
