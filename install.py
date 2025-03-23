@@ -1572,7 +1572,7 @@ class MaggieInstaller:
         Returns
         -------
         bool
-            True if download successful, False otherwise
+            True if model is available or download successful, False otherwise
             
         Notes
         -----
@@ -1580,14 +1580,26 @@ class MaggieInstaller:
         a good balance between accuracy and resource requirements. It's well-suited for
         the RTX 3080 hardware and provides fast inference even without quantization.
         The model requires approximately 500MB of storage space.
+        
+        This method first checks if the model is already available before attempting
+        to download it, verifying the presence of essential model files to ensure
+        the download is complete and valid.
         """
         # Define model directory path
         model_dir = os.path.join(self.base_dir, "maggie", "models", "stt", "whisper-base.en")
         
-        # Check if model directory already exists and contains files
-        if os.path.exists(model_dir) and os.listdir(model_dir):
-            self.color.print("Whisper base.en model already exists", "green")
-            return True
+        # Essential files that should be present in a complete Whisper model
+        essential_files = ['model.bin', 'config.json', 'tokenizer.json', 'vocab.json']
+        
+        # Check if model directory already exists and contains all essential files
+        if os.path.exists(model_dir):
+            files_in_dir = os.listdir(model_dir)
+            if all(essential_file in files_in_dir for essential_file in essential_files):
+                self.color.print("Whisper base.en model is already available", "green")
+                return True
+            else:
+                self.color.print("Whisper model directory exists but appears incomplete", "yellow")
+                self.color.print("Will attempt to download/update the model", "yellow")
         
         # Create model directory
         os.makedirs(model_dir, exist_ok=True)
@@ -1599,7 +1611,34 @@ class MaggieInstaller:
                 python_cmd, "-m", "pip", "install", "huggingface_hub"
             ])
             
-            # Use huggingface_hub to download model files
+            # First check if the model can be accessed without downloading
+            check_script = f"""
+import os
+from huggingface_hub import HfApi
+
+try:
+    api = HfApi()
+    # Check if the model repository exists and is accessible
+    if api.repo_exists(repo_id="openai/whisper-base.en", repo_type="model"):
+        print("Model repository is accessible")
+    else:
+        print("Model repository is not accessible")
+        exit(1)
+except Exception as e:
+    print(f"Error checking model accessibility: {{e}}")
+    exit(1)
+"""
+            # Run the check script
+            check_code, check_stdout, check_stderr = self._run_command([
+                python_cmd, "-c", check_script
+            ])
+            
+            if check_code != 0:
+                self.color.print("Cannot access Whisper model repository", "red")
+                self.color.print(f"Error: {check_stderr}", "red")
+                return False
+            
+            # Proceed with download
             self.color.print("Downloading Whisper base.en model from Hugging Face (this may take a while)...", "cyan")
             
             # Python script to download the model
@@ -1629,8 +1668,17 @@ except Exception as e:
                 self.color.print(f"Error downloading Whisper model: {stderr}", "red")
                 return False
             
-            self.color.print("Whisper base.en model downloaded successfully", "green")
-            return True
+            # Verify download success by checking for essential files
+            files_in_dir = os.listdir(model_dir)
+            if all(essential_file in files_in_dir for essential_file in essential_files):
+                self.color.print("Whisper base.en model downloaded and verified successfully", "green")
+                return True
+            else:
+                self.color.print("Whisper model download appears incomplete", "yellow")
+                self.color.print("Missing files: " + 
+                                ", ".join([f for f in essential_files if f not in files_in_dir]), 
+                                "yellow")
+                return False
         
         except Exception as e:
             self.color.print(f"Error downloading Whisper model: {e}", "red")
@@ -1647,33 +1695,66 @@ except Exception as e:
         Returns
         -------
         bool
-            True if download successful, False otherwise
+            True if model is available or download successful, False otherwise
 
         Notes
         -----
         Downloads the af_heart.pt file from Hugging Face and places it in the
         maggie/models/tts/ directory as specified in the directory structure.
         This voice model is used by the TTS component for speech synthesis.
+        
+        This method first checks if the model file already exists and has the expected
+        file size before attempting to download it again, preventing unnecessary downloads.
         """
         model_dir = os.path.join(self.base_dir, "maggie", "models", "tts")
         model_path = os.path.join(model_dir, "af_heart.pt")
 
-        # Check if model file already exists
+        # Expected file size range for a valid model (in bytes)
+        # af_heart.pt is approximately 41-42 MB
+        MIN_SIZE = 41 * 1024 * 1024  # 41 MB
+        MAX_SIZE = 43 * 1024 * 1024  # 43 MB
+
+        # Check if model file already exists and has valid size
         if os.path.exists(model_path):
-            self.color.print("af_heart voice model file already exists", "green")
-            return True
+            file_size = os.path.getsize(model_path)
+            if MIN_SIZE <= file_size <= MAX_SIZE:
+                self.color.print(f"af_heart voice model file already exists ({file_size / (1024*1024):.2f} MB)", "green")
+                return True
+            else:
+                self.color.print(f"af_heart voice model exists but has unexpected size: {file_size / (1024*1024):.2f} MB", "yellow")
+                self.color.print("Will attempt to download the model again", "yellow")
+        
+        # Create directory if needed
+        os.makedirs(model_dir, exist_ok=True)
         
         # URL for af_heart model file
         model_url = "https://huggingface.co/hexgrad/Kokoro-82M/resolve/main/voices/af_heart.pt"
         
-        # Download model file (directory is created by _download_file)
+        # First check if the URL is accessible
+        try:
+            with urllib.request.urlopen(urllib.request.Request(model_url, method='HEAD')) as response:
+                if response.getcode() != 200:
+                    self.color.print(f"Cannot access af_heart model URL (status code: {response.getcode()})", "red")
+                    return False
+        except Exception as e:
+            self.color.print(f"Error accessing af_heart model URL: {e}", "red")
+            return False
+            
+        # Download model file
         self.color.print("Downloading af_heart voice model...", "cyan")
         if not self._download_file(model_url, model_path):
             self.color.print("Failed to download af_heart voice model", "red")
             return False
-                
-        self.color.print("af_heart voice model downloaded successfully", "green")
-        return True
+            
+        # Verify downloaded file size
+        file_size = os.path.getsize(model_path)
+        if MIN_SIZE <= file_size <= MAX_SIZE:
+            self.color.print(f"af_heart voice model downloaded successfully ({file_size / (1024*1024):.2f} MB)", "green")
+            return True
+        else:
+            self.color.print(f"Downloaded af_heart model has unexpected size: {file_size / (1024*1024):.2f} MB", "yellow")
+            self.color.print("Model may be incomplete or corrupted", "yellow")
+            return False
     
     def _download_mistral_model(self) -> bool:
         """
@@ -1686,7 +1767,8 @@ except Exception as e:
         Returns
         -------
         bool
-            True if download successful or user opts to continue, False otherwise
+            True if model is available, download successful, or user opts to continue, 
+            False otherwise
 
         Notes
         -----
@@ -1694,6 +1776,9 @@ except Exception as e:
         maggie/models/llm/mistral-7b-instruct-v0.3-GPTQ-4bit/ directory using Git, if available.
         This model requires approximately 5GB of storage space and is used for
         natural language processing and generation tasks.
+        
+        This method first verifies if the model is already available by checking for
+        essential files like model configuration, tokenizer, and quantized model files.
         """
         if self.skip_models:
             self.color.print("Skipping Mistral model download (--skip-models)", "yellow")
@@ -1701,10 +1786,49 @@ except Exception as e:
         
         mistral_dir = os.path.join(self.base_dir, "maggie", "models", "llm", "mistral-7b-instruct-v0.3-GPTQ-4bit")
         
-        # Check if model directory already exists and is not empty
+        # Essential files that should be present in a complete Mistral GPTQ model
+        essential_files = [
+            'config.json', 
+            'tokenizer.json', 
+            'tokenizer_config.json',
+            'quantize_config.json',
+            'special_tokens_map.json'
+        ]
+        essential_patterns = [
+            # Check for at least one .safetensors file
+            lambda files: any(file.endswith('.safetensors') for file in files)
+        ]
+        
+        # Check if model directory already exists and contains necessary files
         if os.path.exists(mistral_dir) and os.listdir(mistral_dir):
-            self.color.print("Mistral model directory already exists", "green")
-            return True
+            # Check the contents to see if the model appears complete
+            files_in_dir = os.listdir(mistral_dir)
+            
+            # Check for essential files
+            missing_files = [f for f in essential_files if f not in files_in_dir]
+            
+            # Check for patterns (like .safetensors files)
+            failed_patterns = [i for i, pattern_check in enumerate(essential_patterns) 
+                              if not pattern_check(files_in_dir)]
+            
+            if not missing_files and not failed_patterns:
+                self.color.print("Mistral model is available and appears complete", "green")
+                return True
+            else:
+                self.color.print("Mistral model directory exists but appears incomplete", "yellow")
+                if missing_files:
+                    self.color.print(f"Missing files: {', '.join(missing_files)}", "yellow")
+                if failed_patterns:
+                    self.color.print("Missing model weight files (.safetensors)", "yellow")
+                
+                # Ask if user wants to try downloading again
+                response = self.color.input(
+                    "Would you like to try downloading the model again? (y/n): ",
+                    color="magenta"
+                )
+                if response.lower() != "y":
+                    self.color.print("Continuing with existing model files", "yellow")
+                    return True
         
         # Create model directory
         os.makedirs(mistral_dir, exist_ok=True)
@@ -1719,17 +1843,63 @@ except Exception as e:
                 self.color.print("Skipping Mistral model download", "yellow")
                 return True
         
-        # Download model using Git if available
+        # Check Git repository accessibility before attempting to clone
         if self.has_git:
+            # First check if the repo is accessible
+            check_cmd = ["git", "ls-remote", "https://huggingface.co/neuralmagic/Mistral-7B-Instruct-v0.3-GPTQ-4bit"]
+            returncode, _, stderr = self._run_command(check_cmd, check=False)
+            
+            if returncode != 0:
+                self.color.print("Cannot access Mistral model repository", "red")
+                self.color.print(f"Error: {stderr}", "red")
+                
+                # Offer to continue without model
+                response = self.color.input(
+                    "Continue installation without Mistral model? (y/n): ",
+                    color="magenta"
+                )
+                return response.lower() == "y"
+            
+            # Repository is accessible, proceed with download
             self.color.print("Downloading Mistral 7B model using Git (this may take a while)...", "cyan")
+            
+            # Remove existing directory contents if it exists and has files
+            if os.path.exists(mistral_dir) and os.listdir(mistral_dir):
+                try:
+                    for item in os.listdir(mistral_dir):
+                        item_path = os.path.join(mistral_dir, item)
+                        if os.path.isfile(item_path):
+                            os.remove(item_path)
+                        elif os.path.isdir(item_path):
+                            shutil.rmtree(item_path)
+                except Exception as e:
+                    self.color.print(f"Error cleaning existing model directory: {e}", "red")
+                    return False
+            
+            # Clone the repository
             returncode, _, _ = self._run_command([
                 "git", "clone", "https://huggingface.co/neuralmagic/Mistral-7B-Instruct-v0.3-GPTQ-4bit",
                 mistral_dir
             ], capture_output=False)
             
             if returncode == 0:
-                self.color.print("Mistral model downloaded successfully", "green")
-                return True
+                # Verify the downloaded model
+                files_in_dir = os.listdir(mistral_dir)
+                missing_files = [f for f in essential_files if f not in files_in_dir]
+                failed_patterns = [i for i, pattern_check in enumerate(essential_patterns) 
+                                 if not pattern_check(files_in_dir)]
+                
+                if not missing_files and not failed_patterns:
+                    self.color.print("Mistral model downloaded and verified successfully", "green")
+                    return True
+                else:
+                    self.color.print("Mistral model download appears incomplete", "yellow")
+                    # Offer to continue with potentially incomplete model
+                    response = self.color.input(
+                        "Continue with potentially incomplete model? (y/n): ",
+                        color="magenta"
+                    )
+                    return response.lower() == "y"
             else:
                 self.color.print("Error downloading Mistral model with Git", "red")
                 self.color.print("LLM functionality will be limited", "yellow")
