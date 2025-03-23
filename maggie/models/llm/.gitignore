@@ -1,5 +1,0 @@
-# File: maggie\models\llm\.gitignore
-# Ignore everything in this directory
-*
-# Except for this file
-!.gitignore
