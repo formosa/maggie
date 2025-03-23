@@ -32,16 +32,14 @@ Examples
 
 # Standard library imports
 import argparse
-import sys
 import os
-import threading
 import queue
+import threading
 import time
-from enum import Enum, auto
-from typing import Dict, Any, Optional, List, Callable, Tuple
-from dataclasses import dataclass
 from concurrent.futures import ThreadPoolExecutor
-
+from dataclasses import dataclass
+from enum import Enum, auto
+from typing import Any, Callable, Dict, List, Optional, Tuple
 # Third-party imports
 from loguru import logger
 
@@ -546,12 +544,43 @@ class MaggieAI:
         Register event handlers for the event bus.
         
         Sets up handlers for wake word detection, commands, inactivity timeout,
-        and extension completion events.
+        extension completion events, and error events with appropriate priorities.
+        
+        Returns
+        -------
+        None
+        
+        Notes
+        -----
+        Handlers are registered with priority levels to ensure critical events
+        (like wake word detection) are processed before less critical ones.
         """
-        self.event_bus.subscribe("wake_word_detected", self._handle_wake_word)
-        self.event_bus.subscribe("command_detected", self._handle_command)
-        self.event_bus.subscribe("inactivity_timeout", self._handle_timeout)
-        self.event_bus.subscribe("extension_completed", self._handle_extension_completed)
+        # Define event handlers with their priorities
+        event_handlers = [
+            # Critical events (priority 0)
+            ("wake_word_detected", self._handle_wake_word, 0),
+            ("error_logged", self._handle_error, 0),
+            
+            # Command events (priority 10)
+            ("command_detected", self._handle_command, 10),
+            
+            # Timeout events (priority 20)
+            ("inactivity_timeout", self._handle_timeout, 20),
+            
+            # Extension events (priority 30)
+            ("extension_completed", self._handle_extension_completed, 30),
+            ("extension_error", self._handle_extension_error, 30),
+            
+            # Resource events (priority 40)
+            ("low_memory_warning", self._handle_low_memory, 40),
+            ("gpu_memory_warning", self._handle_gpu_memory_warning, 40),
+        ]
+        
+        # Register all handlers with their priorities
+        for event_type, handler, priority in event_handlers:
+            self.event_bus.subscribe(event_type, handler, priority=priority)
+            
+        logger.debug(f"Registered {len(event_handlers)} event handlers")
         
     def initialize_components(self) -> bool:
         """
