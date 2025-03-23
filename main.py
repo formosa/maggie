@@ -1605,7 +1605,7 @@ def main() -> int:
        - Handles flags for debug, verify, create-template, optimize, headless
     
     2. Directory Setup:
-       - Ensures core directories (logs) exist
+       - Ensures 'logs' directory exist
     
     3. Logging Configuration:
        - Sets up logging with appropriate levels (debug or info)

@@ -1,5 +1,5 @@
 """
-Maggie AI Assistant - Comprehensive Installation Script
+Maggie AI Assistant - Installation Script
 ======================================================
 
 Complete installation system for Maggie AI Assistant, optimized for
