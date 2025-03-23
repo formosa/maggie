@@ -1605,7 +1605,7 @@ def main() -> int:
        - Handles flags for debug, verify, create-template, optimize, headless
     
     2. Directory Setup:
-       - Ensures core directories (logs, models) exist
+       - Ensures core directories (logs) exist
     
     3. Logging Configuration:
        - Sets up logging with appropriate levels (debug or info)
@@ -1644,7 +1644,6 @@ def main() -> int:
     
     # Ensure necessary directories exist
     os.makedirs("logs", exist_ok=True)
-    os.makedirs("models", exist_ok=True)
     
     # Set up logging
     setup_logging(args.debug)
