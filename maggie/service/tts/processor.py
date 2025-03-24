@@ -68,7 +68,7 @@ class TTSProcessor:
                 error_msg = f"TTS voice model not found: {voice_path}"
                 logger.error(error_msg)
                 try:
-                    from maggie.service.service_locator import ServiceLocator
+                    from maggie.service.locator import ServiceLocator
                     event_bus = ServiceLocator.get('event_bus')
                     if event_bus:
                         event_bus.publish('error_logged', {
@@ -111,7 +111,7 @@ class TTSProcessor:
                 error_msg = f"TTS voice model not found: {voice_path}"
                 logger.error(error_msg)
                 try:
-                    from maggie.service.service_locator import ServiceLocator
+                    from maggie.service.locator import ServiceLocator
                     event_bus = ServiceLocator.get('event_bus')
                     if event_bus:
                         event_bus.publish('error_logged', {

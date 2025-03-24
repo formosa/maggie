@@ -42,7 +42,7 @@ class STTProcessor:
     def speak(self, text: str) -> bool:
         try:
             if self.tts_processor is None:
-                from maggie.service.service_locator import ServiceLocator
+                from maggie.service.locator import ServiceLocator
                 self.tts_processor = ServiceLocator.get('tts_processor')
                 if self.tts_processor is None:
                     logger.error('TTS processor not found in ServiceLocator')

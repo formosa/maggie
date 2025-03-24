@@ -51,13 +51,13 @@ class MainWindow(QMainWindow):
 		self.safe_update_gui(self.input_field.set_final_text, text)
     
 	def _on_pause_transcription(self, _ = None) -> None:
-		from maggie.service.service_locator import ServiceLocator
+		from maggie.service.locator import ServiceLocator
 		stt_processor = ServiceLocator.get('stt_processor')
 		if stt_processor:
 			stt_processor.pause_streaming()
     
 	def _on_resume_transcription(self, _ = None) -> None:
-		from maggie.service.service_locator import ServiceLocator
+		from maggie.service.locator import ServiceLocator
 		stt_processor = ServiceLocator.get('stt_processor')
 		if stt_processor:
 			stt_processor.resume_streaming()

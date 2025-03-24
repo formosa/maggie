@@ -66,7 +66,7 @@ class MaggieAI:
 		logger.debug(f"Registered {len(event_handlers)} event handlers")
 	def initialize_components(self) -> bool:
 			try:
-				from maggie.service.service_locator import ServiceLocator
+				from maggie.service.locator import ServiceLocator
 				ServiceLocator.register('event_bus', self.event_bus)
 				ServiceLocator.register('resource_manager', self.resource_manager)
 				

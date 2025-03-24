@@ -318,7 +318,7 @@ class ExtensionBase(ABC):
             Service instance if found, None otherwise
         """
         try:
-            from maggie.service.service_locator import ServiceLocator
+            from maggie.service.locator import ServiceLocator
             return ServiceLocator.get(name)
         except ImportError:
             logger.error("Service locator not available")

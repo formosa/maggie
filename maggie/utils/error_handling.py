@@ -56,7 +56,7 @@ def retry_operation(max_attempts:int=3,retry_delay:float=1.,exponential_backoff:
 	return decorator
 def get_event_bus() -> Optional[Any]:
     try:
-        from maggie.service.service_locator import ServiceLocator
+        from maggie.service.locator import ServiceLocator
         return ServiceLocator.get('event_bus')
     except ImportError:
         logger.warning("ServiceLocator not available, can't get event_bus")
