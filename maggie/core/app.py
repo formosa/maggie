@@ -5,7 +5,7 @@ from enum import Enum,auto
 from typing import Any,Callable,Dict,List,Optional,Set,Tuple,Union,cast
 from loguru import logger
 from maggie.utils.error_handling import safe_execute,ErrorCategory,ErrorSeverity
-from maggie.utils.resource_management import ResourceManager
+from maggie.utils.resource.manager import ResourceManager
 __all__=['State','StateTransition','EventBus','MaggieAI']
 class State(Enum):IDLE=auto();READY=auto();ACTIVE=auto();CLEANUP=auto();SHUTDOWN=auto()
 @dataclass
