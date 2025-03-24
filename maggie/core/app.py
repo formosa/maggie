@@ -96,6 +96,18 @@ class MaggieAI(EventEmitter, EventListener):
         
         self.logger.info('MaggieAI instance created')
     
+    @property
+    def state(self) -> State:
+        """
+        Get the current state from the state manager.
+        
+        Returns
+        -------
+        State
+            The current state of the assistant
+        """
+        return self.state_manager.get_current_state()
+    
     def _register_state_handlers(self) -> None:
         """Register state entry and exit handlers with the state manager."""
         # Register entry handlers
@@ -934,3 +946,21 @@ class MaggieAI(EventEmitter, EventListener):
                 self.gui.safe_update_gui(self.gui.log_event, data)
             elif event_type == 'error_log':
                 self.gui.safe_update_gui(self.gui.log_error, data)
+                
+    def _transition_to(self, state: State, trigger: str) -> bool:
+        """
+        Helper method to transition to a new state.
+        
+        Parameters
+        ----------
+        state : State
+            The state to transition to
+        trigger : str
+            The trigger for the transition
+            
+        Returns
+        -------
+        bool
+            True if transition was successful
+        """
+        return self.state_manager.transition_to(state, trigger)
