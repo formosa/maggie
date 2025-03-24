@@ -1,7 +1,7 @@
 import os,sys,importlib,importlib.util,pkgutil
 from typing import Dict,Type,Any,Optional,List,Tuple,cast
 from maggie.extensions.base import ExtensionBase
-from maggie.utils.error_handling import safe_execute,with_error_handling,ErrorCategory,ErrorSeverity
+from maggie.utils.error_handling import safe_execute,with_error_handling,ErrorCategory,ErrorSeverity,record_error
 from maggie.utils.logging import ComponentLogger,log_operation,logging_context
 class ExtensionRegistry:
 	def __init__(self,extensions_path:Optional[str]=None):
@@ -46,3 +46,12 @@ class ExtensionRegistry:
 		try:extension_instance=extension_class(event_bus,config);self.logger.info(f"Instantiated extension: {extension_name}");return extension_instance
 		except Exception as e:self.logger.error(f"Error instantiating extension {extension_name}: {e}");self._publish_extension_error(extension_name,str(e));return None
 	def get_available_extensions(self)->List[str]:return list(self._registry.keys())
+	@log_operation(component='ExtensionRegistry')
+	@with_error_handling(error_category=ErrorCategory.EXTENSION,error_severity=ErrorSeverity.WARNING)
+	def reload_extension(self,extension_name:str)->bool:
+		if extension_name not in self._registry:self.logger.warning(f"Cannot reload unknown extension: {extension_name}");return False
+		try:
+			module_name=f"{extension_name}.{extension_name}"
+			if module_name in sys.modules:module=sys.modules[module_name];importlib.reload(module);self._extract_extension_classes(module,extension_name);self.logger.info(f"Reloaded extension: {extension_name}");return True
+			else:self.logger.warning(f"Extension module {module_name} not loaded, cannot reload");return False
+		except Exception as e:self.logger.error(f"Error reloading extension {extension_name}: {e}");self._publish_extension_error(extension_name,f"Failed to reload: {e}");return False
