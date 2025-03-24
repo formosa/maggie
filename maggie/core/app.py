@@ -25,6 +25,7 @@ from maggie.utils.error_handling import (
 )
 from maggie.utils.logging import ComponentLogger, log_operation, logging_context
 from maggie.utils.resource.manager import ResourceManager
+from maggie.utils.config.manager import ConfigManager
 
 # Import enhanced state and event management
 from maggie.core.state import State, StateTransition, StateManager
