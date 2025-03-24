@@ -6,12 +6,13 @@ import docx
 from maggie.extensions.base import ExtensionBase
 from maggie.utils.error_handling import safe_execute,retry_operation,ErrorCategory,ErrorSeverity,with_error_handling,record_error,ExtensionError
 from maggie.utils.logging import ComponentLogger,log_operation,logging_context
+from maggie.service.locator import ServiceLocator
 __all__=['RecipeState','RecipeData','RecipeCreator']
 class RecipeState(Enum):INITIAL=auto();NAME_INPUT=auto();DESCRIPTION=auto();PROCESSING=auto();CREATING=auto();COMPLETED=auto();CANCELLED=auto();ERROR=auto()
 @dataclass
 class RecipeData:name:str='';description:str='';ingredients:List[str]=field(default_factory=list);steps:List[str]=field(default_factory=list);notes:str=''
 class RecipeCreator(ExtensionBase):
-	def __init__(self,event_bus,config:Dict[str,Any]):super().__init__(event_bus,config);self.state=RecipeState.INITIAL;self.recipe_data=RecipeData();self.output_dir=config.get('output_dir','recipes');self.template_path=config.get('template_path','templates/recipe_template.docx');self._workflow_thread=None;self.stt_processor=None;self.llm_processor=None;self.tts_processor=None;self._retry_count=0;self._max_retries=config.get('max_retries',3);self.speech_timeout=config.get('speech_timeout',3e1);self.logger=ComponentLogger('RecipeCreator');self._ensure_directories()
+	def __init__(self,event_bus,config:Dict[str,Any]):super().__init__(event_bus,config);self.state=RecipeState.INITIAL;self.recipe_data=RecipeData();self.output_dir=config.get('output_dir','recipes');self.template_path=config.get('template_path','templates/recipe_template.docx');self._retry_count=0;self._max_retries=config.get('max_retries',3);self.speech_timeout=config.get('speech_timeout',3e1);self._workflow_thread=None;self.stt_processor=None;self.llm_processor=None;self.tts_processor=None;self.logger=ComponentLogger('RecipeCreator');self._ensure_directories()
 	def _ensure_directories(self)->None:
 		try:
 			os.makedirs(self.output_dir,exist_ok=True);os.makedirs(os.path.dirname(self.template_path),exist_ok=True)
