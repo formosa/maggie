@@ -40,7 +40,31 @@ class TTSProcessor:
 						else:self.logger.error('Voice model download failed');return False
 					gpu_options={}
 					if self.gpu_acceleration:gpu_options={'precision':self.gpu_precision,'cuda_graphs':self.config.get('tts',{}).get('cuda_graphs',False),'max_batch_size':self.config.get('tts',{}).get('max_batch_size',16),'mixed_precision':self.config.get('tts',{}).get('mixed_precision',False),'tensor_cores':self.config.get('tts',{}).get('tensor_cores',False)}
-					start_time=time.time();self.kokoro_instance=kokoro.load_tts_model(voice_path,use_cuda=self.gpu_acceleration,sample_rate=self.sample_rate,**gpu_options);load_time=time.time()-start_time;self.logger.log_performance('load_model',load_time,{'model':self.voice_model,'gpu_enabled':self.gpu_acceleration});self.logger.info(f"Initialized Kokoro TTS with voice {self.voice_model} in {load_time:.2f}s")
+					
+					# Updated method to use available kokoro API based on version 0.8.4
+					start_time=time.time()
+					
+					# Try to use load method directly (assuming it's a class or function)
+					if hasattr(kokoro, 'load'):
+						self.kokoro_instance = kokoro.load(voice_path, use_cuda=self.gpu_acceleration, sample_rate=self.sample_rate, **gpu_options)
+					# Try to use the TTS class if it exists
+					elif hasattr(kokoro, 'TTS'):
+						self.kokoro_instance = kokoro.TTS(voice_path, use_cuda=self.gpu_acceleration, sample_rate=self.sample_rate, **gpu_options)
+					# Try to use create_tts method if it exists
+					elif hasattr(kokoro, 'create_tts'):
+						self.kokoro_instance = kokoro.create_tts(voice_path, use_cuda=self.gpu_acceleration, sample_rate=self.sample_rate, **gpu_options)
+					# Try other potential method names
+					elif hasattr(kokoro, 'create_model'):
+						self.kokoro_instance = kokoro.create_model(voice_path, use_cuda=self.gpu_acceleration, sample_rate=self.sample_rate, **gpu_options)
+					# If none of the above methods exist, try import TTSModel directly
+					else:
+						from kokoro import TTSModel
+						self.kokoro_instance = TTSModel(voice_path, use_cuda=self.gpu_acceleration, sample_rate=self.sample_rate, **gpu_options)
+						
+					load_time=time.time()-start_time
+					self.logger.log_performance('load_model',load_time,{'model':self.voice_model,'gpu_enabled':self.gpu_acceleration})
+					self.logger.info(f"Initialized Kokoro TTS with voice {self.voice_model} in {load_time:.2f}s")
+					
 					if self.gpu_acceleration:self._warm_up_model()
 					return True
 				except ImportError as e:self.logger.error(f"Failed to import kokoro: {e}");self.logger.error('Please install with: pip install git+https://github.com/hexgrad/kokoro.git');return False
