@@ -55,6 +55,14 @@ def retry_operation(max_attempts:int=3,retry_delay:float=1.,exponential_backoff:
 		return wrapper
 	return decorator
 def get_event_bus() -> Optional[Any]:
+    """
+    Get the event bus from the service locator.
+    
+    Returns
+    -------
+    Optional[Any]
+        Event bus instance if available, None otherwise
+    """
     try:
         from maggie.service.locator import ServiceLocator
         return ServiceLocator.get('event_bus')
