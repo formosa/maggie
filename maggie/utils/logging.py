@@ -43,7 +43,7 @@ class LoggingManager:
 			if issubclass(exc_type,KeyboardInterrupt):sys.__excepthook__(exc_type,exc_value,exc_traceback);return
 			logger.opt(exception=(exc_type,exc_value,exc_traceback)).critical('Unhandled exception:')
 			try:
-				from maggie.utils.service_locator import ServiceLocator;event_bus=ServiceLocator.get('event_bus')
+				from maggie.service.locator import ServiceLocator;event_bus=ServiceLocator.get('event_bus')
 				if event_bus:error_data={'type':str(exc_type.__name__),'message':str(exc_value),'traceback':''.join(traceback.format_tb(exc_traceback)),'is_unhandled':True};event_bus.publish('error_logged',error_data)
 			except:pass
 		sys.excepthook=global_exception_handler

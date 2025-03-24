@@ -26,7 +26,7 @@ class ResourceMonitor:
 			if self._monitoring_thread:self._monitoring_thread.join(timeout=2.)
 			logger.info('Resource monitoring stopped');return True
 	def _monitor_resources(self,interval:float)->None:
-		try:from maggie.utils.service_locator import ServiceLocator;event_bus=ServiceLocator.get('event_bus')
+		try:from maggie.service.locator import ServiceLocator;event_bus=ServiceLocator.get('event_bus')
 		except ImportError:logger.warning('ServiceLocator not available - event publishing disabled');event_bus=None
 		while self._monitoring_enabled:
 			try:
