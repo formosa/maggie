@@ -29,13 +29,13 @@ def main()->int:
 	args=parse_arguments()
 	try:
 		maggie,config=setup_application(args)
-		if args.create_template:
-			create_recipe_template()
-			if not args.verify:return 0
-		if args.verify:
-			if verify_system():logger.info('System verification successful');return 0
-			else:logger.error('System verification failed');return 1
-		if maggie is None:logger.error('Failed to set up application');return 1
+		# if args.create_template:
+		# 	create_recipe_template()
+		# 	if not args.verify:return 0
+		# if args.verify:
+		# 	if verify_system():logger.info('System verification successful');return 0
+		# 	else:logger.error('System verification failed');return 1
+		# if maggie is None:logger.error('Failed to set up application');return 1
 		return start_maggie(args,maggie,config)
 	except KeyboardInterrupt:logger.info('\nApplication interrupted by user');return 1
 	except Exception as e:logger.critical(f"Unexpected error in main: {e}",exc_info=True);return 1
