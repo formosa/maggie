@@ -39,19 +39,6 @@ class STTProcessor:
         logger.info(f"Enhanced speech processor initialized with model: {self.model_size}, compute type: {self.compute_type}")
         logger.info(f"Streaming mode: {'enabled' if self.use_streaming else 'disabled'}")
     
-    def speak(self, text: str) -> bool:
-        try:
-            if self.tts_processor is None:
-                from maggie.service.locator import ServiceLocator
-                self.tts_processor = ServiceLocator.get('tts_processor')
-                if self.tts_processor is None:
-                    logger.error('TTS processor not found in ServiceLocator')
-                    return False
-            return self.tts_processor.speak(text)
-        except Exception as e:
-            logger.error(f"Error in STTProcessor.speak(): {e}")
-            return False
-    
     def start_listening(self) -> bool:
         with self.lock:
             if self.listening:

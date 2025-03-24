@@ -65,42 +65,42 @@ class MaggieAI:
 		for(event_type,handler,priority)in event_handlers:self.event_bus.subscribe(event_type,handler,priority=priority)
 		logger.debug(f"Registered {len(event_handlers)} event handlers")
 	def initialize_components(self) -> bool:
-			try:
-				from maggie.service.locator import ServiceLocator
-				ServiceLocator.register('event_bus', self.event_bus)
-				ServiceLocator.register('resource_manager', self.resource_manager)
-				
-				from maggie.service.stt.wake_word import WakeWordDetector
-				self.wake_word_detector = WakeWordDetector(self.config.get('stt', {}).get('wake_word', {}))
-				self.wake_word_detector.on_detected = lambda: self.event_bus.publish('wake_word_detected')
-				ServiceLocator.register('wake_word_detector', self.wake_word_detector)
-				
-				from maggie.service.tts.processor import TTSProcessor
-				self.tts_processor = TTSProcessor(self.config.get('tts', {}))
-				ServiceLocator.register('tts_processor', self.tts_processor)
-				
-				from maggie.service.stt.processor import STTProcessor
-				self.stt_processor = STTProcessor(self.config.get('stt', {}))
-				self.stt_processor.tts_processor = self.tts_processor
-				ServiceLocator.register('stt_processor', self.stt_processor)
-				
-				from maggie.service.llm.processor import LLMProcessor
-				self.llm_processor = LLMProcessor(self.config.get('llm', {}))
-				ServiceLocator.register('llm_processor', self.llm_processor)
-				
-				ServiceLocator.register('maggie_ai', self)
-				
-				self._initialize_extensions()
-				self.event_bus.start()
-				
-				logger.info('All components initialized successfully')
-				return True
-			except ImportError as import_error:
-				logger.error(f"Failed to import required module: {import_error}")
-				return False
-			except Exception as e:
-				logger.error(f"Error initializing components: {e}")
-				return False
+		try:
+			from maggie.service.locator import ServiceLocator
+			ServiceLocator.register('event_bus', self.event_bus)
+			ServiceLocator.register('resource_manager', self.resource_manager)
+			
+			from maggie.service.stt.wake_word import WakeWordDetector
+			self.wake_word_detector = WakeWordDetector(self.config.get('stt', {}).get('wake_word', {}))
+			self.wake_word_detector.on_detected = lambda: self.event_bus.publish('wake_word_detected')
+			ServiceLocator.register('wake_word_detector', self.wake_word_detector)
+			
+			from maggie.service.tts.processor import TTSProcessor
+			self.tts_processor = TTSProcessor(self.config.get('tts', {}))
+			ServiceLocator.register('tts_processor', self.tts_processor)
+			
+			from maggie.service.stt.processor import STTProcessor
+			self.stt_processor = STTProcessor(self.config.get('stt', {}))
+			self.stt_processor.tts_processor = self.tts_processor
+			ServiceLocator.register('stt_processor', self.stt_processor)
+			
+			from maggie.service.llm.processor import LLMProcessor
+			self.llm_processor = LLMProcessor(self.config.get('llm', {}))
+			ServiceLocator.register('llm_processor', self.llm_processor)
+			
+			ServiceLocator.register('maggie_ai', self)
+			
+			self._initialize_extensions()
+			self.event_bus.start()
+			
+			logger.info('All components initialized successfully')
+			return True
+		except ImportError as import_error:
+			logger.error(f"Failed to import required module: {import_error}")
+			return False
+		except Exception as e:
+			logger.error(f"Error initializing components: {e}")
+			return False
 	def _initialize_extensions(self)->None:
 		from maggie.extensions.registry import ExtensionRegistry;extensions_config=self.config.get('extensions',{});registry=ExtensionRegistry();available_extensions=registry.discover_extensions();logger.info(f"Discovered {len(available_extensions)} extensions: {', '.join(available_extensions.keys())}")
 		for(extension_name,extension_config)in extensions_config.items():
