@@ -38,15 +38,29 @@ class InputField(QLineEdit):
 			if auto_submit and self.submit_callback and text.strip():self.submit_callback(text);self.clear();self.intermediate_text=''
 class MainWindow(QMainWindow):
 	def __init__(self,maggie_ai):super().__init__();self.maggie_ai=maggie_ai;self.setWindowTitle('Maggie AI Assistant');self.setMinimumSize(900,700);self.is_shutting_down=False;self.central_widget=QWidget();self.setCentralWidget(self.central_widget);self.main_layout=QVBoxLayout(self.central_widget);self.status_bar=QStatusBar();self.setStatusBar(self.status_bar);self.status_label=QLabel('Status: IDLE');self.status_label.setStyleSheet('font-weight: bold;');self.status_bar.addPermanentWidget(self.status_label);self._create_main_layout();self.update_state('IDLE');self.log_event('Maggie AI Assistant UI initialized...');self.maggie_ai.event_bus.subscribe('state_changed',self._on_state_changed);self.maggie_ai.event_bus.subscribe('extension_completed',self._on_extension_completed);self.maggie_ai.event_bus.subscribe('extension_error',self._on_extension_error);self.maggie_ai.event_bus.subscribe('error_logged',self._on_error_logged);self._connect_stt_events();self.setup_shortcuts()
-	def _connect_stt_events(self)->None:self.maggie_ai.event_bus.subscribe('intermediate_transcription',self._on_intermediate_transcription,priority=0);self.maggie_ai.event_bus.subscribe('final_transcription',self._on_final_transcription,priority=0);self.maggie_ai.event_bus.subscribe('pause_transcription',self._on_pause_transcription);self.maggie_ai.event_bus.subscribe('resume_transcription',self._on_resume_transcription)
-	def _on_intermediate_transcription(self,text:str)->None:self.safe_update_gui(self.input_field.update_intermediate_text,text)
-	def _on_final_transcription(self,text:str)->None:self.safe_update_gui(self.input_field.set_final_text,text)
-	def _on_pause_transcription(self,_=None)->None:
-		from maggie.utils.service_locator import ServiceLocator;stt_processor=ServiceLocator.get('stt_processor')
-		if stt_processor:stt_processor.pause_streaming()
-	def _on_resume_transcription(self,_=None)->None:
-		from maggie.utils.service_locator import ServiceLocator;stt_processor=ServiceLocator.get('stt_processor')
-		if stt_processor:stt_processor.resume_streaming()
+	def _connect_stt_events(self) -> None:
+		self.maggie_ai.event_bus.subscribe('intermediate_transcription', self._on_intermediate_transcription, priority=0)
+		self.maggie_ai.event_bus.subscribe('final_transcription', self._on_final_transcription, priority=0)
+		self.maggie_ai.event_bus.subscribe('pause_transcription', self._on_pause_transcription)
+		self.maggie_ai.event_bus.subscribe('resume_transcription', self._on_resume_transcription)
+    
+	def _on_intermediate_transcription(self, text: str) -> None:
+		self.safe_update_gui(self.input_field.update_intermediate_text, text)
+    
+	def _on_final_transcription(self, text: str) -> None:
+		self.safe_update_gui(self.input_field.set_final_text, text)
+    
+	def _on_pause_transcription(self, _ = None) -> None:
+		from maggie.service.service_locator import ServiceLocator
+		stt_processor = ServiceLocator.get('stt_processor')
+		if stt_processor:
+			stt_processor.pause_streaming()
+    
+	def _on_resume_transcription(self, _ = None) -> None:
+		from maggie.service.service_locator import ServiceLocator
+		stt_processor = ServiceLocator.get('stt_processor')
+		if stt_processor:
+			stt_processor.resume_streaming()
 	def _create_main_layout(self)->None:self.content_splitter=QSplitter(Qt.Orientation.Horizontal);self.main_layout.addWidget(self.content_splitter);self.left_panel=QWidget();self.left_layout=QVBoxLayout(self.left_panel);self.content_splitter.addWidget(self.left_panel);self.right_panel=QWidget();self.right_layout=QVBoxLayout(self.right_panel);self.content_splitter.addWidget(self.right_panel);self.content_splitter.setSizes([700,200]);self._create_log_sections();self._create_right_panel();self._create_control_panel()
 	def _create_log_sections(self)->None:self.logs_splitter=QSplitter(Qt.Orientation.Vertical);self.left_layout.addWidget(self.logs_splitter);self.chat_section=QWidget();self.chat_layout=QVBoxLayout(self.chat_section);self.chat_layout.setContentsMargins(0,0,0,0);self.chat_group=QGroupBox('Chat');self.chat_group_layout=QVBoxLayout(self.chat_group);self.chat_log=QTextEdit();self.chat_log.setReadOnly(True);self.chat_group_layout.addWidget(self.chat_log);self.chat_layout.addWidget(self.chat_group);self.input_field=InputField(submit_callback=self._on_input_submitted);self.input_field.setFixedHeight(30);self.input_field.update_appearance_for_state('IDLE');self.input_field.state_change_requested.connect(self._on_input_state_change);self.chat_layout.addWidget(self.input_field);self.event_group=QGroupBox('Event Log');self.event_group_layout=QVBoxLayout(self.event_group);self.event_log=QTextEdit();self.event_log.setReadOnly(True);self.event_group_layout.addWidget(self.event_log);self.error_group=QGroupBox('Error Log');self.error_group_layout=QVBoxLayout(self.error_group);self.error_log=QTextEdit();self.error_log.setReadOnly(True);self.error_group_layout.addWidget(self.error_log);self.logs_splitter.addWidget(self.chat_section);self.logs_splitter.addWidget(self.event_group);self.logs_splitter.addWidget(self.error_group);self.logs_splitter.setSizes([400,150,150])
 	def _create_right_panel(self)->None:self.state_group=QGroupBox('Current State');self.state_layout=QVBoxLayout(self.state_group);self.state_display=QLabel('IDLE');self.state_display.setAlignment(Qt.AlignmentFlag.AlignCenter);self.state_display.setStyleSheet('font-size: 18px; font-weight: bold;');self.state_layout.addWidget(self.state_display);self.right_layout.addWidget(self.state_group);self.extensions_group=QGroupBox('Extensions');self.extensions_layout=QVBoxLayout(self.extensions_group);self._create_extension_buttons();self.right_layout.addWidget(self.extensions_group);self.right_layout.addStretch()

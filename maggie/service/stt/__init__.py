@@ -1,5 +1,5 @@
 """
-Maggie AI Assistant Speech-to-Text Package
+Maggie AI Assistant Speech-to-Text Services
 =========================================
 
 Provides components for speech recognition and wake word detection, 
@@ -10,7 +10,7 @@ usage while in idle state, providing immediate system responsiveness when
 user attention is detected.
 """
 
-from maggie.utils.stt.wake_word import WakeWordDetector
-from maggie.utils.stt.processor import STTProcessor
+from maggie.service.stt.wake_word import WakeWordDetector
+from maggie.service.stt.processor import STTProcessor
 
 __all__ = ['WakeWordDetector', 'STTProcessor']

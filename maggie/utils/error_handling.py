@@ -54,10 +54,16 @@ def retry_operation(max_attempts:int=3,retry_delay:float=1.,exponential_backoff:
 			return None
 		return wrapper
 	return decorator
-def get_event_bus()->Optional[Any]:
-	try:from maggie.utils.service_locator import ServiceLocator;return ServiceLocator.get('event_bus')
-	except ImportError:logger.warning("ServiceLocator not available, can't get event_bus");return None
-	except Exception as e:logger.error(f"Error getting event_bus: {e}");return None
+def get_event_bus() -> Optional[Any]:
+    try:
+        from maggie.service.service_locator import ServiceLocator
+        return ServiceLocator.get('event_bus')
+    except ImportError:
+        logger.warning("ServiceLocator not available, can't get event_bus")
+        return None
+    except Exception as e:
+        logger.error(f"Error getting event_bus: {e}")
+        return None
 def record_error(message:str,exception:Optional[Exception]=None,category:ErrorCategory=ErrorCategory.UNKNOWN,severity:ErrorSeverity=ErrorSeverity.ERROR,source:str='',details:Dict[str,Any]=None,publish:bool=True)->ErrorContext:
 	context=ErrorContext(message=message,exception=exception,category=category,severity=severity,source=source,details=details)
 	if severity==ErrorSeverity.CRITICAL:logger.critical(message,exc_info=bool(exception))
