@@ -36,7 +36,7 @@ pip-log.txt
 pip-delete-this-directory.txt
 
 # Python interface stub files containing docstrings
-.pyi
+*.pyi
 
 # Testing / coverage reports
 .coverage
