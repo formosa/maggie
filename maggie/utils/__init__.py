@@ -13,9 +13,8 @@ NVIDIA RTX 3080 hardware, enabling efficient resource usage across the system.
 
 from maggie.utils.service_locator import ServiceLocator
 from maggie.utils.resource.manager import ResourceManager
-from maggie.utils.hardware.manager import HardwareManager
 from maggie.utils.config.manager import ConfigManager
 from maggie.utils.stt import WakeWordDetector
 from maggie.utils.gui import MainWindow
 
-__all__ = ['ServiceLocator', 'ResourceManager', 'HardwareManager', 'ConfigManager','WakeWordDetector', 'MainWindow']
+__all__ = ['ServiceLocator', 'ResourceManager', 'ConfigManager','WakeWordDetector', 'MainWindow']
