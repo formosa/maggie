@@ -20,7 +20,7 @@ def setup_application(args:argparse.Namespace)->Tuple[Any,Dict[str,Any]]:
 		if optimize_system():logger.info('System optimized for performance')
 		else:logger.warning('System optimization failed')
 	if args.verify or args.create_template:return None,config
-	if not verify_system():logger.warning('System verification failed, but attempting to start anyway')
+	# if not verify_system():logger.warning('System verification failed, but attempting to start anyway')
 	try:
 		if not args.headless:add_pyside6_paths()
 		from maggie.core import MaggieAI,State;maggie=MaggieAI(config);register_signal_handlers(maggie);event_bus=maggie.event_bus;logging_manager.add_event_bus_handler(event_bus);return maggie,config
