@@ -1,11 +1,87 @@
 import os,io,threading,time
 from typing import Dict,Any,Optional,Tuple,List,Union,Callable
 import numpy as np,pyaudio
+from maggie.core.state import State,StateTransition,StateAwareComponent
+from maggie.core.event import EventListener,EventEmitter,EventPriority
 from maggie.utils.error_handling import safe_execute,retry_operation,ErrorCategory,ErrorSeverity,with_error_handling,record_error,STTError
 from maggie.utils.logging import ComponentLogger,log_operation,logging_context
 from maggie.service.locator import ServiceLocator
-class STTProcessor:
-	def __init__(self,config:Dict[str,Any]):self.config=config;self.whisper_config=config.get('whisper',{});self.model_size=self.whisper_config.get('model_size','base');self.compute_type=self.whisper_config.get('compute_type','float16');self.streaming_config=config.get('whisper_streaming',{});self.use_streaming=self.streaming_config.get('enabled',True);self.whisper_model=None;self.tts_processor=None;self.sample_rate=self.whisper_config.get('sample_rate',16000);self.chunk_size=self.config.get('chunk_size',1024);self.channels=1;self.audio_stream=None;self.pyaudio_instance=None;self.streaming_server=None;self.streaming_client=None;self.streaming_active=False;self.streaming_paused=False;self.on_intermediate_result=None;self.on_final_result=None;self._streaming_thread=None;self._streaming_stop_event=threading.Event();self.listening=False;self._stop_event=threading.Event();self.lock=threading.RLock();self.buffer_lock=threading.RLock();self.audio_buffer=[];self.use_gpu=not config.get('cpu_only',False);self.vad_enabled=config.get('vad_enabled',True);self.vad_threshold=config.get('vad_threshold',.5);self._model_info={'size':None,'compute_type':None};self.logger=ComponentLogger('STTProcessor');self.logger.info(f"Speech processor initialized with model: {self.model_size}, compute type: {self.compute_type}");self.logger.info(f"Streaming mode: {'enabled'if self.use_streaming else'disabled'}")
+class STTProcessor(StateAwareComponent,EventListener):
+	def __init__(self,config:Dict[str,Any]):
+		self.state_manager=ServiceLocator.get('state_manager')
+		if self.state_manager:StateAwareComponent.__init__(self,self.state_manager)
+		self.event_bus=ServiceLocator.get('event_bus')
+		if self.event_bus:EventListener.__init__(self,self.event_bus)
+		self.config=config;self.whisper_config=config.get('whisper',{});self.model_size=self.whisper_config.get('model_size','base');self.compute_type=self.whisper_config.get('compute_type','float16');self.streaming_config=config.get('whisper_streaming',{});self.use_streaming=self.streaming_config.get('enabled',True);self.sample_rate=self.whisper_config.get('sample_rate',16000);self.chunk_size=self.config.get('chunk_size',1024);self.channels=1;self.whisper_model=None;self.tts_processor=None;self.audio_stream=None;self.pyaudio_instance=None;self.streaming_server=None;self.streaming_client=None;self.streaming_active=False;self.streaming_paused=False;self.listening=False;self.on_intermediate_result=None;self.on_final_result=None;self._streaming_thread=None;self._streaming_stop_event=threading.Event();self._stop_event=threading.Event();self.lock=threading.RLock();self.buffer_lock=threading.RLock();self.audio_buffer=[];self.use_gpu=not config.get('cpu_only',False);self.vad_enabled=config.get('vad_enabled',True);self.vad_threshold=config.get('vad_threshold',.5)
+		try:self.resource_manager=ServiceLocator.get('resource_manager')
+		except Exception:self.resource_manager=None
+		self._model_info={'size':None,'compute_type':None};self.logger=ComponentLogger('STTProcessor')
+		if self.state_manager:self._register_state_handlers()
+		if self.event_bus:self._register_event_handlers()
+		self.logger.info(f"Speech processor initialized with model: {self.model_size}, compute type: {self.compute_type}");self.logger.info(f"Streaming mode: {'enabled'if self.use_streaming else'disabled'}")
+	def _register_state_handlers(self)->None:self.state_manager.register_state_handler(State.INIT,self.on_enter_init,True);self.state_manager.register_state_handler(State.STARTUP,self.on_enter_startup,True);self.state_manager.register_state_handler(State.IDLE,self.on_enter_idle,True);self.state_manager.register_state_handler(State.LOADING,self.on_enter_loading,True);self.state_manager.register_state_handler(State.READY,self.on_enter_ready,True);self.state_manager.register_state_handler(State.ACTIVE,self.on_enter_active,True);self.state_manager.register_state_handler(State.BUSY,self.on_enter_busy,True);self.state_manager.register_state_handler(State.CLEANUP,self.on_enter_cleanup,True);self.state_manager.register_state_handler(State.SHUTDOWN,self.on_enter_shutdown,True);self.state_manager.register_state_handler(State.ACTIVE,self.on_exit_active,False);self.state_manager.register_state_handler(State.BUSY,self.on_exit_busy,False);self.logger.debug('STT state handlers registered')
+	def _register_event_handlers(self)->None:
+		event_handlers=[('input_activation',self._handle_input_activation,EventPriority.NORMAL),('input_deactivation',self._handle_input_deactivation,EventPriority.NORMAL),('pause_transcription',self._handle_pause_transcription,EventPriority.NORMAL),('resume_transcription',self._handle_resume_transcription,EventPriority.NORMAL),('wake_word_detected',self._handle_wake_word_detected,EventPriority.HIGH)]
+		for(event_type,handler,priority)in event_handlers:self.listen(event_type,handler,priority=priority)
+		self.logger.debug(f"Registered {len(event_handlers)} STT event handlers")
+	def on_enter_init(self,transition:StateTransition)->None:self._cleanup_audio_resources();self.logger.debug('STT processor reset in INIT state')
+	def on_enter_startup(self,transition:StateTransition)->None:
+		if self.resource_manager:self.resource_manager.preallocate_for_state(State.STARTUP)
+		if self.config.get('preload_in_startup',False):self._load_whisper_model()
+	def on_enter_idle(self,transition:StateTransition)->None:
+		self.stop_listening();self.stop_streaming();self.whisper_model=None
+		if self.resource_manager:self.resource_manager.clear_gpu_memory()
+	def on_enter_loading(self,transition:StateTransition)->None:
+		if self.resource_manager:self.resource_manager.preallocate_for_state(State.LOADING)
+		if self.resource_manager:self.resource_manager.clear_gpu_memory()
+	def on_enter_ready(self,transition:StateTransition)->None:
+		self.start_listening()
+		if self.use_streaming and self.config.get('auto_start_streaming',True):self.start_streaming(on_intermediate=self._on_intermediate_transcription,on_final=self._on_final_transcription)
+	def on_enter_active(self,transition:StateTransition)->None:
+		if not self.listening:self.start_listening()
+		if self.use_streaming and not self.streaming_active:self.start_streaming(on_intermediate=self._on_intermediate_transcription,on_final=self._on_final_transcription)
+		elif self.streaming_paused:self.resume_streaming()
+	def on_enter_busy(self,transition:StateTransition)->None:
+		if self.streaming_active and not self.streaming_paused:self.pause_streaming()
+	def on_enter_cleanup(self,transition:StateTransition)->None:
+		self.stop_streaming();self.stop_listening();self.whisper_model=None
+		if self.resource_manager:self.resource_manager.reduce_memory_usage()
+	def on_enter_shutdown(self,transition:StateTransition)->None:self._cleanup_audio_resources();self.stop_streaming();self.whisper_model=None
+	def on_exit_active(self,transition:StateTransition)->None:
+		if transition.to_state==State.BUSY:self.pause_streaming()
+	def on_exit_busy(self,transition:StateTransition)->None:
+		if transition.to_state==State.READY:
+			if self.streaming_paused:self.resume_streaming()
+	def _handle_input_activation(self,data:Any)->None:self.pause_streaming()
+	def _handle_input_deactivation(self,data:Any)->None:self.resume_streaming()
+	def _handle_pause_transcription(self,data:Any=None)->None:self.pause_streaming()
+	def _handle_resume_transcription(self,data:Any=None)->None:self.resume_streaming()
+	def _handle_wake_word_detected(self,data:Any=None)->None:
+		current_state=self.state_manager.get_current_state()if self.state_manager else None
+		if current_state==State.IDLE:self.state_manager.transition_to(State.READY,'wake_word_detected')
+		elif current_state==State.READY:self.state_manager.transition_to(State.ACTIVE,'wake_word_detected')
+	def _audio_callback(self,in_data,frame_count,time_info,status):
+		if self._stop_event.is_set():return in_data,pyaudio.paComplete
+		try:
+			with self.buffer_lock:self.audio_buffer.append(in_data)
+		except Exception as e:self.logger.error(f"Error in audio callback: {e}")
+		return in_data,pyaudio.paContinue
+	def _get_audio_data_with_timeout(self,timeout:float)->Optional[bytes]:
+		start_time=time.time();audio_data=None
+		while time.time()-start_time<timeout:
+			with self.buffer_lock:
+				if self.audio_buffer:audio_data=b''.join(self.audio_buffer);self.audio_buffer=[];break
+			time.sleep(.05)
+		return audio_data
+	def _convert_audio_to_numpy(self,audio_data:bytes)->np.ndarray:return np.frombuffer(audio_data,dtype=np.int16).astype(np.float32)/32768.
+	def _extract_text_from_result(self,result:Any)->str:
+		if isinstance(result,dict)and'text'in result:return result['text'].strip()
+		elif hasattr(result,'text'):return result.text.strip()
+		else:self.logger.warning('Unexpected result format from Whisper model');return''
+	def _on_intermediate_transcription(self,text:str)->None:
+		if self.event_bus:self.event_bus.publish('intermediate_transcription',text)
+	def _on_final_transcription(self,text:str)->None:
+		if self.event_bus:self.event_bus.publish('final_transcription',text)
 	@log_operation(component='STTProcessor')
 	@with_error_handling(error_category=ErrorCategory.SYSTEM)
 	def start_listening(self)->bool:
@@ -17,12 +93,6 @@ class STTProcessor:
 				with self.buffer_lock:self.audio_buffer=[]
 				self.logger.info('Audio listening started');return True
 			except Exception as e:self.logger.error(f"Error starting audio listening: {e}");self._cleanup_audio_resources();raise STTError(f"Could not start listening: {e}")
-	def _audio_callback(self,in_data,frame_count,time_info,status):
-		if self._stop_event.is_set():return in_data,pyaudio.paComplete
-		try:
-			with self.buffer_lock:self.audio_buffer.append(in_data)
-		except Exception as e:self.logger.error(f"Error in audio callback: {e}")
-		return in_data,pyaudio.paContinue
 	@log_operation(component='STTProcessor')
 	@with_error_handling(error_category=ErrorCategory.SYSTEM)
 	def stop_listening(self)->bool:
@@ -54,26 +124,31 @@ class STTProcessor:
 			if self.whisper_model is None:self.logger.error('Whisper model not initialized');return False,''
 			start_time=time.time();result=self.whisper_model.transcribe(audio_np);elapsed=time.time()-start_time;text=self._extract_text_from_result(result);self.logger.log_performance('recognize_speech',elapsed,{'text_length':len(text)if text else 0});return True,text
 		except Exception as e:self.logger.error(f"Error recognizing speech: {e}");raise STTError(f"Speech recognition failed: {e}")
-	def _get_audio_data_with_timeout(self,timeout:float)->Optional[bytes]:
-		start_time=time.time();audio_data=None
-		while time.time()-start_time<timeout:
-			with self.buffer_lock:
-				if self.audio_buffer:audio_data=b''.join(self.audio_buffer);self.audio_buffer=[];break
-			time.sleep(.05)
-		return audio_data
-	def _convert_audio_to_numpy(self,audio_data:bytes)->np.ndarray:return np.frombuffer(audio_data,dtype=np.int16).astype(np.float32)/32768.
-	def _extract_text_from_result(self,result:Any)->str:
-		if isinstance(result,dict)and'text'in result:return result['text'].strip()
-		elif hasattr(result,'text'):return result.text.strip()
-		else:self.logger.warning('Unexpected result format from Whisper model');return''
 	@retry_operation(max_attempts=2,allowed_exceptions=(ImportError,RuntimeError))
 	@with_error_handling(error_category=ErrorCategory.MODEL,error_severity=ErrorSeverity.ERROR)
 	def _load_whisper_model(self)->bool:
 		try:
 			from faster_whisper import WhisperModel
-			with logging_context(component='STTProcessor',operation='load_model')as ctx:model_size=self.model_size;compute_type=self.compute_type;device='cuda'if self.use_gpu else'cpu';self.logger.info(f"Loading Whisper model: {model_size} on {device} with {compute_type}");start_time=time.time();self.whisper_model=WhisperModel(model_size,device=device,compute_type=compute_type);elapsed=time.time()-start_time;self._model_info={'size':model_size,'compute_type':compute_type};self.logger.log_performance('load_model',elapsed,{'model_size':model_size,'device':device,'compute_type':compute_type});return True
+			with logging_context(component='STTProcessor',operation='load_model')as ctx:model_size=self.model_size;compute_type=self.compute_type;device='cuda'if self.use_gpu else'cpu';self.logger.info(f"Loading Whisper model: {model_size} on {device} with {compute_type}");self._apply_hardware_optimizations();start_time=time.time();self.whisper_model=WhisperModel(model_size,device=device,compute_type=compute_type);elapsed=time.time()-start_time;self._model_info={'size':model_size,'compute_type':compute_type};self.logger.log_performance('load_model',elapsed,{'model_size':model_size,'device':device,'compute_type':compute_type});return True
 		except ImportError as e:self.logger.error(f"Error importing WhisperModel: {e}");self.logger.error('Please install faster-whisper with: pip install faster-whisper');return False
 		except Exception as e:self.logger.error(f"Error loading Whisper model: {e}");return False
+	def _apply_hardware_optimizations(self)->None:
+		if not self.resource_manager:return
+		hardware_info=self.resource_manager.detector.hardware_info
+		if hardware_info['gpu'].get('is_rtx_3080',False):
+			try:
+				import torch
+				if torch.cuda.is_available():
+					self.compute_type='float16'
+					if hasattr(torch.backends,'cudnn'):torch.backends.cudnn.allow_tf32=True
+					torch.backends.cudnn.benchmark=True;self.logger.info('Applied RTX 3080 optimizations for Whisper')
+			except ImportError:pass
+		if hardware_info['cpu'].get('is_ryzen_9_5900x',False):
+			self.chunk_size=512
+			try:
+				import psutil
+				if os.name=='nt':process=psutil.Process();process.cpu_affinity([0,1,2,3,4,5,6,7])
+			except ImportError:pass
 	@log_operation(component='STTProcessor')
 	@with_error_handling(error_category=ErrorCategory.SYSTEM,error_severity=ErrorSeverity.ERROR)
 	def start_streaming(self,on_intermediate:Optional[Callable[[str],None]]=None,on_final:Optional[Callable[[str],None]]=None)->bool:
