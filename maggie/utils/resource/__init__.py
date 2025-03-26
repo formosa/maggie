@@ -11,16 +11,22 @@ capabilities optimized for AMD Ryzen 9 5900X and NVIDIA RTX 3080 hardware.
 # Import detector first as others depend on it
 from maggie.utils.resource.detector import HardwareDetector
 
-# Import optimizer and monitor which depend on detector
-from maggie.utils.resource.optimizer import HardwareOptimizer
-from maggie.utils.resource.monitor import ResourceMonitor
+# Use lazy imports for modules that may create circular dependencies
+def get_hardware_optimizer():
+    from maggie.utils.resource.optimizer import HardwareOptimizer
+    return HardwareOptimizer
 
-# Import manager last as it depends on all other components
-from maggie.utils.resource.manager import ResourceManager
+def get_resource_monitor():
+    from maggie.utils.resource.monitor import ResourceMonitor
+    return ResourceMonitor
+
+def get_resource_manager():
+    from maggie.utils.resource.manager import ResourceManager
+    return ResourceManager
 
 __all__ = [
     'HardwareDetector',
-    'HardwareOptimizer', 
-    'ResourceMonitor',
-    'ResourceManager'
+    'get_hardware_optimizer', 
+    'get_resource_monitor',
+    'get_resource_manager'
 ]

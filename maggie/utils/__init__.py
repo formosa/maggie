@@ -10,8 +10,13 @@ and utility functions specifically tuned for AMD Ryzen 9 5900X and
 NVIDIA RTX 3080 hardware, enabling efficient resource usage across the system.
 """
 
-from maggie.utils.resource.manager import ResourceManager
+# Use lazy imports to prevent circular dependencies
+def get_resource_manager():
+    from maggie.utils.resource.manager import ResourceManager
+    return ResourceManager
+
+# Direct imports for modules that don't create circular dependencies
 from maggie.utils.config.manager import ConfigManager
 from maggie.utils.gui import MainWindow
 
-__all__ = ['ResourceManager', 'ConfigManager', 'MainWindow']
+__all__ = ['get_resource_manager', 'ConfigManager', 'MainWindow']
