@@ -12,6 +12,74 @@ T=TypeVar('T')
 class LogLevel(str,Enum):DEBUG='DEBUG';INFO='INFO';WARNING='WARNING';ERROR='ERROR';CRITICAL='CRITICAL'
 class LogDestination(str,Enum):CONSOLE='console';FILE='file';EVENT_BUS='event_bus'
 class LoggingManager:
+	"""
+	LoggingManager is a singleton class responsible for managing the logging system in the application. 
+	It provides features such as asynchronous logging, batched logging, and support for multiple logging destinations.
+	Attributes:
+		_instance (LoggingManager): The singleton instance of the LoggingManager.
+		config (Dict[str, Any]): Configuration dictionary for logging settings.
+		log_dir (Path): Directory where log files are stored.
+		console_level (str): Logging level for console output.
+		file_level (str): Logging level for file output.
+		enabled_destinations (Set[LogDestination]): Set of enabled logging destinations.
+		log_batch_size (int): Maximum size of the log batch before flushing.
+		log_batch_timeout (float): Timeout in seconds for flushing the log batch.
+		log_batch (List): List of batched log records.
+		log_batch_lock (threading.RLock): Lock for synchronizing access to the log batch.
+		log_batch_timer (threading.Timer): Timer for flushing the log batch.
+		log_batch_enabled (bool): Whether batched logging is enabled.
+		async_logging (bool): Whether asynchronous logging is enabled.
+		log_queue (queue.Queue): Queue for asynchronous logging.
+		log_worker (threading.Thread): Worker thread for processing asynchronous log records.
+		correlation_id (Optional[str]): Correlation ID for tracking logs across requests.
+	Methods:
+		get_instance() -> 'LoggingManager':
+			Returns the singleton instance of LoggingManager. Raises an error if not initialized.
+		initialize(config: Dict[str, Any]) -> 'LoggingManager':
+			Initializes the LoggingManager with the given configuration. Returns the instance.
+		__init__(config: Dict[str, Any]):
+			Initializes the LoggingManager instance with the provided configuration.
+		_get_hardware_detector():
+			Lazily imports and returns the HardwareDetector for system information.
+		_configure_logging() -> None:
+			Configures the logging system, including console and file handlers.
+		_initialize_log_batching() -> None:
+			Initializes the batching mechanism for logs.
+		_initialize_async_logging() -> None:
+			Initializes the asynchronous logging mechanism.
+		_process_log_queue() -> None:
+			Processes log records from the asynchronous logging queue.
+		_flush_log_batch() -> None:
+			Flushes the batched log records to the logging system.
+		_log_system_info() -> None:
+			Logs system information such as OS, CPU, memory, and GPU details.
+		log(level: LogLevel, message: str, *args, **kwargs) -> None:
+			Logs a message at the specified log level.
+		set_correlation_id(correlation_id: str) -> None:
+			Sets the correlation ID for tracking logs.
+		get_correlation_id() -> Optional[str]:
+			Retrieves the current correlation ID.
+		clear_correlation_id() -> None:
+			Clears the correlation ID.
+		add_event_bus_handler(event_bus: Any) -> None:
+			Adds a handler to publish error logs to an event bus.
+		setup_global_exception_handler() -> None:
+			Sets up a global exception handler to log unhandled exceptions.
+		get_logger(name: str) -> logger:
+			Returns a logger instance bound to the specified name.
+		log_performance(component: str, operation: str, elapsed: float, details: Dict[str, Any] = None) -> None:
+			Logs performance metrics for a specific operation.
+		log_state_transition(from_state: Any, to_state: Any, trigger: str) -> None:
+			Logs state transitions in the application.
+		log_resource_allocation(resource_type: str, resource_name: str, state: Any, details: Dict[str, Any] = None) -> None:
+			Logs resource allocation details.
+		log_resource_deallocation(resource_type: str, resource_name: str, state: Any, details: Dict[str, Any] = None) -> None:
+			Logs resource deallocation details.
+		log_input_processing(input_type: str, state: Any, details: Dict[str, Any] = None) -> None:
+			Logs input processing details.
+		shutdown() -> None:
+			Shuts down the logging system, flushing any remaining logs and stopping background threads.
+	"""
 	_instance=None
 	@classmethod
 	def get_instance(cls)->'LoggingManager':
