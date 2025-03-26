@@ -54,8 +54,6 @@ from maggie.utils.error_handling import (
     with_error_handling
 )
 # Initialize a component-specific logger for the main module
-
-
 from maggie.core import MaggieAI, State
 from maggie.utils.resource.detector import HardwareDetector
 from maggie.utils.config.manager import ConfigManager
