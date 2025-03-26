@@ -13,12 +13,9 @@ class TTSProcessor(StateAwareComponent,EventListener):
 		if self.state_manager:StateAwareComponent.__init__(self,self.state_manager)
 		self.event_bus=ServiceLocator.get('event_bus')
 		if self.event_bus:EventListener.__init__(self,self.event_bus);EventEmitter.__init__(self,self.event_bus)
-		self.config=config;self.voice_model=config.get('voice_model','af_heart.pt');self.model_path=config.get('model_path','');self.sample_rate=config.get('sample_rate',22050);self.use_cache=config.get('use_cache',True);self.cache_dir=config.get('cache_dir','cache/tts');self.cache_size=config.get('cache_size',100);self.gpu_device=config.get('gpu_device',0);self.gpu_acceleration=config.get('gpu_acceleration',True);self.gpu_precision=config.get('gpu_precision','mixed_float16');self.max_workers=config.get('max_workers',2);self.voice_preprocessing=config.get('voice_preprocessing',True);self.logger=ComponentLogger('TTSProcessor');self.kokoro_instance=None;self.cache={};self.lock=threading.RLock();self.thread_pool=concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers,thread_name_prefix='maggie_tts_thread_');self.is_paused=False
-		try:
-			self.resource_manager=ServiceLocator.get('resource_manager')
-			if not self.resource_manager:self.logger.warning('Resource manager not found in ServiceLocator')
-		except Exception as e:self.logger.warning(f"Failed to get resource manager: {e}");self.resource_manager=None
-		self._log_initialization_params()
+		self.config=config;self.voice_model=config.get('voice_model','af_heart.pt');self.model_path=config.get('model_path','');self.sample_rate=config.get('sample_rate',22050);self.use_cache=config.get('use_cache',True);self.cache_dir=config.get('cache_dir','cache/tts');self.cache_size=config.get('cache_size',100);self.gpu_device=config.get('gpu_device',0);self.gpu_acceleration=config.get('gpu_acceleration',True);self.gpu_precision=config.get('gpu_precision','mixed_float16');self.max_workers=config.get('max_workers',2);self.voice_preprocessing=config.get('voice_preprocessing',True);self.logger=ComponentLogger('TTSProcessor');self.resource_manager=ServiceLocator.get('resource_manager')
+		if not self.resource_manager:self.logger.warning('Resource manager not found in ServiceLocator')
+		self.kokoro_instance=None;self.cache={};self.lock=threading.RLock();self.thread_pool=concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers,thread_name_prefix='maggie_tts_thread_');self.is_paused=False;self._log_initialization_params()
 		if self.use_cache and not os.path.exists(self.cache_dir):
 			try:os.makedirs(self.cache_dir,exist_ok=True);self.logger.info(f"Created TTS cache directory: {self.cache_dir}")
 			except Exception as e:self.logger.error(f"Failed to create TTS cache directory: {e}");self.use_cache=False
@@ -74,14 +71,10 @@ class TTSProcessor(StateAwareComponent,EventListener):
 		if self.config.get('preload_in_ready',False):self._init_kokoro()
 	def _optimize_for_active_state(self)->None:
 		self._init_kokoro();self.resume()
-		if self.resource_manager and self.hardware_info.get('gpu',{}).get('is_rtx_3080',False):self._apply_rtx_3080_optimizations()
+		if'gpu'in self.config and self.config['gpu'].get('rtx_3080_optimized',False):self._apply_rtx_3080_optimizations()
 	def _optimize_for_busy_state(self)->None:self.pause()
 	def _optimize_for_cleanup_state(self)->None:self.clear_cache()
 	def _optimize_for_shutdown_state(self)->None:self.cleanup()
-	@property
-	def hardware_info(self)->Dict[str,Any]:
-		if self.resource_manager and hasattr(self.resource_manager,'detector'):return self.resource_manager.detector.hardware_info
-		return{}
 	@with_error_handling(error_category=ErrorCategory.MODEL,error_severity=ErrorSeverity.ERROR)
 	def _init_kokoro(self)->bool:
 		if self.kokoro_instance is not None:return True
@@ -103,7 +96,7 @@ class TTSProcessor(StateAwareComponent,EventListener):
 							if not os.path.exists(voice_path):return False
 						else:self.logger.error('Voice model download failed');return False
 					gpu_options={}
-					if self.gpu_acceleration:gpu_options={'precision':self.gpu_precision,'cuda_graphs':self.config.get('tts',{}).get('cuda_graphs',False),'max_batch_size':self.config.get('tts',{}).get('max_batch_size',16),'mixed_precision':self.config.get('tts',{}).get('mixed_precision',False),'tensor_cores':self.config.get('tts',{}).get('tensor_cores',False)}
+					if self.gpu_acceleration:gpu_options={'precision':self.gpu_precision,'cuda_graphs':self.config.get('tts',{}).get('cuda_graphs_enabled',False),'max_batch_size':self.config.get('tts',{}).get('max_batch_size',16),'mixed_precision':self.config.get('tts',{}).get('mixed_precision',False),'tensor_cores':self.config.get('tts',{}).get('tensor_cores_enabled',False)}
 					start_time=time.time()
 					if hasattr(kokoro,'load'):self.kokoro_instance=kokoro.load(voice_path,use_cuda=self.gpu_acceleration,sample_rate=self.sample_rate,**gpu_options)
 					elif hasattr(kokoro,'TTS'):self.kokoro_instance=kokoro.TTS(voice_path,use_cuda=self.gpu_acceleration,sample_rate=self.sample_rate,**gpu_options)
@@ -243,9 +236,10 @@ class TTSProcessor(StateAwareComponent,EventListener):
 		try:
 			import torch
 			if torch.cuda.is_available():
-				if hasattr(torch.backends.cuda,'matmul'):torch.backends.cuda.matmul.allow_tf32=True
-				if hasattr(torch.backends,'cudnn'):torch.backends.cudnn.allow_tf32=True
-				if self.config.get('tts',{}).get('tensor_cores',False):torch.set_float32_matmul_precision('high')
+				if self.config.get('tts',{}).get('tensor_cores_enabled',False):
+					if hasattr(torch.backends.cuda,'matmul'):torch.backends.cuda.matmul.allow_tf32=True
+					if hasattr(torch.backends,'cudnn'):torch.backends.cudnn.allow_tf32=True
+					if self.config.get('tts',{}).get('tensor_cores',False):torch.set_float32_matmul_precision('high')
 				self.logger.info('Applied RTX 3080 optimizations for TTS')
 		except ImportError:self.logger.debug('PyTorch not available for RTX 3080 optimizations')
 		except Exception as e:self.logger.warning(f"Failed to apply RTX 3080 optimizations: {e}")
