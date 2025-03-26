@@ -15,8 +15,12 @@ def get_resource_manager():
     from maggie.utils.resource.manager import ResourceManager
     return ResourceManager
 
+# Use lazy import for MainWindow to avoid circular dependency
+def get_main_window():
+    from maggie.utils.gui import MainWindow
+    return MainWindow
+
 # Direct imports for modules that don't create circular dependencies
 from maggie.utils.config.manager import ConfigManager
-from maggie.utils.gui import MainWindow
 
-__all__ = ['get_resource_manager', 'ConfigManager', 'MainWindow']
+__all__ = ['get_resource_manager', 'ConfigManager', 'get_main_window']
