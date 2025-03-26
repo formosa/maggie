@@ -139,8 +139,11 @@ class LoggingManager:
 		Notes:
 			If the LoggingManager has already been initialized, a warning is logged, and the existing instance is returned.
 		"""
-		if cls._instance is not None:logger.warning('LoggingManager already initialized');return cls._instance
-		cls._instance=LoggingManager(config);return cls._instance
+		if cls._instance is not None:
+			logger.warning('LoggingManager already initialized')
+			return cls._instance
+		cls._instance=LoggingManager(config)
+		return cls._instance
 	
 	def __init__(self,config:Dict[str,Any]):
 		"""
