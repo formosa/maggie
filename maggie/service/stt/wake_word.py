@@ -5,7 +5,6 @@ from maggie.core.state import State,StateTransition,StateAwareComponent
 from maggie.core.event import EventEmitter,EventListener,EventPriority
 from maggie.utils.logging import ComponentLogger,log_operation
 from maggie.utils.error_handling import safe_execute,with_error_handling,ErrorCategory,ErrorSeverity,record_error
-from maggie.utils.resource.detector import HardwareDetector
 from maggie.service.locator import ServiceLocator
 __all__=['WakeWordDetector']
 class WakeWordDetector(StateAwareComponent,EventListener):
@@ -22,10 +21,7 @@ class WakeWordDetector(StateAwareComponent,EventListener):
 			if not hasattr(self,'logger'):self.logger=ComponentLogger('WakeWordDetector')
 			self.logger.warning(f"Event bus not found in ServiceLocator, falling back to callback mode: {e}")
 		if not hasattr(self,'logger'):self.logger=ComponentLogger('WakeWordDetector')
-		self.logger.info('Initializing Wake Word Detection...');self.config=config;self.access_key=config.get('access_key',None);self.sensitivity=config.get('sensitivity',.5);self.keyword=config.get('keyword','Maggie');self.keyword_path=config.get('keyword_path',None);self.cpu_threshold=config.get('cpu_threshold',5.);self.on_detected=None;self.running=False;self._active_state=True;self.hardware_detector=None
-		try:self.hardware_detector=HardwareDetector()
-		except Exception as e:self.logger.warning(f"Could not initialize hardware detector: {e}")
-		self._porcupine=None;self._pyaudio=None;self._audio_stream=None;self._detection_thread=None;self._stop_event=threading.Event();self._audio_queue=queue.Queue(maxsize=3);self._lock=threading.RLock();self._validate_config();self.logger.info(f"Wake word detector initialized with sensitivity: {self.sensitivity}")
+		self.logger.info('Initializing Wake Word Detection...');self.config=config;self.access_key=config.get('access_key',None);self.sensitivity=config.get('sensitivity',.5);self.keyword=config.get('keyword','Maggie');self.keyword_path=config.get('keyword_path',None);self.cpu_threshold=config.get('cpu_threshold',5.);self.dedicated_core_enabled=config.get('dedicated_core_enabled',True);self.dedicated_core=config.get('dedicated_core',0);self.real_time_priority=config.get('real_time_priority',True);self.minimal_processing=config.get('minimal_processing',True);self.on_detected=None;self.running=False;self._active_state=True;self._porcupine=None;self._pyaudio=None;self._audio_stream=None;self._detection_thread=None;self._stop_event=threading.Event();self._audio_queue=queue.Queue(maxsize=3);self._lock=threading.RLock();self.logger.info(f"Wake word detector initialized with sensitivity: {self.sensitivity}")
 	def _register_state_handlers(self)->None:self.state_manager.register_state_handler(State.INIT,self._on_enter_init,True);self.state_manager.register_state_handler(State.STARTUP,self._on_enter_startup,True);self.state_manager.register_state_handler(State.IDLE,self._on_enter_idle,True);self.state_manager.register_state_handler(State.READY,self._on_enter_ready,True);self.state_manager.register_state_handler(State.ACTIVE,self._on_enter_active,True);self.state_manager.register_state_handler(State.BUSY,self._on_enter_busy,True);self.state_manager.register_state_handler(State.CLEANUP,self._on_enter_cleanup,True);self.state_manager.register_state_handler(State.SHUTDOWN,self._on_enter_shutdown,True);self.state_manager.register_state_handler(State.IDLE,self._on_exit_idle,False);self.state_manager.register_state_handler(State.ACTIVE,self._on_exit_active,False);self.logger.debug('State handlers registered')
 	def _register_event_handlers(self)->None:
 		event_handlers=[('resource_warning',self._handle_resource_warning,EventPriority.HIGH),('low_memory_warning',self._handle_low_memory,EventPriority.HIGH),('input_activation',self._handle_input_activation,EventPriority.NORMAL),('input_deactivation',self._handle_input_deactivation,EventPriority.NORMAL)]
@@ -62,9 +58,6 @@ class WakeWordDetector(StateAwareComponent,EventListener):
 	def _deactivate_detection(self)->None:
 		self._active_state=False
 		if self.running:self.stop()
-	def _validate_config(self)->None:
-		if not self.access_key:self.logger.error('Missing Porcupine access key in configuration');raise ValueError('Porcupine access key is required')
-		if not .0<=self.sensitivity<=1.:self.logger.warning(f"Invalid sensitivity value: {self.sensitivity}, using default: 0.5");self.sensitivity=.5
 	@log_operation(component='WakeWordDetector')
 	@with_error_handling(error_category=ErrorCategory.SYSTEM,error_severity=ErrorSeverity.ERROR)
 	def start(self)->bool:
@@ -93,19 +86,22 @@ class WakeWordDetector(StateAwareComponent,EventListener):
 		return in_data,pyaudio.paContinue
 	def _detection_loop(self)->None:
 		self.logger.debug('Wake word detection thread started')
-		try:import psutil;process=psutil.Process()
+		try:
+			import psutil;process=psutil.Process()
+			if self.dedicated_core_enabled and hasattr(process,'cpu_affinity'):
+				try:process.cpu_affinity([self.dedicated_core]);self.logger.debug(f"Set wake word detection to use dedicated core: {self.dedicated_core}")
+				except Exception as e:self.logger.warning(f"Failed to set CPU affinity: {e}")
+			if self.real_time_priority and hasattr(process,'nice'):
+				try:import psutil;process.nice(psutil.REALTIME_PRIORITY_CLASS if hasattr(psutil,'REALTIME_PRIORITY_CLASS')else psutil.HIGH_PRIORITY_CLASS);self.logger.debug('Set wake word detection thread to high priority')
+				except Exception as e:self.logger.warning(f"Failed to set process priority: {e}")
 		except ImportError:process=None;self.logger.warning('psutil not available, CPU monitoring disabled')
-		current_state=None
+		cpu_threshold=self.cpu_threshold;current_state=None
 		if self.state_manager:
-			try:current_state=self.state_manager.get_current_state()
+			try:
+				current_state=self.state_manager.get_current_state()
+				if current_state==State.IDLE:cpu_threshold=max(1.,cpu_threshold*.5)
 			except Exception:pass
-		cpu_threshold=self.cpu_threshold
-		if current_state==State.IDLE:cpu_threshold=max(1.,cpu_threshold*.5)
-		elif current_state==State.READY:pass
-		base_sleep_time=.01
-		if self.hardware_detector and hasattr(self.hardware_detector,'hardware_info'):
-			cpu_info=self.hardware_detector.hardware_info.get('cpu',{})
-			if cpu_info.get('is_ryzen_9_5900x',False):base_sleep_time=.005
+		base_sleep_time=.005 if self.minimal_processing else .01
 		while not self._stop_event.is_set():
 			try:
 				audio_data=self._audio_queue.get(timeout=.1);pcm=np.frombuffer(audio_data,dtype=np.int16);keyword_index=self._porcupine.process(pcm)
