@@ -41,7 +41,7 @@ from contextlib import contextmanager
 from loguru import logger
 
 # Remove the direct import of HardwareDetector
-from maggie.utils.resource.detector import HardwareDetector
+# from maggie.utils.resource.detector import HardwareDetector
 
 T = TypeVar('T')
 
@@ -180,6 +180,29 @@ class LoggingManager:
         Notes:
                 If the LoggingManager has already been initialized, a warning is logged, and the existing instance is returned.
         """
+        
+		if (config):
+            self.config = config.get('logging', {})
+			self.log_dir = Path(self.config.get('path', 'logs')).resolve()
+			self.log_dir.mkdir(exist_ok=True, parents=True)
+			self.console_level = self.config.get('console_level', 'INFO')
+			self.file_level = self.config.get('file_level', 'DEBUG')
+			(self.enabled_destinations): Set[LogDestination] = {
+				LogDestination.CONSOLE, LogDestination.FILE}
+
+			# Use lazy import for HardwareDetector to avoid circular reference
+			self._hardware_detector = None
+
+			self.log_batch_size = self.config.get('batch_size', 50)
+			self.log_batch_timeout = self.config.get('batch_timeout', 5.)
+			self.log_batch = []
+			self.log_batch_lock = threading.RLock()
+			self.log_batch_timer = None
+			self.log_batch_enabled = self.config.get('batch_enabled', True)
+			self.async_logging = self.config.get('async_enabled', True)
+			self.log_queue = queue.Queue()if self.async_logging else None
+			self.log_worker = None
+
         if cls._instance is not None:
             logger.warning('LoggingManager already initialized')
             return cls._instance
