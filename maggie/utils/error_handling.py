@@ -208,7 +208,7 @@ class InputProcessingError(Exception):
 		input_source (str, optional): The source of the input that caused the error. Defaults to None.
 		details (Dict[str, Any], optional): Additional details about the error. Defaults to an empty dictionary.
 	"""
-    def __init__(self, message: str, input_type: str = None, input_source: str = None,
+	def __init__(self, message: str, input_type: str = None, input_source: str = None,
                  details: Dict[str, Any] = None): self.input_type = input_type; self.input_source = input_source; self.details = details or {}; super().__init__(message)
 
 
