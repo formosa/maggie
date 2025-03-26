@@ -11,4 +11,7 @@ Extensions can be enabled or disabled through configuration and are loaded
 dynamically at runtime.
 """
 
-__all__ = []
+from maggie.extensions.base import ExtensionBase
+from maggie.extensions.registry import ExtensionRegistry
+
+__all__ = ['ExtensionBase', 'ExtensionRegistry']
