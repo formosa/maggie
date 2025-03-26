@@ -135,6 +135,16 @@ class StateTransition:
 
 		to_dict() -> Dict[str, Any]:
 			Converts the StateTransition object into a dictionary representation.
+	
+	Example:
+		```python
+		transition = StateTransition(from_state=State.IDLE, to_state=State.READY, trigger="start", timestamp=1234567890.0)
+		print(transition.animation_type)  # Output: "slide"
+		print(transition.animation_duration)  # Output: 300
+		print(transition.get_animation_properties())  # Output: {"type": "slide", "duration": 300, "easing": "ease-in-out"}
+		print(transition.to_dict())  # Output: {"from_state": "IDLE", "to_state": "READY", "trigger": "start", "timestamp": 1234567890.0, "metadata": {}}
+		```
+	
 	"""
 	from_state:State;to_state:State;trigger:str;timestamp:float;metadata:Dict[str,Any]=field(default_factory=dict)
 	def __lt__(self,other:'StateTransition')->bool:return self.timestamp<other.timestamp
