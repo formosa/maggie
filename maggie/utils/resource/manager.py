@@ -13,6 +13,7 @@ from maggie.service.locator import ServiceLocator
 from maggie.utils.config.manager import ConfigManager
 class ResourceManager(StateAwareComponent,EventListener):
 	def __init__(self,config:Dict[str,Any]):
+		if config is None:raise ValueError('Configuration cannot be None when initializing ResourceManager')
 		self.config_manager=None
 		try:self.config_manager=ServiceLocator.get('config_manager')
 		except Exception:pass

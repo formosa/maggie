@@ -12,8 +12,17 @@ NVIDIA RTX 3080 hardware, enabling efficient resource usage across the system.
 
 # Use lazy imports to prevent circular dependencies
 def get_resource_manager():
-    from maggie.utils.resource.manager import ResourceManager
-    return ResourceManager
+    """
+    Returns the ResourceManager class, not an instance.
+    This prevents circular dependency issues during initialization.
+    """
+    try:
+        from maggie.utils.resource.manager import ResourceManager
+        return ResourceManager
+    except ImportError:
+        import logging
+        logging.getLogger(__name__).error("Failed to import ResourceManager")
+        return None
 
 # Use lazy import for MainWindow to avoid circular dependency
 def get_main_window():
