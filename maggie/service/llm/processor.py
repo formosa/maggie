@@ -30,7 +30,7 @@ class LLMProcessor(StateAwareComponent,EventListener):
 	def on_enter_idle(self,transition:StateTransition)->None:self.unload_model()
 	def on_enter_loading(self,transition:StateTransition)->None:
 		if self.resource_manager:self.resource_manager.clear_gpu_memory()
-		if self._is_rtx_3080():self._optimize_for_rtx_3080()
+		self._optimize_for_rtx_3080()
 	def on_enter_ready(self,transition:StateTransition)->None:
 		if self.config.get('llm',{}).get('preload_in_ready',False):self._load_model()
 	def on_enter_active(self,transition:StateTransition)->None:self._prepare_for_active_state()
@@ -55,12 +55,10 @@ class LLMProcessor(StateAwareComponent,EventListener):
 			if self.gpu_layer_auto_adjust:self.reduce_gpu_layers()
 	def _handle_model_unload_request(self,_:Any)->None:self.unload_model()
 	def _prepare_for_active_state(self)->None:
-		if self.model is None:
-			if self._is_rtx_3080():self._optimize_for_rtx_3080()
-			self._load_model()
+		if self.model is None:self._optimize_for_rtx_3080();self._load_model()
 	def _prepare_for_busy_state(self)->None:
 		if self.resource_manager:self.resource_manager.clear_gpu_memory()
-		if self._is_rtx_3080():
+		if self.config.get('gpu',{}).get('rtx_3080_optimized',False):
 			try:
 				import torch
 				if torch.cuda.is_available():
@@ -72,30 +70,15 @@ class LLMProcessor(StateAwareComponent,EventListener):
 		try:
 			if os.name=='nt':import psutil;psutil.Process().nice(psutil.HIGH_PRIORITY_CLASS);self.logger.debug('Set process priority to HIGH for BUSY state')
 		except Exception as e:self.logger.debug(f"Could not set process priority: {e}")
-	def _is_rtx_3080(self)->bool:
-		if not self.resource_manager:return False
-		try:hardware_info=self.resource_manager.detector.hardware_info;return hardware_info.get('gpu',{}).get('is_rtx_3080',False)
-		except Exception:return False
-	def _optimize_for_rtx_3080(self)->None:
-		if not self.resource_manager:return
-		try:
-			optimizations=self.resource_manager.optimizer.optimize_for_rtx_3080()
-			if optimizations.get('applied',False):self.logger.info('Applied RTX 3080 optimizations')
-		except Exception as e:self.logger.warning(f"Failed to apply RTX 3080 optimizations: {e}")
 	def _adjust_gpu_layers_for_hardware(self)->None:
-		if self._is_rtx_3080():
-			current_vram=0
-			try:
-				import torch
-				if torch.cuda.is_available():props=torch.cuda.get_device_properties(0);current_vram=props.total_memory/1024**3
-			except:pass
-			if current_vram>=9.5:optimal_layers=32;self.logger.info(f"RTX 3080 detected with {current_vram:.1f}GB VRAM, setting {optimal_layers} GPU layers");self.gpu_layers=optimal_layers
-			elif current_vram>0:optimal_layers=max(1,min(32,int(current_vram*3.2)));self.logger.info(f"GPU detected with {current_vram:.1f}GB VRAM, setting {optimal_layers} GPU layers");self.gpu_layers=optimal_layers
+		if self.config.get('gpu',{}).get('rtx_3080_optimized',False):self.gpu_layers=self.config.get('llm',{}).get('gpu_layers',32);self.logger.info(f"Using {self.gpu_layers} GPU layers from configuration")
+	def _optimize_for_rtx_3080(self)->None:
+		if self.config.get('gpu',{}).get('rtx_3080_optimized',False):self.logger.info('Applying RTX 3080 optimizations from configuration')
 	def _get_model_type_mapping(self)->str:model_type_mapping={'mistral':'mistral','llama2':'llama','phi':'phi'};return model_type_mapping.get(self.model_type,'mistral')
 	def _get_model_loading_kwargs(self)->Dict[str,Any]:
-		threads=self.config.get('cpu',{}).get('max_threads',8);kwargs={'threads':threads}
-		if self.config.get('llm',{}).get('use_cache',True):kwargs['use_cache']=True
-		batch_size=self.config.get('llm',{}).get('batch_size',16)
+		threads=self.config.get('cpu',{}).get('max_threads',8);kwargs={'threads':threads};llm_config=self.config.get('llm',{})
+		if llm_config.get('use_cache',True):kwargs['use_cache']=True
+		batch_size=llm_config.get('batch_size',16)
 		if batch_size>0:kwargs['batch_size']=batch_size
 		return kwargs
 	@retry_operation(max_attempts=2,allowed_exceptions=(OSError,RuntimeError))
