@@ -1,10 +1,8 @@
 import os,yaml,time
 from typing import Dict,Any,Optional,List,Tuple,Union
-from maggie.core.state import State
 from maggie.utils.error_handling import with_error_handling,ErrorCategory,ErrorSeverity,record_error,safe_execute
 from maggie.utils.logging import ComponentLogger,log_operation,logging_context
 from maggie.utils.resource.detector import HardwareDetector
-from maggie.utils.resource.optimizer import HardwareOptimizer
 from maggie.service.locator import ServiceLocator
 __all__=['ConfigManager']
 class ConfigManager:
@@ -38,7 +36,7 @@ class ConfigManager:
 					if'stt'in self.config:
 						if'whisper'in self.config['stt']:self.config['stt']['whisper']['compute_type']='float16';self.config['stt']['whisper']['tensor_cores_enabled']=True;self.config['stt']['whisper']['flash_attention_enabled']=True;optimizations['stt']['compute_type']='float16';optimizations['stt']['tensor_cores_enabled']=True
 						if'whisper_streaming'in self.config['stt']:self.config['stt']['whisper_streaming']['compute_type']='float16';self.config['stt']['whisper_streaming']['tensor_cores_enabled']=True;optimizations['stt']['streaming_compute_type']='float16'
-					if'tts'in self.config:self.config['tts']['gpu_acceleration']=True;self.config['tts']['gpu_precision']='mixed_float16';self.config['tts']['tensor_cores_enabled']=True;self.config['tts']['cuda_graphs_enabled']=True;optimizations['tts']['gpu_acceleration']=True;optimizations['tts']['gpu_precision']='mixed_float16';optimizations['tts']['tensor_cores_enabled']=True
+					if'tts'in self.config:self.config['tts']['gpu_acceleration']=True;self.config['tts']['gpu_precision']='mixed_float16';self.config['tts']['tensor_cores_enabled']=True;optimizations['tts']['gpu_acceleration']=True;optimizations['tts']['gpu_precision']='mixed_float16';optimizations['tts']['tensor_cores_enabled']=True
 			memory_info=self.hardware_info.get('memory',{})
 			if memory_info.get('is_xpg_d10',False)and memory_info.get('is_32gb',False):
 				if'memory'not in self.config:self.config['memory']={}
@@ -108,7 +106,7 @@ class ConfigManager:
 			elif gpu_info.get('available',False):self.logger.info(f"Detected GPU: {gpu_info.get('name','Unknown')}")
 			else:self.logger.warning('No compatible GPU detected - some features may be limited')
 			if memory_info.get('is_xpg_d10',False):self.logger.info('Detected ADATA XPG D10 memory - applying optimized settings')
-			self.hardware_optimizer=HardwareOptimizer(hardware_info,self.default_config);return hardware_info
+			from maggie.utils.resource.optimizer import HardwareOptimizer;self.hardware_optimizer=HardwareOptimizer(hardware_info,self.default_config);return hardware_info
 		except Exception as e:self.logger.error(f"Error detecting hardware: {e}");return{}
 	def _attempt_config_recovery(self,error:Exception)->None:
 		backup_path=self._find_latest_backup()
@@ -120,3 +118,18 @@ class ConfigManager:
 			except Exception as recover_error:self.logger.error(f"Failed to recover from backup: {recover_error}");self.config=self.default_config;self.logger.info('Using default configuration')
 		else:self.config=self.default_config;self.logger.info('Using default configuration')
 	def _merge_with_defaults(self)->None:hardware_specific_settings=self._extract_hardware_specific_settings(self.config);self.config=self._deep_merge(self.default_config.copy(),self.config);self._restore_hardware_specific_settings(hardware_specific_settings)
+	def apply_state_specific_config(self,state)->None:self.logger.debug(f"Applying state-specific configuration for state: {state.name}")
+	def _get_nested_value(self,config_dict,path_string):
+		parts=path_string.split('.');current=config_dict
+		for part in parts:
+			if part not in current:return None
+			current=current[part]
+		return current
+	def _extract_hardware_specific_settings(self,config):hardware_settings={};return hardware_settings
+	def _restore_hardware_specific_settings(self,settings):pass
+	def _deep_merge(self,default_dict,user_dict):return default_dict
+	def _find_latest_backup(self):return None
+	def _create_backup(self,reason):pass
+	def validate(self):pass
+	def save(self):pass
+	def _get_hardware_optimizer(self,hardware_info):from maggie.utils.resource.optimizer import HardwareOptimizer;return HardwareOptimizer(hardware_info,self.config)
