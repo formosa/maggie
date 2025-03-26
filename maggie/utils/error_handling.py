@@ -916,7 +916,31 @@ def create_state_transition_error(
 		to_state: Any, 
 		trigger: str, 
 		details: Dict[str, Any] = None
-	) -> StateTransitionError: 
+) -> StateTransitionError: 
+	"""
+	Creates and logs a StateTransitionError for invalid state transitions.
+
+	Args:
+		from_state (Any): The current state before the transition. Can be an object
+			with a `name` attribute or any other representation of the state.
+		to_state (Any): The target state for the transition. Can be an object
+			with a `name` attribute or any other representation of the state.
+		trigger (str): The event or action that triggered the state transition.
+		details (Dict[str, Any], optional): Additional details about the error
+			or context for debugging. Defaults to None.
+
+	Returns:
+		StateTransitionError: An exception object representing the invalid state
+		transition, including the error message and relevant details.
+
+	Logs:
+		Records the error with the following details:
+		- Message describing the invalid state transition.
+		- Error category as `STATE`.
+		- Severity level as `ERROR`.
+		- Source as 'StateManager.transition_to'.
+		- Additional details, if provided.
+	"""
 	from_name = from_state.name if hasattr(from_state, 'name')else str(from_state)
 	to_name = to_state.name if hasattr(to_state, 'name')else str(to_state)
 	message = f"Invalid state transition: {from_name} -> {to_name} (trigger: {trigger})"
@@ -930,4 +954,10 @@ def create_state_transition_error(
 		to_state=to_state, 
 		trigger=trigger
 	)
-	return StateTransitionError(message=message, from_state=from_state, to_state=to_state, trigger=trigger, details=details)
+	return StateTransitionError(
+			message=message,
+			from_state=from_state,
+			to_state=to_state,
+			trigger=trigger,
+			details=details
+		)
