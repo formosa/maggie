@@ -40,7 +40,7 @@ def setup_application(args:argparse.Namespace)->Tuple[Optional[MaggieAI],Dict[st
 	except Exception as e:record_error(message=f"Error setting up application: {e}",exception=e,category=ErrorCategory.SYSTEM,severity=ErrorSeverity.CRITICAL,source='main.setup_application');return None,config
 @with_error_handling(error_category=ErrorCategory.SYSTEM)
 def setup_gui(maggie:MaggieAI)->Optional[Tuple[Any,Any]]:
-	try:setup_pyside6_paths();from PySide6.QtWidgets import QApplication;from maggie.utils.gui import MainWindow;app=QApplication(sys.argv);window=MainWindow(maggie);return window,app
+	try:setup_pyside6_paths();from PySide6.QtWidgets import QApplication;from maggie.utils import get_main_window;MainWindow=get_main_window();app=QApplication(sys.argv);window=MainWindow(maggie);return window,app
 	except ImportError as e:logger.error(f"Failed to import GUI modules: {e}");return None
 	except Exception as e:logger.error(f"Error setting up GUI: {e}");return None
 @with_error_handling(error_category=ErrorCategory.SYSTEM)
