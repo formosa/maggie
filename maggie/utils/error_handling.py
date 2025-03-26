@@ -9,8 +9,6 @@ import threading
 from typing import Any, Callable, Optional, TypeVar, Dict, Union, List, Tuple, cast, Type
 from functools import wraps
 T = TypeVar('T')
-logger = logging.getLogger(__name__)
-
 
 class ErrorSeverity(enum.Enum):
 	"""
@@ -961,3 +959,5 @@ def create_state_transition_error(
 			trigger=trigger,
 			details=details
 		)
+
+logger = logging.getLogger(__name__)
