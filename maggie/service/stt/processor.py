@@ -12,7 +12,7 @@ class STTProcessor(StateAwareComponent,EventListener):
 		if self.state_manager:StateAwareComponent.__init__(self,self.state_manager)
 		self.event_bus=ServiceLocator.get('event_bus')
 		if self.event_bus:EventListener.__init__(self,self.event_bus)
-		self.config=config;self.whisper_config=config.get('whisper',{});self.model_size=self.whisper_config.get('model_size','base');self.compute_type=self.whisper_config.get('compute_type','float16');self.streaming_config=config.get('whisper_streaming',{});self.use_streaming=self.streaming_config.get('enabled',True);self.sample_rate=self.whisper_config.get('sample_rate',16000);self.chunk_size=self.config.get('chunk_size',1024);self.channels=1;self.whisper_model=None;self.tts_processor=None;self.audio_stream=None;self.pyaudio_instance=None;self.streaming_server=None;self.streaming_client=None;self.streaming_active=False;self.streaming_paused=False;self.listening=False;self.on_intermediate_result=None;self.on_final_result=None;self._streaming_thread=None;self._streaming_stop_event=threading.Event();self._stop_event=threading.Event();self.lock=threading.RLock();self.buffer_lock=threading.RLock();self.audio_buffer=[];self.use_gpu=not config.get('cpu_only',False);self.vad_enabled=config.get('vad_enabled',True);self.vad_threshold=config.get('vad_threshold',.5)
+		self.config=config;self.whisper_config=config.get('whisper',{});self.model_size=self.whisper_config.get('model_size','base');self.compute_type=self.whisper_config.get('compute_type','float16');self.streaming_config=config.get('whisper_streaming',{});self.use_streaming=self.streaming_config.get('enabled',True);self.sample_rate=self.whisper_config.get('sample_rate',16000);self.chunk_size=self.whisper_config.get('chunk_size',1024);self.channels=1;self.whisper_model=None;self.tts_processor=None;self.audio_stream=None;self.pyaudio_instance=None;self.streaming_server=None;self.streaming_client=None;self.streaming_active=False;self.streaming_paused=False;self.listening=False;self.on_intermediate_result=None;self.on_final_result=None;self._streaming_thread=None;self._streaming_stop_event=threading.Event();self._stop_event=threading.Event();self.lock=threading.RLock();self.buffer_lock=threading.RLock();self.audio_buffer=[];self.use_gpu=not config.get('cpu_only',False);self.vad_enabled=config.get('vad_enabled',True);self.vad_threshold=config.get('vad_threshold',.5)
 		try:self.resource_manager=ServiceLocator.get('resource_manager')
 		except Exception:self.resource_manager=None
 		self._model_info={'size':None,'compute_type':None};self.logger=ComponentLogger('STTProcessor')
@@ -133,21 +133,20 @@ class STTProcessor(StateAwareComponent,EventListener):
 		except ImportError as e:self.logger.error(f"Error importing WhisperModel: {e}");self.logger.error('Please install faster-whisper with: pip install faster-whisper');return False
 		except Exception as e:self.logger.error(f"Error loading Whisper model: {e}");return False
 	def _apply_hardware_optimizations(self)->None:
-		if not self.resource_manager:return
-		hardware_info=self.resource_manager.detector.hardware_info
-		if hardware_info['gpu'].get('is_rtx_3080',False):
+		if self.config.get('cpu',{}).get('ryzen_9_5900x_optimized',False):
+			self.chunk_size=self.whisper_config.get('chunk_size',512)
+			if self.config.get('cpu',{}).get('thread_affinity_enabled',False):
+				try:import psutil;process=psutil.Process();perf_cores=self.config.get('cpu',{}).get('performance_cores',[0,1,2,3,4,5,6,7]);process.cpu_affinity(perf_cores)
+				except ImportError:pass
+		if self.config.get('gpu',{}).get('rtx_3080_optimized',False):
 			try:
 				import torch
 				if torch.cuda.is_available():
-					self.compute_type='float16'
-					if hasattr(torch.backends,'cudnn'):torch.backends.cudnn.allow_tf32=True
-					torch.backends.cudnn.benchmark=True;self.logger.info('Applied RTX 3080 optimizations for Whisper')
-			except ImportError:pass
-		if hardware_info['cpu'].get('is_ryzen_9_5900x',False):
-			self.chunk_size=512
-			try:
-				import psutil
-				if os.name=='nt':process=psutil.Process();process.cpu_affinity([0,1,2,3,4,5,6,7])
+					self.compute_type=self.whisper_config.get('compute_type','float16')
+					if self.whisper_config.get('tensor_cores_enabled',True):
+						if hasattr(torch.backends,'cudnn'):torch.backends.cudnn.allow_tf32=True
+					if self.whisper_config.get('flash_attention_enabled',True):pass
+					torch.backends.cudnn.benchmark=True;self.logger.info('Applied RTX 3080 optimizations for Whisper from configuration')
 			except ImportError:pass
 	@log_operation(component='STTProcessor')
 	@with_error_handling(error_category=ErrorCategory.SYSTEM,error_severity=ErrorSeverity.ERROR)
