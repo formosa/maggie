@@ -2,13 +2,13 @@
 Maggie AI Assistant - Main Application Entry Point
 ================================================
 
-This module serves as the primary entry point for the Maggie AI Assistant, 
-implementing a comprehensive initialization and startup process for an 
+This module serves as the primary entry point for the Maggie AI Assistant,
+implementing a comprehensive initialization and startup process for an
 intelligent, state-aware AI assistant application.
 
-The application follows a modular, event-driven architecture with a 
-Finite State Machine (FSM) design, optimized for high-performance 
-computing environments, particularly systems with AMD Ryzen 9 5900X 
+The application follows a modular, event-driven architecture with a
+Finite State Machine (FSM) design, optimized for high-performance
+computing environments, particularly systems with AMD Ryzen 9 5900X
 processors and NVIDIA RTX 3080 GPUs.
 
 Key Architecture Concepts:
@@ -34,6 +34,16 @@ References:
 .. moduleauthor:: Anthony Formosa <emailformosa@gmail.com>
 """
 
+from maggie.utils.config.manager import ConfigManager
+from maggie.utils.resource.detector import HardwareDetector
+from maggie.core import MaggieAI, State
+from maggie.utils.error_handling import (
+    safe_execute,
+    ErrorCategory,
+    ErrorSeverity,
+    record_error,
+    with_error_handling
+)
 import os
 import sys
 import argparse
@@ -46,25 +56,14 @@ from typing import Dict, Any, Optional, Tuple
 from maggie.utils.logging import ComponentLogger
 logger = ComponentLogger('Main')
 
-from maggie.utils.error_handling import (
-    safe_execute, 
-    ErrorCategory, 
-    ErrorSeverity, 
-    record_error, 
-    with_error_handling
-)
 # Initialize a component-specific logger for the main module
-from maggie.core import MaggieAI, State
-from maggie.utils.resource.detector import HardwareDetector
-from maggie.utils.config.manager import ConfigManager
-
 
 
 def parse_arguments() -> argparse.Namespace:
     """
     Parse and process command-line arguments for the Maggie AI Assistant.
 
-    This function configures an argument parser to handle various runtime 
+    This function configures an argument parser to handle various runtime
     configuration and execution modes for the application.
 
     Returns
@@ -89,38 +88,39 @@ def parse_arguments() -> argparse.Namespace:
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
     parser.add_argument(
-        '--config', 
-        type=str, 
-        default='config.yaml', 
+        '--config',
+        type=str,
+        default='config.yaml',
         help='Path to configuration file'
     )
     parser.add_argument(
-        '--debug', 
-        action='store_true', 
+        '--debug',
+        action='store_true',
         help='Enable debug logging'
     )
     parser.add_argument(
-        '--verify', 
-        action='store_true', 
+        '--verify',
+        action='store_true',
         help='Verify system configuration without starting the assistant'
     )
     parser.add_argument(
-        '--create-template', 
-        action='store_true', 
+        '--create-template',
+        action='store_true',
         help="Create the recipe template file if it doesn't exist"
     )
     parser.add_argument(
-        '--headless', 
-        action='store_true', 
+        '--headless',
+        action='store_true',
         help='Run in headless mode without GUI'
     )
     return parser.parse_args()
+
 
 def initialize_logging(config: Dict[str, Any], debug: bool = False) -> None:
     """
     Initialize the logging system for the Maggie AI Assistant.
 
-    This function sets up logging configurations, ensuring proper 
+    This function sets up logging configurations, ensuring proper
     log file creation and setting log levels based on debug mode.
 
     Parameters
@@ -142,22 +142,23 @@ def initialize_logging(config: Dict[str, Any], debug: bool = False) -> None:
     - Loguru Documentation: https://loguru.readthedocs.io/
     """
     os.makedirs('logs', exist_ok=True)
-    
+
     # Adjust log levels if debug mode is enabled
     if debug and 'logging' in config:
         config['logging']['console_level'] = 'DEBUG'
         config['logging']['file_level'] = 'DEBUG'
-    
+
     LoggingManager.initialize(config)
     LoggingManager.get_instance().setup_global_exception_handler()
     logger.info('Logging system initialized')
+
 
 def initialize_multiprocessing() -> None:
     """
     Configure multiprocessing start method for the application.
 
-    Sets the multiprocessing start method to 'spawn', which is 
-    safer and more compatible across different platforms, 
+    Sets the multiprocessing start method to 'spawn', which is
+    safer and more compatible across different platforms,
     especially for GUI and complex application architectures.
 
     Notes
@@ -176,11 +177,12 @@ def initialize_multiprocessing() -> None:
         # Method might already be set, which is acceptable
         pass
 
+
 def setup_pyside6_paths() -> None:
     """
     Dynamically configure system paths for PySide6 Qt6 libraries.
 
-    Searches for PySide6 installation paths and appends them to 
+    Searches for PySide6 installation paths and appends them to
     sys.path to ensure proper library loading and compatibility.
 
     Notes
@@ -200,12 +202,12 @@ def setup_pyside6_paths() -> None:
             if os.path.exists(pyside_path):
                 if pyside_path not in sys.path:
                     sys.path.append(pyside_path)
-                    
+
                     # Add Qt6 specific paths
                     qt6_path = os.path.join(pyside_path, 'Qt6')
                     if os.path.exists(qt6_path) and qt6_path not in sys.path:
                         sys.path.append(qt6_path)
-                    
+
                     # Add binary path
                     bin_path = os.path.join(qt6_path, 'bin')
                     if os.path.exists(bin_path) and bin_path not in sys.path:
@@ -214,11 +216,12 @@ def setup_pyside6_paths() -> None:
     except Exception as e:
         logger.warning(f"Error setting up PySide6 paths: {e}")
 
+
 def register_signal_handlers(maggie: MaggieAI) -> None:
     """
     Register system signal handlers for graceful application shutdown.
 
-    Configures handlers for SIGINT (Ctrl+C) and SIGTERM to ensure 
+    Configures handlers for SIGINT (Ctrl+C) and SIGTERM to ensure
     the Maggie AI Assistant can perform clean shutdown procedures.
 
     Parameters
@@ -241,7 +244,7 @@ def register_signal_handlers(maggie: MaggieAI) -> None:
             logger.info(f"Received signal {sig}, shutting down gracefully")
             maggie.shutdown()
             sys.exit(0)
-        
+
         signal.signal(signal.SIGINT, signal_handler)
         signal.signal(signal.SIGTERM, signal_handler)
         logger.info('Registered signal handlers for graceful shutdown')
@@ -249,6 +252,8 @@ def register_signal_handlers(maggie: MaggieAI) -> None:
         logger.warning(f"Failed to register signal handlers: {e}")
 
 # @with_error_handling(error_category=ErrorCategory.CONFIGURATION)
+
+
 def setup_application(args: argparse.Namespace) -> Tuple[Optional[MaggieAI], Dict[str, Any]]:
     """
     Initialize the core Maggie AI Assistant application.
@@ -279,45 +284,45 @@ def setup_application(args: argparse.Namespace) -> Tuple[Optional[MaggieAI], Dic
     ------
     Various exceptions related to configuration and initialization
     """
-    
-	from maggie.utils.logging import ComponentLogger, LoggingManager
 
+    from maggie.utils.logging import ComponentLogger, LoggingManager
 
-	config_manager = ConfigManager(args.config)
-	config = config_manager.load()
+    config_manager = ConfigManager(args.config)
+    config = config_manager.load()
 
-	initialize_logging(config, args.debug)
+    initialize_logging(config, args.debug)
 
-	logger.info('Starting Maggie AI Assistant')
-	logger.info(f"Running on Python {platform.python_version()}")
-	logger.info(f"Process ID: {os.getpid()}")
+    logger.info('Starting Maggie AI Assistant')
+    logger.info(f"Running on Python {platform.python_version()}")
+     logger.info(f"Process ID: {os.getpid()}")
 
-	initialize_multiprocessing()
+      initialize_multiprocessing()
 
-	try:
-		maggie = MaggieAI(args.config)
-		register_signal_handlers(maggie)
-		
-		logger.info('Application setup completed successfully')
-		return maggie, config
-	except ImportError as e:
-		record_error(
-			message=f"Failed to import required module: {e}",
-			exception=e,
-			category=ErrorCategory.SYSTEM,
-			severity=ErrorSeverity.CRITICAL,
-			source='main.setup_application'
-		)
-		return None, config
-	except Exception as e:
-		record_error(
-			message=f"Error setting up application: {e}",
-			exception=e,
-			category=ErrorCategory.SYSTEM,
-			severity=ErrorSeverity.CRITICAL,
-			source='main.setup_application'
-		)
-		return None, config
+       try:
+            maggie = MaggieAI(args.config)
+            register_signal_handlers(maggie)
+
+            logger.info('Application setup completed successfully')
+            return maggie, config
+        except ImportError as e:
+            record_error(
+                message=f"Failed to import required module: {e}",
+                exception=e,
+                category=ErrorCategory.SYSTEM,
+                severity=ErrorSeverity.CRITICAL,
+                source='main.setup_application'
+            )
+            return None, config
+        except Exception as e:
+            record_error(
+                message=f"Error setting up application: {e}",
+                exception=e,
+                category=ErrorCategory.SYSTEM,
+                severity=ErrorSeverity.CRITICAL,
+                source='main.setup_application'
+            )
+            return None, config
+
 
 @with_error_handling(error_category=ErrorCategory.SYSTEM)
 def setup_gui(maggie: MaggieAI) -> Optional[Tuple[Any, Any]]:
@@ -352,11 +357,11 @@ def setup_gui(maggie: MaggieAI) -> Optional[Tuple[Any, Any]]:
         setup_pyside6_paths()
         from PySide6.QtWidgets import QApplication
         from maggie.utils import get_main_window
-        
+
         MainWindow = get_main_window()
         app = QApplication(sys.argv)
         window = MainWindow(maggie)
-        
+
         return window, app
     except ImportError as e:
         logger.error(f"Failed to import GUI modules: {e}")
@@ -364,6 +369,7 @@ def setup_gui(maggie: MaggieAI) -> Optional[Tuple[Any, Any]]:
     except Exception as e:
         logger.error(f"Error setting up GUI: {e}")
         return None
+
 
 @with_error_handling(error_category=ErrorCategory.SYSTEM)
 def start_maggie(args: argparse.Namespace, maggie: MaggieAI, config: Dict[str, Any]) -> int:
@@ -400,44 +406,45 @@ def start_maggie(args: argparse.Namespace, maggie: MaggieAI, config: Dict[str, A
     """
     logger.info('Starting Maggie AI core services')
     success = maggie.start()
-    
+
     if not success:
         logger.error('Failed to start Maggie AI core services')
         return 1
-    
+
     if not args.headless:
         try:
             gui_result = setup_gui(maggie)
-            
+
             if gui_result is None:
                 logger.error('GUI setup failed')
                 maggie.shutdown()
                 return 1
-            
+
             window, app = gui_result
-            
+
             if hasattr(maggie, 'set_gui') and callable(getattr(maggie, 'set_gui')):
                 maggie.set_gui(window)
-            
+
             window.show()
             return app.exec()
-        
+
         except Exception as e:
             logger.error(f"Error starting GUI: {e}")
             maggie.shutdown()
             return 1
-    
+
     else:
         logger.info('Running in headless mode')
         try:
             while maggie.state != State.SHUTDOWN:
                 time.sleep(1)
             return 0
-        
+
         except KeyboardInterrupt:
             logger.info('Keyboard interrupt received, shutting down')
             maggie.shutdown()
             return 0
+
 
 def main() -> int:
     """
@@ -467,20 +474,21 @@ def main() -> int:
     try:
         args = parse_arguments()
         maggie, config = setup_application(args)
-        
+
         if maggie is None:
             logger.error('Failed to set up application')
             return 1
-        
+
         return start_maggie(args, maggie, config)
-    
+
     except KeyboardInterrupt:
         logger.info('\nApplication interrupted by user')
         return 1
-    
+
     except Exception as e:
         logger.critical(f"Unexpected error in main: {e}", exc_info=True)
         return 1
+
 
 if __name__ == '__main__':
     sys.exit(main())
