@@ -47,7 +47,11 @@ class ExtensionRegistry(StateAwareComponent,EventListener):
 	def _on_enter_shutdown(self,transition:StateTransition)->None:self._registry.clear();self._active_extensions.clear();self._lazy_load_registry.clear();self.logger.info('Extension registry cleared in SHUTDOWN state')
 	def _on_transition_idle_to_ready(self,transition:StateTransition)->None:pass
 	def _on_transition_ready_to_active(self,transition:StateTransition)->None:pass
-	def _on_transition_active_to_busy(self,transition:StateTransition)->None:self._optimize_extensions_for_busy_state()
+	def _on_transition_active_to_busy(self,transition:StateTransition)->None:
+		try:
+			config_manager=ServiceLocator.get('config_manager')
+			if config_manager:config_manager.apply_state_specific_config(State.BUSY);self.logger.debug('Applied busy state configuration for extensions')
+		except Exception as e:self.logger.warning(f"Failed to apply busy state configuration: {e}")
 	def _on_transition_busy_to_ready(self,transition:StateTransition)->None:self._resume_paused_extensions()
 	def _preload_common_extensions(self)->None:self.logger.debug('Preloading common extensions')
 	def _unload_extension(self,extension_name:str)->None:
@@ -71,17 +75,12 @@ class ExtensionRegistry(StateAwareComponent,EventListener):
 			if hasattr(extension,'resume'):
 				try:extension.resume();self.logger.debug(f"Resumed extension: {extension_name}")
 				except Exception as e:self.logger.warning(f"Error resuming extension {extension_name}: {e}")
-	def _optimize_extensions_for_busy_state(self)->None:
-		resource_manager=None
-		try:resource_manager=ServiceLocator.get('resource_manager')
-		except Exception:pass
-		if resource_manager:self.logger.debug('Optimizing extensions for busy state')
 	@log_operation(component='ExtensionRegistry')
 	@with_error_handling(error_category=ErrorCategory.EXTENSION)
 	def discover_extensions(self)->Dict[str,Type[ExtensionBase]]:
 		self._registry={};self._lazy_load_registry={}
 		if self._extensions_path not in sys.path:sys.path.append(self._extensions_path)
-		with logging_context(component='ExtensionRegistry',operation='discover_extensions'):
+		with logging_context(component='ExtensionRegistry',operation='discover_extensions')as ctx:
 			extension_modules=[]
 			for(_,module_name,is_pkg)in pkgutil.iter_modules([self._extensions_path]):
 				if is_pkg and module_name!='__pycache__'and not module_name.startswith('_'):extension_modules.append(module_name)
