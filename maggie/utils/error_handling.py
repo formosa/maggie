@@ -10,6 +10,8 @@ from typing import Any, Callable, Optional, TypeVar, Dict, Union, List, Tuple, c
 from functools import wraps
 T = TypeVar('T')
 
+logger = logging.getLogger(__name__)
+
 class ErrorSeverity(enum.Enum):
 	"""
 	ErrorSeverity is an enumeration that represents different levels of error severity.
@@ -960,4 +962,3 @@ def create_state_transition_error(
 			details=details
 		)
 
-logger = logging.getLogger(__name__)
