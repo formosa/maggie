@@ -35,7 +35,7 @@ def register_signal_handlers(maggie:MaggieAI)->None:
 @with_error_handling(error_category=ErrorCategory.CONFIGURATION)
 def setup_application(args:argparse.Namespace)->Tuple[Optional[MaggieAI],Dict[str,Any]]:
 	config_manager=ConfigManager(args.config);config=config_manager.load();initialize_logging(config,args.debug);logger.info('Starting Maggie AI Assistant');logger.info(f"Running on Python {platform.python_version()}");logger.info(f"Process ID: {os.getpid()}");initialize_multiprocessing()
-	try:maggie=MaggieAI(config_manager);register_signal_handlers(maggie);logger.info('Application setup completed successfully');return maggie,config
+	try:maggie=MaggieAI(args.config);register_signal_handlers(maggie);logger.info('Application setup completed successfully');return maggie,config
 	except ImportError as e:record_error(message=f"Failed to import required module: {e}",exception=e,category=ErrorCategory.SYSTEM,severity=ErrorSeverity.CRITICAL,source='main.setup_application');return None,config
 	except Exception as e:record_error(message=f"Error setting up application: {e}",exception=e,category=ErrorCategory.SYSTEM,severity=ErrorSeverity.CRITICAL,source='main.setup_application');return None,config
 @with_error_handling(error_category=ErrorCategory.SYSTEM)
