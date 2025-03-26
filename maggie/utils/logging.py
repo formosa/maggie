@@ -1,3 +1,30 @@
+"""
+Maggie AI Assistant - Logging Utility
+================================================
+
+This module provides a comprehensive logging utility for managing and structuring logs in a Python application. 
+It includes support for multiple logging destinations, asynchronous logging, batched logging, and contextual logging.
+Classes:
+	LogLevel (Enum):
+		Enumeration representing different levels of logging severity.
+	LogDestination (Enum):
+		Enumeration representing different destinations where log messages can be sent.
+	LoggingManager:
+		A singleton class responsible for managing the logging system in the application. 
+	ComponentLogger:
+		A utility class for structured logging with additional context related to the component's state and resource usage.
+Functions:
+	logging_context(correlation_id: Optional[str] = None, component: str = '', operation: str = '', state: Any = None) -> Generator[Dict[str, Any], None, None]:
+	log_operation(component: str = '', log_args: bool = True, log_result: bool = False, include_state: bool = True):
+	- Supports logging to console, files, and event buses.
+	- Provides detailed system information logging.
+	- Includes performance metrics logging for operations.
+	- Allows for state transition and resource allocation/deallocation logging.
+	- Integrates with a state manager and resource manager for additional context.
+	- Offers global exception handling for unhandled exceptions.
+	- Enables asynchronous and batched logging for performance optimization.
+	- Provides decorators for function-level logging with argument/result tracking.
+"""
 import os,sys,logging,time,uuid,inspect,functools,threading,queue
 from enum import Enum,auto
 from pathlib import Path
@@ -36,9 +63,9 @@ class LogDestination(str,Enum):
 		FILE (str): Represents logging to a file.
 		EVENT_BUS (str): Represents logging to an event bus.
 	"""
-	CONSOLE='console'
-	FILE='file'
-	EVENT_BUS='event_bus'
+	CONSOLE='CONSOLE'
+	FILE='FILE'
+	EVENT_BUS='EVENT_BUS'
 class LoggingManager:
 	"""
 	LoggingManager is a singleton class responsible for managing the logging system in the application. 
@@ -109,7 +136,8 @@ class LoggingManager:
 			Shuts down the logging system, flushing any remaining logs and stopping background threads.
 	"""
 	_instance=None
-
+	_configured=False
+	
 	@classmethod
 	def get_instance(cls)->'LoggingManager':
 		"""
@@ -179,12 +207,12 @@ class LoggingManager:
 		Raises:
 			OSError: If the log directory cannot be created.
 		"""
-		# self.config=config.get('logging',{})
-		# self.log_dir=Path(self.config.get('path','logs')).resolve()
-		# self.log_dir.mkdir(exist_ok=True,parents=True)
-		# self.console_level=self.config.get('console_level','INFO')
-		# self.file_level=self.config.get('file_level','DEBUG')
-		# (self.enabled_destinations):Set[LogDestination]={LogDestination.CONSOLE,LogDestination.FILE}
+		self.config=config.get('logging',{})
+		self.log_dir=Path(self.config.get('path','logs')).resolve()
+		self.log_dir.mkdir(exist_ok=True,parents=True)
+		self.console_level=self.config.get('console_level','INFO')
+		self.file_level=self.config.get('file_level','DEBUG')
+		(self.enabled_destinations):Set[LogDestination]={LogDestination.CONSOLE,LogDestination.FILE}
 		
 		# Use lazy import for HardwareDetector to avoid circular reference
 		self._hardware_detector = None
