@@ -6,11 +6,39 @@ from contextlib import contextmanager
 from loguru import logger
 
 # Remove the direct import of HardwareDetector
-# from maggie.utils.resource.detector import HardwareDetector
+from maggie.utils.resource.detector import HardwareDetector
 
 T=TypeVar('T')
-class LogLevel(str,Enum):DEBUG='DEBUG';INFO='INFO';WARNING='WARNING';ERROR='ERROR';CRITICAL='CRITICAL'
-class LogDestination(str,Enum):CONSOLE='console';FILE='file';EVENT_BUS='event_bus'
+class LogLevel(str,Enum):
+	"""
+	LogLevel is an enumeration that represents different levels of logging severity.
+
+	Attributes:
+		DEBUG (str): Detailed information, typically of interest only when diagnosing problems.
+		INFO (str): Confirmation that things are working as expected.
+		WARNING (str): An indication that something unexpected happened, or indicative of some problem in the near future.
+		ERROR (str): A more serious problem, the software has not been able to perform some function.
+		CRITICAL (str): A very serious error, indicating that the program itself may be unable to continue running.
+	"""
+	DEBUG='DEBUG'
+	INFO='INFO'
+	WARNING='WARNING'
+	ERROR='ERROR'
+	CRITICAL='CRITICAL'
+
+class LogDestination(str,Enum):
+	"""
+	LogDestination is an enumeration that represents different destinations
+	where log messages can be sent.
+
+	Attributes:
+		CONSOLE (str): Represents logging to the console.
+		FILE (str): Represents logging to a file.
+		EVENT_BUS (str): Represents logging to an event bus.
+	"""
+	CONSOLE='console'
+	FILE='file'
+	EVENT_BUS='event_bus'
 class LoggingManager:
 	"""
 	LoggingManager is a singleton class responsible for managing the logging system in the application. 
@@ -81,6 +109,7 @@ class LoggingManager:
 			Shuts down the logging system, flushing any remaining logs and stopping background threads.
 	"""
 	_instance=None
+
 	@classmethod
 	def get_instance(cls)->'LoggingManager':
 		"""
@@ -92,7 +121,8 @@ class LoggingManager:
 		Raises:
 			RuntimeError: If the LoggingManager has not been initialized.
 		"""
-		if cls._instance is None:raise RuntimeError('LoggingManager not initialized')
+		if cls._instance is None:
+			raise RuntimeError('LoggingManager not initialized')
 		return cls._instance
 	
 	@classmethod
@@ -146,12 +176,27 @@ class LoggingManager:
 		Raises:
 			OSError: If the log directory cannot be created.
 		"""
-		self.config=config.get('logging',{});self.log_dir=Path(self.config.get('path','logs')).resolve();self.log_dir.mkdir(exist_ok=True,parents=True);self.console_level=self.config.get('console_level','INFO');self.file_level=self.config.get('file_level','DEBUG');(self.enabled_destinations):Set[LogDestination]={LogDestination.CONSOLE,LogDestination.FILE};
+		# self.config=config.get('logging',{})
+		# self.log_dir=Path(self.config.get('path','logs')).resolve()
+		# self.log_dir.mkdir(exist_ok=True,parents=True)
+		# self.console_level=self.config.get('console_level','INFO')
+		# self.file_level=self.config.get('file_level','DEBUG')
+		# (self.enabled_destinations):Set[LogDestination]={LogDestination.CONSOLE,LogDestination.FILE}
 		
 		# Use lazy import for HardwareDetector to avoid circular reference
 		self._hardware_detector = None
 		
-		self.log_batch_size=self.config.get('batch_size',50);self.log_batch_timeout=self.config.get('batch_timeout',5.);self.log_batch=[];self.log_batch_lock=threading.RLock();self.log_batch_timer=None;self.log_batch_enabled=self.config.get('batch_enabled',True);self.async_logging=self.config.get('async_enabled',True);self.log_queue=queue.Queue()if self.async_logging else None;self.log_worker=None;self._configure_logging();self._log_system_info()
+		self.log_batch_size=self.config.get('batch_size',50)
+		self.log_batch_timeout=self.config.get('batch_timeout',5.)
+		self.log_batch=[]
+		self.log_batch_lock=threading.RLock()
+		self.log_batch_timer=None
+		self.log_batch_enabled=self.config.get('batch_enabled',True)
+		self.async_logging=self.config.get('async_enabled',True)
+		self.log_queue=queue.Queue()if self.async_logging else None
+		self.log_worker=None
+		self._configure_logging()
+		self._log_system_info()
 		if self.log_batch_enabled:self._initialize_log_batching()
 		if self.async_logging:self._initialize_async_logging()
 		self.correlation_id=None
@@ -207,8 +252,77 @@ class LoggingManager:
 			Any exceptions related to file handling or logger configuration.
 		"""
 		logger.remove()
-		if LogDestination.CONSOLE in self.enabled_destinations:logger.add(sys.stdout,level=self.console_level,format='<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>',colorize=True,backtrace=True,diagnose=True)
-		if LogDestination.FILE in self.enabled_destinations:log_file=self.log_dir/'maggie.log';logger.add(log_file,level=self.file_level,format='{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} - {message}',rotation='10 MB',retention='1 week',compression='zip',backtrace=True,diagnose=True);error_log=self.log_dir/'errors.log';logger.add(error_log,level='ERROR',format='{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} - {message}',rotation='5 MB',retention='1 month',compression='zip',backtrace=True,diagnose=True);perf_log=self.log_dir/'performance.log';logger.add(perf_log,level='DEBUG',format='{time:YYYY-MM-DD HH:mm:ss} | PERFORMANCE | {extra[component]}:{extra[operation]} | {message}',filter=lambda record:'performance'in record['extra'],rotation='5 MB',retention='1 week',compression='zip');fsm_log=self.log_dir/'fsm.log';logger.add(fsm_log,level='DEBUG',format='{time:YYYY-MM-DD HH:mm:ss} | FSM | {extra[component]} | {message}',filter=lambda record:'fsm'in record['extra'],rotation='5 MB',retention='1 week',compression='zip');resource_log=self.log_dir/'resources.log';logger.add(resource_log,level='DEBUG',format='{time:YYYY-MM-DD HH:mm:ss} | RESOURCE | {extra[component]}:{extra[resource_type]} | {message}',filter=lambda record:'resource_operation'in record['extra'],rotation='5 MB',retention='1 week',compression='zip');input_log=self.log_dir/'input.log';logger.add(input_log,level='DEBUG',format='{time:YYYY-MM-DD HH:mm:ss} | INPUT | {extra[component]}:{extra[input_type]} | {message}',filter=lambda record:'input_operation'in record['extra'],rotation='5 MB',retention='1 week',compression='zip')
+		if LogDestination.CONSOLE in self.enabled_destinations:
+			logger.add(
+				sys.stdout,
+				level=self.console_level,
+				format='<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>',
+				colorize=True,
+				backtrace=True,
+				diagnose=True
+			)
+		if LogDestination.FILE in self.enabled_destinations:
+			log_file=self.log_dir/'maggie.log'
+			logger.add(
+				log_file,
+				level=self.file_level,
+				format='{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} - {message}',
+				rotation='10 MB',
+				retention='1 week',
+				compression='zip',
+				backtrace=True,
+				diagnose=True
+			)
+			error_log=self.log_dir/'errors.log'
+			logger.add(
+				error_log,
+				level='ERROR',
+				format='{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} - {message}',
+				rotation='5 MB',
+				retention='1 month',
+				compression='zip',
+				backtrace=True,
+				diagnose=True
+			)
+			perf_log=self.log_dir/'performance.log'
+			logger.add(
+				perf_log,
+				level='DEBUG',
+				format='{time:YYYY-MM-DD HH:mm:ss} | PERFORMANCE | {extra[component]}:{extra[operation]} | {message}',
+				filter=lambda record:'performance'in record['extra'],
+				rotation='5 MB',
+				retention='1 week',
+				compression='zip'
+			)
+			fsm_log=self.log_dir/'fsm.log'
+			logger.add(
+				fsm_log,
+				level='DEBUG',
+				format='{time:YYYY-MM-DD HH:mm:ss} | FSM | {extra[component]} | {message}',
+				filter=lambda record:'fsm'in record['extra'],
+				rotation='5 MB',
+				retention='1 week',
+				compression='zip'
+			)
+			resource_log=self.log_dir/'resources.log'
+			logger.add(
+				resource_log,
+				level='DEBUG',
+				format='{time:YYYY-MM-DD HH:mm:ss} | RESOURCE | {extra[component]}:{extra[resource_type]} | {message}',
+				filter=lambda record:'resource_operation'in record['extra'],
+				rotation='5 MB',
+				retention='1 week',
+				compression='zip'
+			)
+			input_log=self.log_dir/'input.log'
+			logger.add(
+				input_log,level='DEBUG',
+				format='{time:YYYY-MM-DD HH:mm:ss} | INPUT | {extra[component]}:{extra[input_type]} | {message}',
+				filter=lambda record:'input_operation'in record['extra'],
+				rotation='5 MB',
+				retention='1 week',
+				compression='zip'
+			)
 	
 	def _initialize_log_batching(self) -> None:
 		"""
@@ -853,7 +967,8 @@ class ComponentLogger:
 			Attempts to retrieve the 'state_manager' and 'resource_manager' from the
 			ServiceLocator. If unsuccessful, these attributes will remain as None.
 		"""
-		self.component=component_name;self.logger=logger.bind(component=component_name)
+		self.component=component_name
+		self.logger=logger.bind(component=component_name)
 		self._state_manager=None;self._resource_manager=None
 		try:
 			from maggie.service.locator import ServiceLocator
