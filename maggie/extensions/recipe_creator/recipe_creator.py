@@ -17,7 +17,7 @@ class RecipeCreator(ExtensionBase,StateAwareComponent,EventListener):
 	def __init__(self,event_bus,config:Dict[str,Any]):
 		ExtensionBase.__init__(self,event_bus,config);self.state_manager=ServiceLocator.get('state_manager')
 		if self.state_manager:StateAwareComponent.__init__(self,self.state_manager)
-		EventListener.__init__(self,event_bus);self.state=RecipeState.INITIAL;self.recipe_data=RecipeData();self.output_dir=config.get('output_dir','recipes');self.template_path=config.get('template_path','templates/recipe_template.docx');self._retry_count=0;self._max_retries=config.get('max_retries',3);self.speech_timeout=config.get('speech_timeout',3e1);self._workflow_thread=None;self.stt_processor=None;self.llm_processor=None;self.tts_processor=None;self.logger=ComponentLogger('RecipeCreator');self._register_event_handlers();self._ensure_directories()
+		EventListener.__init__(self,event_bus);self.state=RecipeState.INITIAL;self.recipe_data=RecipeData();self.output_dir=config.get('output_dir','recipes');self.template_path=config.get('template_path','templates/recipe_template.docx');self._retry_count=0;self._max_retries=config.get('max_retries',3);self.speech_timeout=config.get('speech_timeout',30);self.thread_count=config.get('cpu',{}).get('max_threads',8);self._workflow_thread=None;self.stt_processor=None;self.llm_processor=None;self.tts_processor=None;self.logger=ComponentLogger('RecipeCreator');self._register_event_handlers();self._ensure_directories()
 	def _register_event_handlers(self)->None:
 		event_handlers=[('error_logged',self._handle_error,EventPriority.HIGH),('low_memory_warning',self._handle_memory_warning,EventPriority.NORMAL)]
 		for(event_type,handler,priority)in event_handlers:self.listen(event_type,handler,priority=priority)
@@ -95,7 +95,7 @@ class RecipeCreator(ExtensionBase,StateAwareComponent,EventListener):
 		finally:self._cleanup_resources();self.running=False
 	def _handle_name_input_state(self)->None:
 		if not self.recipe_data.name:
-			self._speak('What would you like to name this recipe?');success,name=self._recognize_speech(timeout=1e1)
+			self._speak('What would you like to name this recipe?');success,name=self._recognize_speech(timeout=10)
 			if success and name:self.recipe_data.name=name;self._speak(f"I heard {name}. Is that correct?")
 			else:self._speak("I didn't catch that. Let's try again.")
 	def _handle_description_state(self)->None:
@@ -122,7 +122,7 @@ class RecipeCreator(ExtensionBase,StateAwareComponent,EventListener):
 			current_state=self.state_manager.get_current_state()
 			if current_state==State.ACTIVE:self.state_manager.transition_to(State.READY,'recipe_creator_finished')
 	@with_error_handling(error_category=ErrorCategory.EXTENSION)
-	def _recognize_speech(self,timeout:float=1e1)->Tuple[bool,str]:
+	def _recognize_speech(self,timeout:float=10)->Tuple[bool,str]:
 		if self.state_manager:
 			current_state=self.state_manager.get_current_state()
 			if current_state!=State.ACTIVE:self.state_manager.transition_to(State.ACTIVE,'recipe_speech_recognition')
@@ -189,9 +189,11 @@ class RecipeCreator(ExtensionBase,StateAwareComponent,EventListener):
 	@with_error_handling(error_category=ErrorCategory.PROCESSING)
 	def _create_document(self)->bool:
 		try:
-			if os.path.exists(self.template_path):doc=docx.Document(self.template_path)
-			else:self._create_template();doc=docx.Document(self.template_path)
-			self._populate_document(doc);filepath=self._save_document(doc);self.logger.info(f"Recipe document saved to {filepath}");return True
+			import concurrent.futures
+			with concurrent.futures.ThreadPoolExecutor(max_workers=self.thread_count)as executor:
+				if os.path.exists(self.template_path):doc=docx.Document(self.template_path)
+				else:self._create_template();doc=docx.Document(self.template_path)
+				self._populate_document(doc);filepath=self._save_document(doc);self.logger.info(f"Recipe document saved to {filepath}");return True
 		except Exception as e:record_error(message=f"Error creating recipe document: {e}",exception=e,category=ErrorCategory.PROCESSING,severity=ErrorSeverity.ERROR,source='RecipeCreator._create_document');return False
 	def _populate_document(self,doc:docx.Document)->None:
 		for paragraph in doc.paragraphs:
