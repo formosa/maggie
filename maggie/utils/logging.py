@@ -4,7 +4,6 @@ from pathlib import Path
 from typing import Dict,Any,Optional,List,Union,Set,Callable,Generator,TypeVar,cast
 from contextlib import contextmanager
 from loguru import logger
-from maggie.utils.resource.detector import HardwareDetector
 T=TypeVar('T')
 class LogLevel(str,Enum):DEBUG='DEBUG';INFO='INFO';WARNING='WARNING';ERROR='ERROR';CRITICAL='CRITICAL'
 class LogDestination(str,Enum):CONSOLE='console';FILE='file';EVENT_BUS='event_bus'
@@ -19,10 +18,15 @@ class LoggingManager:
 		if cls._instance is not None:logger.warning('LoggingManager already initialized');return cls._instance
 		cls._instance=LoggingManager(config);return cls._instance
 	def __init__(self,config:Dict[str,Any]):
-		self.config=config.get('logging',{});self.log_dir=Path(self.config.get('path','logs')).resolve();self.log_dir.mkdir(exist_ok=True,parents=True);self.console_level=self.config.get('console_level','INFO');self.file_level=self.config.get('file_level','DEBUG');(self.enabled_destinations):Set[LogDestination]={LogDestination.CONSOLE,LogDestination.FILE};self._hardware_detector=HardwareDetector();self.log_batch_size=self.config.get('batch_size',50);self.log_batch_timeout=self.config.get('batch_timeout',5.);self.log_batch=[];self.log_batch_lock=threading.RLock();self.log_batch_timer=None;self.log_batch_enabled=self.config.get('batch_enabled',True);self.async_logging=self.config.get('async_enabled',True);self.log_queue=queue.Queue()if self.async_logging else None;self.log_worker=None;self._configure_logging();self._log_system_info()
+		self.config=config.get('logging',{});self.log_dir=Path(self.config.get('path','logs')).resolve();self.log_dir.mkdir(exist_ok=True,parents=True);self.console_level=self.config.get('console_level','INFO');self.file_level=self.config.get('file_level','DEBUG');(self.enabled_destinations):Set[LogDestination]={LogDestination.CONSOLE,LogDestination.FILE};self._hardware_detector=None;self.log_batch_size=self.config.get('batch_size',50);self.log_batch_timeout=self.config.get('batch_timeout',5.);self.log_batch=[];self.log_batch_lock=threading.RLock();self.log_batch_timer=None;self.log_batch_enabled=self.config.get('batch_enabled',True);self.async_logging=self.config.get('async_enabled',True);self.log_queue=queue.Queue()if self.async_logging else None;self.log_worker=None;self._configure_logging();self._log_system_info()
 		if self.log_batch_enabled:self._initialize_log_batching()
 		if self.async_logging:self._initialize_async_logging()
 		self.correlation_id=None
+	def _get_hardware_detector(self):
+		if self._hardware_detector is None:
+			try:from maggie.utils.resource.detector import HardwareDetector;self._hardware_detector=HardwareDetector()
+			except ImportError:logger.warning('Failed to import HardwareDetector, system info may be limited');self._hardware_detector=None
+		return self._hardware_detector
 	def _configure_logging(self)->None:
 		logger.remove()
 		if LogDestination.CONSOLE in self.enabled_destinations:logger.add(sys.stdout,level=self.console_level,format='<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>',colorize=True,backtrace=True,diagnose=True)
@@ -56,11 +60,14 @@ class LoggingManager:
 			self.log_batch.clear();self.log_batch_timer=threading.Timer(self.log_batch_timeout,self._flush_log_batch);self.log_batch_timer.daemon=True;self.log_batch_timer.start()
 	def _log_system_info(self)->None:
 		try:
-			system_info=self._hardware_detector.detect_system();logger.info(f"System: {system_info['os']['system']} {system_info['os']['release']}");cpu_info=system_info['cpu'];logger.info(f"CPU: {cpu_info['model']}");logger.info(f"CPU Cores: {cpu_info['physical_cores']} physical, {cpu_info['logical_cores']} logical");memory_info=system_info['memory'];logger.info(f"RAM: {memory_info['total_gb']:.2f} GB (Available: {memory_info['available_gb']:.2f} GB)");gpu_info=system_info['gpu']
-			if gpu_info.get('available',False):
-				logger.info(f"GPU: {gpu_info['name']} ({gpu_info['memory_gb']:.2f} GB VRAM)");logger.info(f"CUDA available: {gpu_info['cuda_version']}")
-				if gpu_info.get('is_rtx_3080',False):logger.info('RTX 3080 detected - applying optimal configurations')
-			else:logger.warning('CUDA not available, GPU acceleration disabled')
+			hardware_detector=self._get_hardware_detector()
+			if hardware_detector:
+				system_info=hardware_detector.detect_system();logger.info(f"System: {system_info['os']['system']} {system_info['os']['release']}");cpu_info=system_info['cpu'];logger.info(f"CPU: {cpu_info['model']}");logger.info(f"CPU Cores: {cpu_info['physical_cores']} physical, {cpu_info['logical_cores']} logical");memory_info=system_info['memory'];logger.info(f"RAM: {memory_info['total_gb']:.2f} GB (Available: {memory_info['available_gb']:.2f} GB)");gpu_info=system_info['gpu']
+				if gpu_info.get('available',False):
+					logger.info(f"GPU: {gpu_info['name']} ({gpu_info['memory_gb']:.2f} GB VRAM)");logger.info(f"CUDA available: {gpu_info['cuda_version']}")
+					if gpu_info.get('is_rtx_3080',False):logger.info('RTX 3080 detected - applying optimal configurations')
+				else:logger.warning('CUDA not available, GPU acceleration disabled')
+			else:logger.warning('Hardware detector not available, skipping detailed system info');logger.info(f"System: {sys.platform}")
 		except Exception as e:logger.warning(f"Error logging system information: {e}")
 	def log(self,level:LogLevel,message:str,*args,**kwargs)->None:
 		if self.async_logging and self.log_queue is not None:self.log_queue.put((level,message,args,kwargs))
@@ -128,98 +135,3 @@ class LoggingManager:
 			self.log_queue.put(None)
 			if self.log_worker:self.log_worker.join(timeout=2.)
 		logger.info('Logging system shutdown')
-@contextmanager
-def logging_context(correlation_id:Optional[str]=None,component:str='',operation:str='',state:Any=None)->Generator[Dict[str,Any],None,None]:
-	ctx_id=correlation_id or str(uuid.uuid4());context={'correlation_id':ctx_id,'component':component,'operation':operation,'start_time':time.time()}
-	if state is not None:context['state']=state.name if hasattr(state,'name')else str(state)
-	if state is None:
-		try:
-			from maggie.service.locator import ServiceLocator;state_manager=ServiceLocator.get('state_manager')
-			if state_manager:current_state=state_manager.get_current_state();context['state']=current_state.name if hasattr(current_state,'name')else str(current_state)
-		except Exception:pass
-	try:logging_mgr=LoggingManager.get_instance();prev_id=logging_mgr.get_correlation_id();logging_mgr.set_correlation_id(ctx_id)
-	except RuntimeError:prev_id=None
-	extra={'correlation_id':ctx_id,'component':component,'operation':operation}
-	if'state'in context:extra['state']=context['state']
-	with logger.contextualize(**extra):
-		try:yield context
-		except Exception as e:logger.error(f"Error in {component}/{operation}: {e}");raise
-		finally:
-			try:
-				if prev_id is not None:logging_mgr=LoggingManager.get_instance();logging_mgr.set_correlation_id(prev_id)
-			except RuntimeError:pass
-			if component and operation:
-				elapsed=time.time()-context['start_time'];logger.debug(f"{component}/{operation} completed in {elapsed:.3f}s")
-				if elapsed>.1:
-					try:logging_mgr=LoggingManager.get_instance();logging_mgr.log_performance(component,operation,elapsed)
-					except RuntimeError:pass
-def log_operation(component:str='',log_args:bool=True,log_result:bool=False,include_state:bool=True):
-	def decorator(func):
-		@functools.wraps(func)
-		def wrapper(*args,**kwargs):
-			operation=func.__name__;args_str=''
-			if log_args:
-				sig=inspect.signature(func);arg_names=list(sig.parameters.keys());pos_args=[]
-				for(i,arg)in enumerate(args):
-					if i<len(arg_names)and i>0:pos_args.append(f"{arg_names[i]}={repr(arg)}")
-					elif i>=len(arg_names):pos_args.append(repr(arg))
-				kw_args=[f"{k}={repr(v)}"for(k,v)in kwargs.items()];all_args=pos_args+kw_args;args_str=', '.join(all_args)
-				if len(args_str)>200:args_str=args_str[:197]+'...'
-			state=None
-			if include_state:
-				try:
-					from maggie.service.locator import ServiceLocator;state_manager=ServiceLocator.get('state_manager')
-					if state_manager:state=state_manager.get_current_state()
-				except Exception:pass
-			with logging_context(component=component,operation=operation,state=state)as ctx:
-				if log_args and args_str:logger.debug(f"{operation} called with args: {args_str}")
-				start_time=time.time();result=func(*args,**kwargs);elapsed=time.time()-start_time
-				if log_result:
-					if isinstance(result,(str,int,float,bool,type(None))):logger.debug(f"{operation} returned: {result}")
-					else:logger.debug(f"{operation} returned: {type(result).__name__}")
-				try:logging_mgr=LoggingManager.get_instance();logging_mgr.log_performance(component or func.__module__,operation,elapsed)
-				except RuntimeError:pass
-				return result
-		return wrapper
-	return decorator
-class ComponentLogger:
-	def __init__(self,component_name:str):
-		self.component=component_name;self.logger=logger.bind(component=component_name);self._state_manager=None;self._resource_manager=None
-		try:from maggie.service.locator import ServiceLocator;self._state_manager=ServiceLocator.get('state_manager');self._resource_manager=ServiceLocator.get('resource_manager')
-		except Exception:pass
-	def _get_state_context(self)->Dict[str,Any]:
-		context={}
-		if self._state_manager:
-			try:current_state=self._state_manager.get_current_state();context['state']=current_state.name
-			except Exception:pass
-		return context
-	def _get_resource_context(self)->Dict[str,Any]:
-		context={}
-		if self._resource_manager:
-			try:
-				resource_status=self._resource_manager.get_resource_status()
-				if'memory'in resource_status:context['memory_percent']=resource_status['memory'].get('used_percent',0)
-				if'gpu'in resource_status and resource_status['gpu'].get('available',False):context['gpu_percent']=resource_status['gpu'].get('memory_percent',0)
-			except Exception:pass
-		return context
-	def debug(self,message:str,**kwargs)->None:context=self._get_state_context();self.logger.bind(**context).debug(message,**kwargs)
-	def info(self,message:str,**kwargs)->None:context=self._get_state_context();self.logger.bind(**context).info(message,**kwargs)
-	def warning(self,message:str,**kwargs)->None:context=self._get_state_context();self.logger.bind(**context).warning(message,**kwargs)
-	def error(self,message:str,exception:Optional[Exception]=None,**kwargs)->None:
-		context=self._get_state_context()
-		if exception:self.logger.bind(**context).error(f"{message}: {exception}",exc_info=exception,**kwargs)
-		else:self.logger.bind(**context).error(message,**kwargs)
-	def critical(self,message:str,exception:Optional[Exception]=None,**kwargs)->None:
-		context=self._get_state_context();resource_context=self._get_resource_context();context.update(resource_context)
-		if exception:self.logger.bind(**context).critical(f"{message}: {exception}",exc_info=exception,**kwargs)
-		else:self.logger.bind(**context).critical(message,**kwargs)
-	def log_state_change(self,old_state:Any,new_state:Any,trigger:str)->None:
-		old_name=old_state.name if hasattr(old_state,'name')else str(old_state);new_name=new_state.name if hasattr(new_state,'name')else str(new_state);context={'fsm':True,'from_state':old_name,'to_state':new_name,'trigger':trigger};self.logger.bind(**context).info(f"State change: {old_name} -> {new_name} (trigger: {trigger})")
-		try:logging_mgr=LoggingManager.get_instance();logging_mgr.log_state_transition(old_state,new_state,trigger)
-		except RuntimeError:pass
-	def log_performance(self,operation:str,elapsed:float,details:Dict[str,Any]=None)->None:
-		message=f"Performance: {operation} took {elapsed:.3f}s"
-		if details:message+=f" ({', '.join(f'{k}={v}'for(k,v)in details.items())})"
-		self.logger.debug(message)
-		try:logging_mgr=LoggingManager.get_instance();logging_mgr.log_performance(self.component,operation,elapsed,details)
-		except RuntimeError:pass
