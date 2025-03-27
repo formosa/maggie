@@ -42,7 +42,36 @@ from typing import Any, Callable, Optional, TypeVar, Dict, Union, List, Tuple, c
 
 T = TypeVar('T')
 
-# Error severity levels
+# Setup basic logging as fallback
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[logging.StreamHandler(sys.stdout)]
+)
+logger = logging.getLogger('maggie.error_handling')
+
+# Event constants for integration with event bus
+ERROR_EVENT_LOGGED = 'error_logged'
+"""Event name for when any error is logged."""
+
+ERROR_EVENT_COMPONENT_FAILURE = 'component_failure'
+"""Event name for when a component fails."""
+
+ERROR_EVENT_RESOURCE_WARNING = 'resource_warning'
+"""Event name for resource-related warnings."""
+
+ERROR_EVENT_SYSTEM_ERROR = 'system_error'
+"""Event name for system-level errors."""
+
+ERROR_EVENT_STATE_TRANSITION = 'state_transition_error'
+"""Event name for state transition errors."""
+
+ERROR_EVENT_RESOURCE_MANAGEMENT = 'resource_management_error'
+"""Event name for resource management errors."""
+
+ERROR_EVENT_INPUT_PROCESSING = 'input_processing_error'
+"""Event name for input processing errors."""
+
 class ErrorSeverity(enum.Enum):
     """
     Enumeration of error severity levels.
@@ -50,23 +79,22 @@ class ErrorSeverity(enum.Enum):
     This enum provides standardized severity levels for classifying errors
     throughout the application, enabling consistent error handling, logging,
     and reporting.
-    
+
     Attributes
     ----------
-    DEBUG : enum.auto
+    DEBUG : int
         Low-level debug information about errors that is primarily useful for developers.
-    INFO : enum.auto
+    INFO : int
         Informational messages about errors that don't require immediate attention.
-    WARNING : enum.auto
+    WARNING : int
         Errors that might cause issues but don't prevent the system from functioning.
-    ERROR : enum.auto
+    ERROR : int
         Significant errors that impact functionality but don't require system shutdown.
-    CRITICAL : enum.auto
+    CRITICAL : int
         Severe errors that may require immediate attention or system restart.
-        
+
     Examples
     --------
-    >>> from maggie.utils.error_handling import ErrorSeverity
     >>> severity = ErrorSeverity.WARNING
     >>> if severity == ErrorSeverity.WARNING:
     ...     print("This is a warning level error")
@@ -84,7 +112,7 @@ class ErrorCategory(enum.Enum):
     
     This enum provides standardized categories for classifying errors based on
     their source or nature, enabling more precise error handling, routing, and reporting.
-    
+
     Attributes
     ----------
     SYSTEM : str
@@ -109,10 +137,9 @@ class ErrorCategory(enum.Enum):
         Errors related to state management or transitions.
     UNKNOWN : str
         Errors that don't fit into any other category.
-        
+
     Examples
     --------
-    >>> from maggie.utils.error_handling import ErrorCategory
     >>> error_type = ErrorCategory.NETWORK
     >>> if error_type == ErrorCategory.NETWORK:
     ...     print("This is a network-related error")
@@ -130,29 +157,6 @@ class ErrorCategory(enum.Enum):
     STATE = 'state'
     UNKNOWN = 'unknown'
 
-# Event constants for integration with event bus
-ERROR_EVENT_LOGGED: str
-"""Event name for when any error is logged."""
-
-ERROR_EVENT_COMPONENT_FAILURE: str
-"""Event name for when a component fails."""
-
-ERROR_EVENT_RESOURCE_WARNING: str
-"""Event name for resource-related warnings."""
-
-ERROR_EVENT_SYSTEM_ERROR: str
-"""Event name for system-level errors."""
-
-ERROR_EVENT_STATE_TRANSITION: str
-"""Event name for state transition errors."""
-
-ERROR_EVENT_RESOURCE_MANAGEMENT: str
-"""Event name for resource management errors."""
-
-ERROR_EVENT_INPUT_PROCESSING: str
-"""Event name for input processing errors."""
-
-# Base exception classes
 class MaggieError(Exception):
     """
     Base exception for all Maggie AI Assistant specific errors.
@@ -160,22 +164,20 @@ class MaggieError(Exception):
     This class serves as the root of the Maggie exception hierarchy, providing
     a way to catch all application-specific exceptions with a single except clause.
     All other custom exceptions in the application should inherit from this class.
-    
-    Attributes
+
+    Parameters
     ----------
-    args : tuple
-        Arguments passed to the exception constructor.
-    
+    *args : tuple
+        Variable length argument list passed to the exception constructor.
+
     Examples
     --------
-    >>> from maggie.utils.error_handling import MaggieError
     >>> try:
     ...     raise MaggieError("Something went wrong")
     ... except MaggieError as e:
     ...     print(f"Caught error: {e}")
     Caught error: Something went wrong
-    
-    >>> # Create a custom error
+
     >>> class MyCustomError(MaggieError):
     ...     pass
     >>> try:
@@ -192,15 +194,14 @@ class LLMError(MaggieError):
     
     This exception is raised for errors that occur during language model
     interactions, such as text generation, model loading, or inference failures.
-    
-    Attributes
+
+    Parameters
     ----------
-    args : tuple
-        Arguments passed to the exception constructor.
-    
+    *args : tuple
+        Variable length argument list passed to the exception constructor.
+
     Examples
     --------
-    >>> from maggie.utils.error_handling import LLMError
     >>> try:
     ...     raise LLMError("Failed to generate text")
     ... except LLMError as e:
@@ -215,15 +216,14 @@ class ModelLoadError(LLMError):
     
     This exception is specifically for errors that occur during model loading,
     such as file not found, invalid model format, or insufficient resources.
-    
-    Attributes
+
+    Parameters
     ----------
-    args : tuple
-        Arguments passed to the exception constructor.
-    
+    *args : tuple
+        Variable length argument list passed to the exception constructor.
+
     Examples
     --------
-    >>> from maggie.utils.error_handling import ModelLoadError
     >>> try:
     ...     raise ModelLoadError("Failed to load model: insufficient VRAM")
     ... except ModelLoadError as e:
@@ -238,15 +238,14 @@ class GenerationError(LLMError):
     
     This exception is specifically for errors that occur during text generation,
     such as context length exceeded, token limits, or inference failures.
-    
-    Attributes
+
+    Parameters
     ----------
-    args : tuple
-        Arguments passed to the exception constructor.
-    
+    *args : tuple
+        Variable length argument list passed to the exception constructor.
+
     Examples
     --------
-    >>> from maggie.utils.error_handling import GenerationError
     >>> try:
     ...     raise GenerationError("Token limit exceeded during generation")
     ... except GenerationError as e:
@@ -261,15 +260,14 @@ class STTError(MaggieError):
     
     This exception is raised for errors that occur during speech recognition,
     audio processing, or transcription operations.
-    
-    Attributes
+
+    Parameters
     ----------
-    args : tuple
-        Arguments passed to the exception constructor.
-    
+    *args : tuple
+        Variable length argument list passed to the exception constructor.
+
     Examples
     --------
-    >>> from maggie.utils.error_handling import STTError
     >>> try:
     ...     raise STTError("Failed to transcribe audio")
     ... except STTError as e:
@@ -284,15 +282,14 @@ class TTSError(MaggieError):
     
     This exception is raised for errors that occur during speech synthesis,
     voice model loading, or audio playback operations.
-    
-    Attributes
+
+    Parameters
     ----------
-    args : tuple
-        Arguments passed to the exception constructor.
-    
+    *args : tuple
+        Variable length argument list passed to the exception constructor.
+
     Examples
     --------
-    >>> from maggie.utils.error_handling import TTSError
     >>> try:
     ...     raise TTSError("Failed to synthesize speech")
     ... except TTSError as e:
@@ -307,15 +304,14 @@ class ExtensionError(MaggieError):
     
     This exception is raised for errors that occur within extension modules,
     such as initialization failures, runtime errors, or resource issues.
-    
-    Attributes
+
+    Parameters
     ----------
-    args : tuple
-        Arguments passed to the exception constructor.
-    
+    *args : tuple
+        Variable length argument list passed to the exception constructor.
+
     Examples
     --------
-    >>> from maggie.utils.error_handling import ExtensionError
     >>> try:
     ...     raise ExtensionError("Extension 'my_extension' failed to initialize")
     ... except ExtensionError as e:
@@ -330,7 +326,20 @@ class StateTransitionError(MaggieError):
     
     This exception is raised when a state transition fails, such as when
     attempting to transition to an invalid state or with invalid parameters.
-    
+
+    Parameters
+    ----------
+    message : str
+        The error message.
+    from_state : Any, optional
+        The current state before the attempted transition.
+    to_state : Any, optional
+        The target state of the attempted transition.
+    trigger : str, optional
+        The event or action that triggered the attempted transition.
+    details : Dict[str, Any], optional
+        Additional details about the transition error.
+
     Attributes
     ----------
     from_state : Any
@@ -341,43 +350,29 @@ class StateTransitionError(MaggieError):
         The event or action that triggered the attempted transition.
     details : Dict[str, Any]
         Additional details about the transition error.
-    
+
     Examples
     --------
-    >>> from maggie.utils.error_handling import StateTransitionError
-    >>> from maggie.core.state import State
     >>> try:
     ...     raise StateTransitionError(
     ...         "Invalid transition",
-    ...         from_state=State.IDLE,
-    ...         to_state=State.BUSY,
+    ...         from_state="IDLE",
+    ...         to_state="BUSY",
     ...         trigger="user_command"
     ...     )
     ... except StateTransitionError as e:
     ...     print(f"Transition error: {e}")
     ...     print(f"From: {e.from_state}, To: {e.to_state}")
     Transition error: Invalid transition
-    From: State.IDLE, To: State.BUSY
+    From: IDLE, To: BUSY
     """
     def __init__(self, message: str, from_state: Any = None, to_state: Any = None, trigger: str = None,
-                 details: Dict[str, Any] = None) -> None: 
-        """
-        Initialize a StateTransitionError.
-        
-        Parameters
-        ----------
-        message : str
-            The error message.
-        from_state : Any, optional
-            The current state before the attempted transition.
-        to_state : Any, optional
-            The target state of the attempted transition.
-        trigger : str, optional
-            The event or action that triggered the attempted transition.
-        details : Dict[str, Any], optional
-            Additional details about the transition error.
-        """
-        ...
+                 details: Dict[str, Any] = None):
+        self.from_state = from_state
+        self.to_state = to_state
+        self.trigger = trigger
+        self.details = details or {}
+        super().__init__(message)
 
 class ResourceManagementError(MaggieError):
     """
@@ -385,7 +380,18 @@ class ResourceManagementError(MaggieError):
     
     This exception is raised when there are issues managing system resources,
     such as memory allocation failures, GPU memory issues, or resource limits.
-    
+
+    Parameters
+    ----------
+    message : str
+        The error message.
+    resource_type : str, optional
+        The type of resource involved (e.g., 'memory', 'gpu', 'cpu').
+    resource_name : str, optional
+        The specific resource name or identifier.
+    details : Dict[str, Any], optional
+        Additional details about the resource error.
+
     Attributes
     ----------
     resource_type : str
@@ -394,10 +400,9 @@ class ResourceManagementError(MaggieError):
         The specific resource name or identifier.
     details : Dict[str, Any]
         Additional details about the resource error.
-    
+
     Examples
     --------
-    >>> from maggie.utils.error_handling import ResourceManagementError
     >>> try:
     ...     raise ResourceManagementError(
     ...         "Insufficient resources",
@@ -412,22 +417,11 @@ class ResourceManagementError(MaggieError):
     Resource type: gpu
     """
     def __init__(self, message: str, resource_type: str = None, resource_name: str = None,
-                 details: Dict[str, Any] = None) -> None: 
-        """
-        Initialize a ResourceManagementError.
-        
-        Parameters
-        ----------
-        message : str
-            The error message.
-        resource_type : str, optional
-            The type of resource involved (e.g., 'memory', 'gpu', 'cpu').
-        resource_name : str, optional
-            The specific resource name or identifier.
-        details : Dict[str, Any], optional
-            Additional details about the resource error.
-        """
-        ...
+                 details: Dict[str, Any] = None):
+        self.resource_type = resource_type
+        self.resource_name = resource_name
+        self.details = details or {}
+        super().__init__(message)
 
 class InputProcessingError(MaggieError):
     """
@@ -435,7 +429,18 @@ class InputProcessingError(MaggieError):
     
     This exception is raised when there are issues processing user input,
     such as invalid input format, failed parsing, or validation errors.
-    
+
+    Parameters
+    ----------
+    message : str
+        The error message.
+    input_type : str, optional
+        The type of input being processed (e.g., 'voice', 'text', 'command').
+    input_source : str, optional
+        The source of the input (e.g., 'user', 'system', 'extension').
+    details : Dict[str, Any], optional
+        Additional details about the input processing error.
+
     Attributes
     ----------
     input_type : str
@@ -444,10 +449,9 @@ class InputProcessingError(MaggieError):
         The source of the input (e.g., 'user', 'system', 'extension').
     details : Dict[str, Any]
         Additional details about the input processing error.
-    
+
     Examples
     --------
-    >>> from maggie.utils.error_handling import InputProcessingError
     >>> try:
     ...     raise InputProcessingError(
     ...         "Failed to parse input",
@@ -462,22 +466,11 @@ class InputProcessingError(MaggieError):
     Input type: command
     """
     def __init__(self, message: str, input_type: str = None, input_source: str = None,
-                 details: Dict[str, Any] = None) -> None: 
-        """
-        Initialize an InputProcessingError.
-        
-        Parameters
-        ----------
-        message : str
-            The error message.
-        input_type : str, optional
-            The type of input being processed (e.g., 'voice', 'text', 'command').
-        input_source : str, optional
-            The source of the input (e.g., 'user', 'system', 'extension').
-        details : Dict[str, Any], optional
-            Additional details about the input processing error.
-        """
-        ...
+                 details: Dict[str, Any] = None):
+        self.input_type = input_type
+        self.input_source = input_source
+        self.details = details or {}
+        super().__init__(message)
 
 class ErrorContext:
     """
@@ -487,13 +480,26 @@ class ErrorContext:
     including the error message, exception object, category, severity, source,
     and other contextual details. It provides methods for converting to a
     dictionary representation and logging the error.
-    
-    The ErrorContext implements a structured approach to error handling by:
-    1. Capturing comprehensive error details in a standardized format
-    2. Providing consistent conversion to dictionary format for serialization
-    3. Integrating with the event bus for error event publishing
-    4. Supporting correlation IDs for tracking related errors
-    
+
+    Parameters
+    ----------
+    message : str
+        The error message.
+    exception : Exception, optional
+        The exception object, if applicable.
+    category : ErrorCategory, optional
+        The error category. Defaults to ErrorCategory.UNKNOWN.
+    severity : ErrorSeverity, optional
+        The error severity level. Defaults to ErrorSeverity.ERROR.
+    source : str, optional
+        The source of the error (e.g., component or function name). Defaults to ''.
+    details : Dict[str, Any], optional
+        Additional details about the error.
+    correlation_id : str, optional
+        A unique ID for correlating related errors.
+    state_info : Dict[str, Any], optional
+        Information about the system state when the error occurred.
+
     Attributes
     ----------
     message : str
@@ -515,21 +521,20 @@ class ErrorContext:
     state_info : Dict[str, Any]
         Information about the system state when the error occurred.
     exception_type : str
-        The type of the exception (available if exception is provided).
+        The type of the exception (if provided).
     exception_msg : str
-        The exception message (available if exception is provided).
+        The exception message (if provided).
     filename : str
-        The filename where the exception occurred (available if exception is provided).
+        The filename where the exception occurred (if provided).
     line : int
-        The line number where the exception occurred (available if exception is provided).
+        The line number where the exception occurred (if provided).
     function : str
-        The function name where the exception occurred (available if exception is provided).
+        The function name where the exception occurred (if provided).
     code : str
-        The code snippet where the exception occurred (available if exception is provided).
-    
+        The code snippet where the exception occurred (if provided).
+
     Examples
     --------
-    >>> from maggie.utils.error_handling import ErrorContext, ErrorCategory, ErrorSeverity
     >>> try:
     ...     1/0
     ... except Exception as e:
@@ -548,109 +553,118 @@ class ErrorContext:
     Error category: processing
     """
     def __init__(self, message: str, exception: Optional[Exception] = None, 
-                category: ErrorCategory = ErrorCategory.UNKNOWN, 
-                severity: ErrorSeverity = ErrorSeverity.ERROR, source: str = '',
-                details: Dict[str, Any] = None, correlation_id: Optional[str] = None,
-                state_info: Optional[Dict[str, Any]] = None) -> None:
-        """
-        Initialize an ErrorContext.
+                 category: ErrorCategory = ErrorCategory.UNKNOWN, 
+                 severity: ErrorSeverity = ErrorSeverity.ERROR, source: str = '',
+                 details: Dict[str, Any] = None, correlation_id: Optional[str] = None,
+                 state_info: Optional[Dict[str, Any]] = None):
+        self.message = message
+        self.exception = exception
+        self.category = category
+        self.severity = severity
+        self.source = source
+        self.details = details or {}
+        self.correlation_id = correlation_id or str(uuid.uuid4())
+        self.timestamp = time.time()
+        self.state_info = state_info or {}
         
-        Parameters
-        ----------
-        message : str
-            The error message.
-        exception : Exception, optional
-            The exception object, if applicable.
-        category : ErrorCategory, default=ErrorCategory.UNKNOWN
-            The error category.
-        severity : ErrorSeverity, default=ErrorSeverity.ERROR
-            The error severity level.
-        source : str, default=''
-            The source of the error (e.g., component or function name).
-        details : Dict[str, Any], optional
-            Additional details about the error.
-        correlation_id : str, optional
-            A unique ID for correlating related errors. If not provided,
-            a new UUID will be generated.
-        state_info : Dict[str, Any], optional
-            Information about the system state when the error occurred.
-        """
-        ...
+        if exception:
+            self.exception_type = type(exception).__name__
+            self.exception_msg = str(exception)
+            exc_type, exc_value, exc_traceback = sys.exc_info()
+            if exc_traceback:
+                tb = traceback.extract_tb(exc_traceback)
+                if tb:
+                    frame = tb[-1]
+                    self.filename = frame.filename
+                    self.line = frame.lineno
+                    self.function = frame.name
+                    self.code = frame.line
     
     def to_dict(self) -> Dict[str, Any]:
         """
         Convert the error context to a dictionary.
-        
-        This method creates a serializable dictionary representation of the
-        error context, suitable for logging, event publishing, or persistence.
-        
+
         Returns
         -------
         Dict[str, Any]
-            A dictionary containing all error context information, with the
-            following structure:
-            {
-                'message': str,
-                'category': str,
-                'severity': str,
-                'source': str,
-                'timestamp': float,
-                'correlation_id': str,
-                'exception': {
-                    'type': str,
-                    'message': str
-                },
-                'location': {
-                    'file': str,
-                    'line': int,
-                    'function': str,
-                    'code': str
-                },
-                'details': Dict[str, Any],
-                'state': Dict[str, Any]
-            }
-            
+            A dictionary containing all error context information.
+
         Notes
         -----
         The 'exception' and 'location' keys are only included if an exception
         was provided. The 'details' and 'state' keys are only included if
         those attributes contain data.
         """
-        ...
+        result = {
+            'message': self.message,
+            'category': self.category.value,
+            'severity': self.severity.value,
+            'source': self.source,
+            'timestamp': self.timestamp,
+            'correlation_id': self.correlation_id
+        }
+        
+        if hasattr(self, 'exception_type'):
+            result['exception'] = {
+                'type': self.exception_type,
+                'message': self.exception_msg
+            }
+        
+        if hasattr(self, 'filename'):
+            result['location'] = {
+                'file': self.filename,
+                'line': self.line,
+                'function': self.function,
+                'code': self.code
+            }
+        
+        if self.details:
+            result['details'] = self.details
+        
+        if self.state_info:
+            result['state'] = self.state_info
+        
+        return result
     
     def log(self, publish: bool = True) -> None:
         """
         Log the error.
-        
-        This method logs the error using the appropriate logging level based on
-        the error severity, and optionally publishes an error event using the
-        event bus if available.
-        
+
         Parameters
         ----------
-        publish : bool, default=True
-            Whether to publish an error event via the event bus, if available.
-            
+        publish : bool, optional
+            Whether to publish an error event via the event bus. Defaults to True.
+
         Notes
         -----
-        The method attempts to publish the error event using the event bus if
-        available, but gracefully handles the case where the event bus is not
-        available or publishing fails.
-        
-        The method uses the following mapping from severity to logging level:
-        - CRITICAL: logger.critical
-        - ERROR: logger.error
-        - WARNING: logger.warning
-        - INFO/DEBUG: logger.debug
-        
-        In addition to publishing to the general ERROR_EVENT_LOGGED event,
-        the method also publishes to specific error channels based on the
-        error category:
-        - ErrorCategory.STATE: ERROR_EVENT_STATE_TRANSITION
-        - ErrorCategory.RESOURCE: ERROR_EVENT_RESOURCE_MANAGEMENT
-        - ErrorCategory.INPUT: ERROR_EVENT_INPUT_PROCESSING
+        The method uses different logging levels based on severity and publishes
+        to specific error channels based on category if publish is True.
         """
-        ...
+        if self.severity == ErrorSeverity.CRITICAL:
+            logger.critical(self.message, exc_info=bool(self.exception))
+        elif self.severity == ErrorSeverity.ERROR:
+            logger.error(self.message, exc_info=bool(self.exception))
+        elif self.severity == ErrorSeverity.WARNING:
+            logger.warning(self.message)
+        else:
+            logger.debug(self.message)
+        
+        try:
+            from maggie.utils.abstractions import get_event_publisher
+            publisher = get_event_publisher()
+            if publish and publisher:
+                publisher.publish(ERROR_EVENT_LOGGED, self.to_dict())
+                
+                if self.category == ErrorCategory.STATE:
+                    publisher.publish(ERROR_EVENT_STATE_TRANSITION, self.to_dict())
+                elif self.category == ErrorCategory.RESOURCE:
+                    publisher.publish(ERROR_EVENT_RESOURCE_MANAGEMENT, self.to_dict())
+                elif self.category == ErrorCategory.INPUT:
+                    publisher.publish(ERROR_EVENT_INPUT_PROCESSING, self.to_dict())
+        except ImportError:
+            pass
+        except Exception as e:
+            logger.debug(f"Failed to publish error event: {e}")
 
 def safe_execute(func: Callable[..., T], *args: Any, error_code: Optional[str] = None,
                 default_return: Optional[T] = None, error_details: Dict[str, Any] = None,
@@ -659,18 +673,7 @@ def safe_execute(func: Callable[..., T], *args: Any, error_code: Optional[str] =
                 publish_error: bool = True, include_state_info: bool = True, **kwargs: Any) -> T:
     """
     Safely execute a function, handling exceptions.
-    
-    This utility function provides a standardized way to execute a function
-    with comprehensive error handling. If an exception occurs, it captures
-    detailed error information, logs the error, optionally publishes an error
-    event, and returns a default value if provided.
-    
-    The function implements the "Circuit Breaker" design pattern by:
-    1. Attempting to execute the wrapped function
-    2. Catching and handling any exceptions that occur
-    3. Returning a safe default value if execution fails
-    4. Recording detailed error information for diagnosis
-    
+
     Parameters
     ----------
     func : Callable[..., T]
@@ -683,55 +686,65 @@ def safe_execute(func: Callable[..., T], *args: Any, error_code: Optional[str] =
         Value to return if an exception occurs.
     error_details : Dict[str, Any], optional
         Additional error details.
-    error_category : ErrorCategory, default=ErrorCategory.UNKNOWN
-        Error category.
-    error_severity : ErrorSeverity, default=ErrorSeverity.ERROR
-        Error severity.
-    publish_error : bool, default=True
-        Whether to publish error events.
-    include_state_info : bool, default=True
-        Whether to include state information.
+    error_category : ErrorCategory, optional
+        Error category. Defaults to ErrorCategory.UNKNOWN.
+    error_severity : ErrorSeverity, optional
+        Error severity. Defaults to ErrorSeverity.ERROR.
+    publish_error : bool, optional
+        Whether to publish error events. Defaults to True.
+    include_state_info : bool, optional
+        Whether to include state information. Defaults to True.
     **kwargs : Any
         Keyword arguments to pass to the function.
-        
+
     Returns
     -------
     T
         The result of the function or the default return value if an exception occurs.
-        
+
     Examples
     --------
-    >>> from maggie.utils.error_handling import safe_execute, ErrorCategory, ErrorSeverity
     >>> def divide(a, b):
     ...     return a / b
-    >>> 
-    >>> # Safe execution with default return value
-    >>> result = safe_execute(
-    ...     divide, 10, 0,
-    ...     default_return=0,
-    ...     error_category=ErrorCategory.PROCESSING,
-    ...     error_severity=ErrorSeverity.WARNING
-    ... )
+    >>> result = safe_execute(divide, 10, 0, default_return=0)
     >>> print(result)
     0
-    
-    >>> # Safe execution with custom error details
-    >>> result = safe_execute(
-    ...     divide, 10, 0,
-    ...     default_return=0,
-    ...     error_details={"operation": "division", "inputs": {"a": 10, "b": 0}},
-    ...     error_category=ErrorCategory.PROCESSING
-    ... )
-    >>> print(result)
-    0
-    
-    Notes
-    -----
-    This function is particularly useful for operations that should not cause
-    the application to crash, such as UI operations, non-critical background
-    tasks, or operations with reasonable default behaviors.
     """
-    ...
+    try:
+        return func(*args, **kwargs)
+    except Exception as e:
+        details = error_details or {}
+        if not details:
+            details = {'args': str(args), 'kwargs': str(kwargs)}
+        
+        source = f"{func.__module__}.{func.__name__}"
+        
+        current_state = None
+        if include_state_info:
+            try:
+                from maggie.utils.abstractions import get_state_provider
+                state_provider = get_state_provider()
+                if state_provider:
+                    current_state = state_provider.get_current_state()
+            except ImportError:
+                pass
+            except Exception:
+                pass
+        
+        context = ErrorContext(
+            message=f"Error executing {func.__name__}: {e}",
+            exception=e,
+            category=error_category,
+            severity=error_severity,
+            source=source,
+            details=details
+        )
+        
+        if current_state is not None:
+            context.state_info['current_state'] = current_state.name if hasattr(current_state, 'name') else str(current_state)
+        
+        context.log(publish=publish_error)
+        return default_return if default_return is not None else cast(T, None)
 
 def record_error(message: str, exception: Optional[Exception] = None, 
                 category: ErrorCategory = ErrorCategory.UNKNOWN, 
@@ -740,27 +753,23 @@ def record_error(message: str, exception: Optional[Exception] = None,
                 from_state: Any = None, to_state: Any = None, trigger: str = None) -> ErrorContext:
     """
     Record an error.
-    
-    This function creates an ErrorContext for an error occurrence, logs the error,
-    and optionally publishes an error event. It provides a standardized way to
-    record errors throughout the application.
-    
+
     Parameters
     ----------
     message : str
         Error message.
     exception : Exception, optional
         Exception object.
-    category : ErrorCategory, default=ErrorCategory.UNKNOWN
-        Error category.
-    severity : ErrorSeverity, default=ErrorSeverity.ERROR
-        Error severity.
-    source : str, default=''
-        Error source.
+    category : ErrorCategory, optional
+        Error category. Defaults to ErrorCategory.UNKNOWN.
+    severity : ErrorSeverity, optional
+        Error severity. Defaults to ErrorSeverity.ERROR.
+    source : str, optional
+        Error source. Defaults to ''.
     details : Dict[str, Any], optional
         Additional details.
-    publish : bool, default=True
-        Whether to publish the error event.
+    publish : bool, optional
+        Whether to publish the error event. Defaults to True.
     state_object : Any, optional
         Current state object.
     from_state : Any, optional
@@ -769,53 +778,45 @@ def record_error(message: str, exception: Optional[Exception] = None,
         To state for transitions.
     trigger : str, optional
         Transition trigger.
-        
+
     Returns
     -------
     ErrorContext
         The created ErrorContext object.
-        
+
     Examples
     --------
-    >>> from maggie.utils.error_handling import record_error, ErrorCategory, ErrorSeverity
-    >>> 
-    >>> # Basic error recording
     >>> context = record_error(
     ...     message="Failed to process input",
     ...     category=ErrorCategory.INPUT,
     ...     severity=ErrorSeverity.WARNING,
     ...     source="input_processor.validate"
     ... )
-    >>> 
-    >>> # Recording an exception
-    >>> try:
-    ...     1/0
-    ... except Exception as e:
-    ...     context = record_error(
-    ...         message="Division operation failed",
-    ...         exception=e,
-    ...         category=ErrorCategory.PROCESSING,
-    ...         source="calculator.divide"
-    ...     )
-    >>> 
-    >>> # Recording a state transition error
-    >>> from maggie.core.state import State
-    >>> context = record_error(
-    ...     message="Invalid state transition",
-    ...     category=ErrorCategory.STATE,
-    ...     source="state_manager.transition_to",
-    ...     from_state=State.IDLE,
-    ...     to_state=State.BUSY,
-    ...     trigger="user_command"
-    ... )
-    
-    Notes
-    -----
-    The function automatically enhances the error context with state information
-    if provided, either via the state_object parameter or the from_state/to_state
-    parameters for transition errors.
     """
-    ...
+    context = ErrorContext(
+        message=message,
+        exception=exception,
+        category=category,
+        severity=severity,
+        source=source,
+        details=details or {}
+    )
+    
+    if state_object is not None:
+        state_name = state_object.name if hasattr(state_object, 'name') else str(state_object)
+        context.state_info['current_state'] = state_name
+    
+    if from_state is not None and to_state is not None:
+        from_name = from_state.name if hasattr(from_state, 'name') else str(from_state)
+        to_name = to_state.name if hasattr(to_state, 'name') else str(to_state)
+        context.state_info['transition'] = {
+            'from': from_name,
+            'to': to_name,
+            'trigger': trigger
+        }
+    
+    context.log(publish=publish)
+    return context
 
 def with_error_handling(error_code: Optional[str] = None, 
                        error_category: ErrorCategory = ErrorCategory.UNKNOWN,
@@ -823,76 +824,46 @@ def with_error_handling(error_code: Optional[str] = None,
                        publish_error: bool = True, include_state_info: bool = True):
     """
     Decorator for error handling.
-    
-    This decorator wraps a function with standardized error handling using
-    `safe_execute`. It provides a convenient way to add consistent error
-    handling to multiple functions without duplicating code.
-    
-    The decorator pattern applied here allows for:
-    1. Separation of error handling logic from business logic
-    2. Consistent error handling across multiple functions
-    3. Centralized configuration of error handling parameters
-    
+
     Parameters
     ----------
     error_code : str, optional
         Optional error code for categorization.
-    error_category : ErrorCategory, default=ErrorCategory.UNKNOWN
-        Default error category.
-    error_severity : ErrorSeverity, default=ErrorSeverity.ERROR
-        Default error severity.
-    publish_error : bool, default=True
-        Whether to publish error events.
-    include_state_info : bool, default=True
-        Whether to include state information.
-        
+    error_category : ErrorCategory, optional
+        Default error category. Defaults to ErrorCategory.UNKNOWN.
+    error_severity : ErrorSeverity, optional
+        Default error severity. Defaults to ErrorSeverity.ERROR.
+    publish_error : bool, optional
+        Whether to publish error events. Defaults to True.
+    include_state_info : bool, optional
+        Whether to include state information. Defaults to True.
+
     Returns
     -------
     Callable
         Decorator function.
-        
+
     Examples
     --------
-    >>> from maggie.utils.error_handling import with_error_handling, ErrorCategory, ErrorSeverity
-    >>> 
-    >>> # Basic usage
     >>> @with_error_handling()
     ... def risky_function(a, b):
     ...     return a / b
-    >>> 
     >>> result = risky_function(10, 0)  # Returns None instead of raising an exception
-    >>> 
-    >>> # With custom parameters
-    >>> @with_error_handling(
-    ...     error_code="MATH_ERROR",
-    ...     error_category=ErrorCategory.PROCESSING,
-    ...     error_severity=ErrorSeverity.WARNING
-    ... )
-    ... def divide(a, b):
-    ...     return a / b
-    >>> 
-    >>> result = divide(10, 0)  # Returns None and logs a warning
-    >>> 
-    >>> # With default return value (via wrapper function)
-    >>> @with_error_handling(error_category=ErrorCategory.PROCESSING)
-    ... def safe_divide(a, b, default=0):
-    ...     try:
-    ...         return a / b
-    ...     except ZeroDivisionError:
-    ...         return default
-    >>> 
-    >>> result = safe_divide(10, 0, default=0)  # Returns 0
-    >>> print(result)
-    0
-    
-    Notes
-    -----
-    The wrapped function will return None if an exception occurs and no default
-    return value is specified. To provide a default return value, you can either:
-    1. Handle the exception within the wrapped function and return a default value
-    2. Use `safe_execute` directly with the `default_return` parameter
     """
-    ...
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            return safe_execute(
+                func, *args,
+                error_code=error_code,
+                error_category=error_category,
+                error_severity=error_severity,
+                publish_error=publish_error,
+                include_state_info=include_state_info,
+                **kwargs
+            )
+        return wrapper
+    return decorator
 
 def retry_operation(max_attempts: int = 3, retry_delay: float = 1.0, 
                    exponential_backoff: bool = True, jitter: bool = True,
@@ -901,101 +872,78 @@ def retry_operation(max_attempts: int = 3, retry_delay: float = 1.0,
                    error_category: ErrorCategory = ErrorCategory.UNKNOWN):
     """
     Decorator for retrying operations.
-    
-    This decorator adds retry logic to a function, allowing it to automatically
-    retry upon failure up to a specified number of times. It supports exponential
-    backoff, jitter, and filtering of allowed exceptions.
-    
-    The retry mechanism implements best practices for resilient systems:
-    1. Exponential backoff to avoid overloading systems under stress
-    2. Jitter to prevent synchronized retry storms
-    3. Selective retry based on exception types
-    4. Callback hooks for monitoring and logging retry attempts
-    
+
     Parameters
     ----------
-    max_attempts : int, default=3
-        Maximum number of attempts.
-    retry_delay : float, default=1.0
-        Base delay between retries in seconds.
-    exponential_backoff : bool, default=True
-        Whether to use exponential backoff.
-    jitter : bool, default=True
-        Whether to add random jitter to retry delay.
-    allowed_exceptions : Tuple[Type[Exception], ...], default=(Exception,)
-        Exceptions to retry on.
+    max_attempts : int, optional
+        Maximum number of attempts. Defaults to 3.
+    retry_delay : float, optional
+        Base delay between retries in seconds. Defaults to 1.0.
+    exponential_backoff : bool, optional
+        Whether to use exponential backoff. Defaults to True.
+    jitter : bool, optional
+        Whether to add random jitter to retry delay. Defaults to True.
+    allowed_exceptions : Tuple[Type[Exception], ...], optional
+        Exceptions to retry on. Defaults to (Exception,).
     on_retry_callback : Callable[[Exception, int], None], optional
         Callback function for retry events.
-    error_category : ErrorCategory, default=ErrorCategory.UNKNOWN
-        Error category for failures.
-        
+    error_category : ErrorCategory, optional
+        Error category for failures. Defaults to ErrorCategory.UNKNOWN.
+
     Returns
     -------
     Callable
         Decorator function.
-        
+
     Examples
     --------
-    >>> import requests
-    >>> from maggie.utils.error_handling import retry_operation, ErrorCategory
-    >>> 
-    >>> # Basic usage with default parameters (retry up to 3 times)
-    >>> @retry_operation()
+    >>> @retry_operation(max_attempts=3)
     ... def fetch_data(url):
-    ...     response = requests.get(url)
-    ...     response.raise_for_status()
-    ...     return response.json()
-    >>> 
-    >>> # Custom retry parameters
-    >>> @retry_operation(
-    ...     max_attempts=5,
-    ...     retry_delay=2.0,
-    ...     exponential_backoff=True,
-    ...     jitter=True,
-    ...     allowed_exceptions=(requests.RequestException,),
-    ...     error_category=ErrorCategory.NETWORK
-    ... )
-    ... def fetch_api_data(url):
-    ...     response = requests.get(url, timeout=5)
-    ...     response.raise_for_status()
-    ...     return response.json()
-    >>> 
-    >>> # With retry callback
-    >>> def log_retry(exception, attempt):
-    ...     print(f"Retry attempt {attempt} after error: {exception}")
-    >>> 
-    >>> @retry_operation(
-    ...     max_attempts=3, 
-    ...     on_retry_callback=log_retry
-    ... )
-    ... def connect_to_database():
-    ...     # Database connection code
-    ...     pass
-    
-    Notes
-    -----
-    For exponential backoff, the delay between retries is calculated as:
-    delay = retry_delay * (2 ** (attempt - 1))
-    
-    If jitter is enabled, the delay is further randomized by multiplying by
-    a random factor between 0.5 and 1.5, which helps prevent retry storms
-    when multiple clients are retrying simultaneously.
-    
-    References
-    ----------
-    - Exponential backoff: https://en.wikipedia.org/wiki/Exponential_backoff
-    - Jitter for distributed systems: https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter/
+    ...     # Simulate network call
+    ...     raise Exception("Network error")
     """
-    ...
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            import random
+            last_exception = None
+            
+            for attempt in range(1, max_attempts + 1):
+                try:
+                    return func(*args, **kwargs)
+                except allowed_exceptions as e:
+                    last_exception = e
+                    
+                    if attempt == max_attempts:
+                        logger.error(f"All {max_attempts} attempts failed for {func.__name__}: {e}")
+                        raise
+                    
+                    delay = retry_delay
+                    if exponential_backoff:
+                        delay = retry_delay * (2 ** (attempt - 1))
+                    if jitter:
+                        delay = delay * (0.5 + random.random())
+                    
+                    if on_retry_callback:
+                        try:
+                            on_retry_callback(e, attempt)
+                        except Exception as callback_error:
+                            logger.warning(f"Error in retry callback: {callback_error}")
+                    
+                    logger.warning(f"Attempt {attempt}/{max_attempts} for {func.__name__} failed: {e}. Retrying in {delay:.2f}s")
+                    time.sleep(delay)
+            
+            if last_exception:
+                raise last_exception
+            return None
+        return wrapper
+    return decorator
 
 def create_state_transition_error(from_state: Any, to_state: Any, 
                                  trigger: str, details: Dict[str, Any] = None) -> StateTransitionError:
     """
     Create a state transition error.
-    
-    This function creates a StateTransitionError with the given parameters,
-    records the error using `record_error`, and returns the error object.
-    
+
     Parameters
     ----------
     from_state : Any
@@ -1006,40 +954,37 @@ def create_state_transition_error(from_state: Any, to_state: Any,
         Transition trigger.
     details : Dict[str, Any], optional
         Additional details.
-        
+
     Returns
     -------
     StateTransitionError
         StateTransitionError object.
-        
+
     Examples
     --------
-    >>> from maggie.utils.error_handling import create_state_transition_error
-    >>> from maggie.core.state import State
-    >>> 
-    >>> # Create a state transition error
-    >>> error = create_state_transition_error(
-    ...     from_state=State.IDLE,
-    ...     to_state=State.BUSY,
-    ...     trigger="user_command",
-    ...     details={"user_id": "12345", "command": "process_data"}
-    ... )
-    >>> 
-    >>> # Raise the error
-    >>> try:
-    ...     raise error
-    ... except StateTransitionError as e:
-    ...     print(f"Error: {e}")
-    ...     print(f"From: {e.from_state}, To: {e.to_state}, Trigger: {e.trigger}")
-    Error: Invalid state transition: IDLE -> BUSY (trigger: user_command)
-    From: State.IDLE, To: State.BUSY, Trigger: user_command
-    
-    Notes
-    -----
-    This function automatically records the error using `record_error` with
-    the appropriate category (ErrorCategory.STATE) and severity (ErrorSeverity.ERROR).
-    
-    The error message is automatically generated as:
-    "Invalid state transition: {from_name} -> {to_name} (trigger: {trigger})"
+    >>> error = create_state_transition_error("IDLE", "BUSY", "user_command")
+    >>> print(error)
+    Invalid state transition: IDLE -> BUSY (trigger: user_command)
     """
-    ...
+    from_name = from_state.name if hasattr(from_state, 'name') else str(from_state)
+    to_name = to_state.name if hasattr(to_state, 'name') else str(to_state)
+    message = f"Invalid state transition: {from_name} -> {to_name} (trigger: {trigger})"
+    
+    record_error(
+        message=message,
+        category=ErrorCategory.STATE,
+        severity=ErrorSeverity.ERROR,
+        source='StateManager.transition_to',
+        details=details or {},
+        from_state=from_state,
+        to_state=to_state,
+        trigger=trigger
+    )
+    
+    return StateTransitionError(
+        message=message,
+        from_state=from_state,
+        to_state=to_state,
+        trigger=trigger,
+        details=details
+    )
