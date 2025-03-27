@@ -90,8 +90,8 @@ class MaggieAI(EventEmitter, EventListener):
     
     Parameters
     ----------
-    config_path : str, default='config.yaml'
-        Path to the configuration file
+    config_path : str, optional
+        Path to the configuration file, by default 'config.yaml'
         
     Attributes
     ----------
@@ -164,8 +164,8 @@ class MaggieAI(EventEmitter, EventListener):
         
         Parameters
         ----------
-        config_path : str, default='config.yaml'
-            Path to the configuration file
+        config_path : str, optional
+            Path to the configuration file, by default 'config.yaml'
             
         Notes
         -----
@@ -182,7 +182,28 @@ class MaggieAI(EventEmitter, EventListener):
         5. State handlers registration
         6. Resource management setup
         """
-        ...
+        self.config_manager = ConfigManager(config_path)
+        self.config = self.config_manager.load()
+        self.event_bus = EventBus()
+        EventEmitter.__init__(self, self.event_bus)
+        EventListener.__init__(self, self.event_bus)
+        self.logger = ComponentLogger('MaggieAI')
+        self.state_manager = StateManager(State.INIT, self.event_bus)
+        self._register_core_services()
+        self.extensions = {}
+        self.inactivity_timer = None
+        self.inactivity_timeout = self.config.get('inactivity_timeout', 300)
+        self.wake_word_detector = None
+        self.stt_processor = None
+        self.llm_processor = None
+        self.tts_processor = None
+        self.gui = None
+        cpu_config = self.config.get('cpu', {})
+        max_threads = cpu_config.get('max_threads', 10)
+        self.thread_pool = ThreadPoolExecutor(max_workers=max_threads, thread_name_prefix='maggie_thread_')
+        self._register_state_handlers()
+        self._setup_resource_management()
+        self.logger.info('MaggieAI instance created')
         
     @property
     def state(self) -> State:
@@ -199,7 +220,7 @@ class MaggieAI(EventEmitter, EventListener):
         This is a convenience property that delegates to the state manager's
         get_current_state method.
         """
-        ...
+        return self.state_manager.get_current_state()
         
     def _register_state_handlers(self) -> None:
         """
@@ -226,7 +247,26 @@ class MaggieAI(EventEmitter, EventListener):
         polymorphic state objects. This approach reduces the number of classes needed
         but still achieves the same separation of state-specific behavior.
         """
-        ...
+        self.state_manager.register_state_handler(State.INIT, self._on_enter_init, True)
+        self.state_manager.register_state_handler(State.STARTUP, self._on_enter_startup, True)
+        self.state_manager.register_state_handler(State.IDLE, self._on_enter_idle, True)
+        self.state_manager.register_state_handler(State.LOADING, self._on_enter_loading, True)
+        self.state_manager.register_state_handler(State.READY, self._on_enter_ready, True)
+        self.state_manager.register_state_handler(State.ACTIVE, self._on_enter_active, True)
+        self.state_manager.register_state_handler(State.BUSY, self._on_enter_busy, True)
+        self.state_manager.register_state_handler(State.CLEANUP, self._on_enter_cleanup, True)
+        self.state_manager.register_state_handler(State.SHUTDOWN, self._on_enter_shutdown, True)
+        self.state_manager.register_state_handler(State.ACTIVE, self._on_exit_active, False)
+        self.state_manager.register_state_handler(State.BUSY, self._on_exit_busy, False)
+        self.state_manager.register_transition_handler(State.INIT, State.STARTUP, self._on_transition_init_to_startup)
+        self.state_manager.register_transition_handler(State.STARTUP, State.IDLE, self._on_transition_startup_to_idle)
+        self.state_manager.register_transition_handler(State.IDLE, State.READY, self._on_transition_idle_to_ready)
+        self.state_manager.register_transition_handler(State.READY, State.LOADING, self._on_transition_ready_to_loading)
+        self.state_manager.register_transition_handler(State.LOADING, State.ACTIVE, self._on_transition_loading_to_active)
+        self.state_manager.register_transition_handler(State.ACTIVE, State.READY, self._on_transition_active_to_ready)
+        self.state_manager.register_transition_handler(State.ACTIVE, State.BUSY, self._on_transition_active_to_busy)
+        self.state_manager.register_transition_handler(State.BUSY, State.READY, self._on_transition_busy_to_ready)
+        self.logger.debug('State handlers registered')
         
     def _register_event_handlers(self) -> None:
         """
@@ -257,7 +297,23 @@ class MaggieAI(EventEmitter, EventListener):
         The EventPriority enum is used to ensure that critical handlers (like error handling)
         are executed before less critical ones. This is crucial for proper error recovery.
         """
-        ...
+        event_handlers = [
+            ('wake_word_detected', self._handle_wake_word, EventPriority.HIGH),
+            ('error_logged', self._handle_error, EventPriority.HIGH),
+            ('command_detected', self._handle_command, EventPriority.NORMAL),
+            ('inactivity_timeout', self._handle_timeout, EventPriority.NORMAL),
+            ('extension_completed', self._handle_extension_completed, EventPriority.NORMAL),
+            ('extension_error', self._handle_extension_error, EventPriority.NORMAL),
+            ('low_memory_warning', self._handle_low_memory, EventPriority.LOW),
+            ('gpu_memory_warning', self._handle_gpu_memory_warning, EventPriority.LOW),
+            (INPUT_ACTIVATION_EVENT, self._handle_input_activation, EventPriority.NORMAL),
+            (INPUT_DEACTIVATION_EVENT, self._handle_input_deactivation, EventPriority.NORMAL),
+            ('intermediate_transcription', self._handle_intermediate_transcription, EventPriority.LOW),
+            ('final_transcription', self._handle_final_transcription, EventPriority.NORMAL)
+        ]
+        for event_type, handler, priority in event_handlers:
+            self.listen(event_type, handler, priority=priority)
+        self.logger.debug(f"Registered {len(event_handlers)} event handlers")
         
     def _register_core_services(self) -> bool:
         """
@@ -287,11 +343,24 @@ class MaggieAI(EventEmitter, EventListener):
         parts.
         
         References
-        ----------
+        --------
         .. [1] Fowler, M. (2004). "Inversion of Control Containers and the Dependency Injection Pattern."
                https://martinfowler.com/articles/injection.html
         """
-        ...
+        try:
+            from maggie.service.locator import ServiceLocator
+            ServiceLocator.register('event_bus', self.event_bus)
+            ServiceLocator.register('state_manager', self.state_manager)
+            ServiceLocator.register('maggie_ai', self)
+            ServiceLocator.register('config_manager', self.config_manager)
+            self.logger.debug('Core services registered with ServiceLocator')
+            return True
+        except ImportError as e:
+            self.logger.error(f"Failed to import ServiceLocator: {e}")
+            return False
+        except Exception as e:
+            self.logger.error(f"Error registering core services: {e}")
+            return False
 
     def _setup_resource_management(self) -> None:
         """
@@ -319,7 +388,19 @@ class MaggieAI(EventEmitter, EventListener):
         .. [1] NVIDIA RTX 3080 optimization: https://developer.nvidia.com/blog/cuda-pro-tip-optimize-your-kernels-with-nvidia-nsight-compute/
         .. [2] AMD Ryzen thread optimization: https://www.amd.com/en/products/ryzen-processors
         """
-        ...
+        ResourceManager = get_resource_manager()
+        if ResourceManager is not None:
+            self.resource_manager = ResourceManager(self.config)
+            if ServiceLocator.has_service('resource_manager'):
+                self.logger.debug('Resource manager already registered')
+            else:
+                ServiceLocator.register('resource_manager', self.resource_manager)
+            self.resource_manager.setup_gpu()
+            self.resource_manager.apply_hardware_specific_optimizations()
+            self.logger.debug('Resource management setup complete')
+        else:
+            self.logger.error('Failed to get ResourceManager class')
+            self.resource_manager = None
         
     def _on_enter_init(self, transition: StateTransition) -> None:
         """
@@ -333,7 +414,7 @@ class MaggieAI(EventEmitter, EventListener):
         transition : StateTransition
             Object containing information about the state transition
         """
-        ...
+        self.config_manager.apply_state_specific_config(State.INIT)
         
     def _on_enter_startup(self, transition: StateTransition) -> None:
         """
@@ -348,7 +429,7 @@ class MaggieAI(EventEmitter, EventListener):
         transition : StateTransition
             Object containing information about the state transition
         """
-        ...
+        self.config_manager.apply_state_specific_config(State.STARTUP)
         
     def _on_enter_idle(self, transition: StateTransition) -> None:
         """
@@ -362,7 +443,7 @@ class MaggieAI(EventEmitter, EventListener):
         transition : StateTransition
             Object containing information about the state transition
         """
-        ...
+        self.config_manager.apply_state_specific_config(State.IDLE)
         
     def _on_enter_loading(self, transition: StateTransition) -> None:
         """
@@ -377,7 +458,7 @@ class MaggieAI(EventEmitter, EventListener):
         transition : StateTransition
             Object containing information about the state transition
         """
-        ...
+        self.config_manager.apply_state_specific_config(State.LOADING)
         
     def _on_enter_ready(self, transition: StateTransition) -> None:
         """
@@ -391,7 +472,7 @@ class MaggieAI(EventEmitter, EventListener):
         transition : StateTransition
             Object containing information about the state transition
         """
-        ...
+        self.config_manager.apply_state_specific_config(State.READY)
         
     def _on_enter_active(self, transition: StateTransition) -> None:
         """
@@ -406,7 +487,7 @@ class MaggieAI(EventEmitter, EventListener):
         transition : StateTransition
             Object containing information about the state transition
         """
-        ...
+        self.config_manager.apply_state_specific_config(State.ACTIVE)
         
     def _on_enter_busy(self, transition: StateTransition) -> None:
         """
@@ -420,7 +501,7 @@ class MaggieAI(EventEmitter, EventListener):
         transition : StateTransition
             Object containing information about the state transition
         """
-        ...
+        self.config_manager.apply_state_specific_config(State.BUSY)
         
     def _on_enter_cleanup(self, transition: StateTransition) -> None:
         """
@@ -434,7 +515,7 @@ class MaggieAI(EventEmitter, EventListener):
         transition : StateTransition
             Object containing information about the state transition
         """
-        ...
+        self.config_manager.apply_state_specific_config(State.CLEANUP)
         
     def _on_enter_shutdown(self, transition: StateTransition) -> None:
         """
@@ -448,7 +529,7 @@ class MaggieAI(EventEmitter, EventListener):
         transition : StateTransition
             Object containing information about the state transition
         """
-        ...
+        self.config_manager.apply_state_specific_config(State.SHUTDOWN)
         
     def _on_exit_active(self, transition: StateTransition) -> None:
         """
@@ -463,7 +544,8 @@ class MaggieAI(EventEmitter, EventListener):
         transition : StateTransition
             Object containing information about the state transition
         """
-        ...
+        if transition.to_state == State.BUSY and self.resource_manager:
+            self.resource_manager.optimizer.optimize_for_busy_state()
         
     def _on_exit_busy(self, transition: StateTransition) -> None:
         """
@@ -477,7 +559,8 @@ class MaggieAI(EventEmitter, EventListener):
         transition : StateTransition
             Object containing information about the state transition
         """
-        ...
+        if transition.to_state == State.READY and self.resource_manager:
+            self.resource_manager.reduce_memory_usage()
         
     def _on_transition_init_to_startup(self, transition: StateTransition) -> None:
         """
@@ -490,7 +573,8 @@ class MaggieAI(EventEmitter, EventListener):
         transition : StateTransition
             Object containing information about the state transition
         """
-        ...
+        if self.resource_manager:
+            self.resource_manager.preallocate_for_state(State.STARTUP)
         
     def _on_transition_startup_to_idle(self, transition: StateTransition) -> None:
         """
@@ -503,7 +587,8 @@ class MaggieAI(EventEmitter, EventListener):
         transition : StateTransition
             Object containing information about the state transition
         """
-        ...
+        if self.resource_manager:
+            self.resource_manager.preallocate_for_state(State.IDLE)
         
     def _on_transition_idle_to_ready(self, transition: StateTransition) -> None:
         """
@@ -516,7 +601,8 @@ class MaggieAI(EventEmitter, EventListener):
         transition : StateTransition
             Object containing information about the state transition
         """
-        ...
+        if self.resource_manager:
+            self.resource_manager.preallocate_for_state(State.READY)
         
     def _on_transition_ready_to_loading(self, transition: StateTransition) -> None:
         """
@@ -529,7 +615,8 @@ class MaggieAI(EventEmitter, EventListener):
         transition : StateTransition
             Object containing information about the state transition
         """
-        ...
+        if self.resource_manager:
+            self.resource_manager.preallocate_for_state(State.LOADING)
         
     def _on_transition_loading_to_active(self, transition: StateTransition) -> None:
         """
@@ -542,7 +629,8 @@ class MaggieAI(EventEmitter, EventListener):
         transition : StateTransition
             Object containing information about the state transition
         """
-        ...
+        if self.resource_manager:
+            self.resource_manager.preallocate_for_state(State.ACTIVE)
         
     def _on_transition_active_to_ready(self, transition: StateTransition) -> None:
         """
@@ -555,7 +643,8 @@ class MaggieAI(EventEmitter, EventListener):
         transition : StateTransition
             Object containing information about the state transition
         """
-        ...
+        if self.resource_manager:
+            self.resource_manager.preallocate_for_state(State.READY)
         
     def _on_transition_active_to_busy(self, transition: StateTransition) -> None:
         """
@@ -568,7 +657,8 @@ class MaggieAI(EventEmitter, EventListener):
         transition : StateTransition
             Object containing information about the state transition
         """
-        ...
+        if self.resource_manager:
+            self.resource_manager.preallocate_for_state(State.BUSY)
         
     def _on_transition_busy_to_ready(self, transition: StateTransition) -> None:
         """
@@ -581,7 +671,8 @@ class MaggieAI(EventEmitter, EventListener):
         transition : StateTransition
             Object containing information about the state transition
         """
-        ...
+        if self.resource_manager:
+            self.resource_manager.preallocate_for_state(State.READY)
     
     @log_operation(component='MaggieAI')
     def _initialize_extensions(self) -> None:
@@ -611,7 +702,25 @@ class MaggieAI(EventEmitter, EventListener):
         ----------
         .. [1] Plugin and Extension patterns: https://www.oreilly.com/content/getting-started-with-writing-custom-components-for-your-design-system/
         """
-        ...
+        try:
+            from maggie.extensions.registry import ExtensionRegistry
+            extensions_config = self.config.get('extensions', {})
+            registry = ExtensionRegistry()
+            available_extensions = registry.discover_extensions()
+            self.logger.info(f"Discovered {len(available_extensions)} extensions: {', '.join(available_extensions.keys())}")
+            for extension_name, extension_config in extensions_config.items():
+                if extension_config.get('enabled', True) is False:
+                    self.logger.info(f"Extension {extension_name} is disabled in configuration")
+                    continue
+                extension = registry.instantiate_extension(extension_name, self.event_bus, extension_config)
+                if extension is not None:
+                    self.extensions[extension_name] = extension
+                    self.logger.info(f"Initialized extension: {extension_name}")
+                else:
+                    self.logger.warning(f"Failed to initialize extension: {extension_name}")
+            self.logger.info(f"Initialized {len(self.extensions)} extension modules")
+        except Exception as e:
+            self.logger.error(f"Error initializing extensions: {e}")
         
     @log_operation(component='MaggieAI')
     def initialize_components(self) -> bool:
@@ -646,7 +755,29 @@ class MaggieAI(EventEmitter, EventListener):
                "Design Patterns: Elements of Reusable Object-Oriented Software."
                (Facade pattern)
         """
-        ...
+        with logging_context(component='MaggieAI', operation='initialize_components') as ctx:
+            try:
+                if not self._register_core_services():
+                    return False
+                init_success = (self._initialize_wake_word_detector() and 
+                              self._initialize_tts_processor() and 
+                              self._initialize_stt_processor() and 
+                              self._initialize_llm_processor())
+                if not init_success:
+                    self.logger.error('Failed to initialize core components')
+                    return False
+                self._initialize_extensions()
+                self.event_bus.start()
+                if self.resource_manager:
+                    self.resource_manager.apply_hardware_specific_optimizations()
+                self.logger.info('All components initialized successfully')
+                return True
+            except ImportError as import_error:
+                self.logger.error(f"Failed to import required module: {import_error}")
+                return False
+            except Exception as e:
+                self.logger.error(f"Error initializing components: {e}")
+                return False
         
     def start(self) -> bool:
         """
@@ -678,7 +809,18 @@ class MaggieAI(EventEmitter, EventListener):
         ... else:
         ...     print("Failed to start MaggieAI system")
         """
-        ...
+        self.logger.info('Starting MaggieAI')
+        self._register_event_handlers()
+        success = self.initialize_components()
+        if not success:
+            self.logger.error('Failed to initialize components')
+            return False
+        if self.state_manager.get_current_state() == State.INIT:
+            self.state_manager.transition_to(State.STARTUP, 'system_start')
+        if self.resource_manager and hasattr(self.resource_manager, 'start_monitoring'):
+            self.resource_manager.start_monitoring()
+        self.logger.info('MaggieAI started successfully')
+        return True
         
     def _initialize_wake_word_detector(self) -> bool:
         """
@@ -702,7 +844,18 @@ class MaggieAI(EventEmitter, EventListener):
         The detector is configured from the wake_word section of the configuration
         and registered with the service locator for access by other components.
         """
-        ...
+        try:
+            from maggie.service.stt.wake_word import WakeWordDetector
+            from maggie.service.locator import ServiceLocator
+            wake_word_config = self.config.get('stt', {}).get('wake_word', {})
+            self.wake_word_detector = WakeWordDetector(wake_word_config)
+            self.wake_word_detector.on_detected = lambda: self.event_bus.publish('wake_word_detected')
+            ServiceLocator.register('wake_word_detector', self.wake_word_detector)
+            self.logger.debug('Wake word detector initialized')
+            return True
+        except Exception as e:
+            self.logger.error(f"Error initializing wake word detector: {e}")
+            return False
         
     def _initialize_tts_processor(self) -> bool:
         """
@@ -725,7 +878,17 @@ class MaggieAI(EventEmitter, EventListener):
         The TTS component supports various voices and speech customization options
         such as rate, pitch, and volume adjustments.
         """
-        ...
+        try:
+            from maggie.service.tts.processor import TTSProcessor
+            from maggie.service.locator import ServiceLocator
+            tts_config = self.config.get('tts', {})
+            self.tts_processor = TTSProcessor(tts_config)
+            ServiceLocator.register('tts_processor', self.tts_processor)
+            self.logger.debug('TTS processor initialized')
+            return True
+        except Exception as e:
+            self.logger.error(f"Error initializing TTS processor: {e}")
+            return False
         
     def _initialize_stt_processor(self) -> bool:
         """
@@ -749,7 +912,19 @@ class MaggieAI(EventEmitter, EventListener):
         processor to enable features like barge-in prevention (avoiding processing
         of the assistant's own speech output).
         """
-        ...
+        try:
+            from maggie.service.stt.processor import STTProcessor
+            from maggie.service.locator import ServiceLocator
+            stt_config = self.config.get('stt', {})
+            self.stt_processor = STTProcessor(stt_config)
+            if self.tts_processor:
+                self.stt_processor.tts_processor = self.tts_processor
+            ServiceLocator.register('stt_processor', self.stt_processor)
+            self.logger.debug('STT processor initialized')
+            return True
+        except Exception as e:
+            self.logger.error(f"Error initializing STT processor: {e}")
+            return False
         
     def _initialize_llm_processor(self) -> bool:
         """
@@ -773,7 +948,17 @@ class MaggieAI(EventEmitter, EventListener):
         This component typically uses a large language model and may require
         significant computational resources, particularly GPU memory for inference.
         """
-        ...
+        try:
+            from maggie.service.llm.processor import LLMProcessor
+            from maggie.service.locator import ServiceLocator
+            llm_config = self.config.get('llm', {})
+            self.llm_processor = LLMProcessor(llm_config)
+            ServiceLocator.register('llm_processor', self.llm_processor)
+            self.logger.debug('LLM processor initialized')
+            return True
+        except Exception as e:
+            self.logger.error(f"Error initializing LLM processor: {e}")
+            return False
         
     def set_gui(self, gui: Any) -> None:
         """
@@ -791,7 +976,8 @@ class MaggieAI(EventEmitter, EventListener):
         The GUI reference allows the core system to update the user interface
         when state changes occur or when responses need to be displayed.
         """
-        ...
+        self.gui = gui
+        self.logger.debug('GUI reference set')
         
     def shutdown(self) -> None:
         """
@@ -815,7 +1001,15 @@ class MaggieAI(EventEmitter, EventListener):
         >>> # After processing is complete
         >>> maggie.shutdown()
         """
-        ...
+        self.logger.info('Shutting down MaggieAI')
+        if self.resource_manager and hasattr(self.resource_manager, 'stop_monitoring'):
+            self.resource_manager.stop_monitoring()
+        if self.state_manager.get_current_state() != State.SHUTDOWN:
+            self.state_manager.transition_to(State.SHUTDOWN, 'system_shutdown')
+        if self.resource_manager and hasattr(self.resource_manager, 'release_resources'):
+            self.resource_manager.release_resources()
+        self.thread_pool.shutdown(wait=False)
+        self.logger.info('MaggieAI shutdown complete')
         
     def timeout(self) -> None:
         """
@@ -830,7 +1024,9 @@ class MaggieAI(EventEmitter, EventListener):
         actively being used. When timed out, the system enters a low-power IDLE
         state but can still be reactivated by the wake word.
         """
-        ...
+        self.logger.info('Inactivity timeout reached')
+        if self.state_manager.get_current_state() != State.IDLE:
+            self.state_manager.transition_to(State.IDLE, 'inactivity_timeout')
         
     def _handle_wake_word(self, data: Any = None) -> None:
         """
@@ -849,7 +1045,7 @@ class MaggieAI(EventEmitter, EventListener):
         When the wake word is detected, the system should transition from IDLE
         to READY state to prepare for user commands.
         """
-        ...
+        pass
         
     def _handle_error(self, error_data: Dict[str, Any]) -> None:
         """
@@ -869,7 +1065,7 @@ class MaggieAI(EventEmitter, EventListener):
         coordinated error response strategies. It may log errors, attempt recovery,
         notify the user, or trigger state transitions as appropriate.
         """
-        ...
+        pass
         
     def _handle_command(self, command: str) -> None:
         """
@@ -889,7 +1085,7 @@ class MaggieAI(EventEmitter, EventListener):
         and coordinates the response by directing the command to the appropriate
         handler or extension.
         """
-        ...
+        pass
         
     def _handle_timeout(self, data: Any = None) -> None:
         """
@@ -908,7 +1104,7 @@ class MaggieAI(EventEmitter, EventListener):
         This handler is called when the inactivity timer expires. It allows
         the system to conserve resources during periods of inactivity.
         """
-        ...
+        pass
         
     def _handle_extension_completed(self, extension_name: str) -> None:
         """
@@ -926,7 +1122,7 @@ class MaggieAI(EventEmitter, EventListener):
         When an extension finishes its processing, this handler may update
         the system state or trigger follow-up actions.
         """
-        ...
+        pass
         
     def _handle_extension_error(self, error_data: Dict[str, Any]) -> None:
         """
@@ -946,7 +1142,7 @@ class MaggieAI(EventEmitter, EventListener):
         from extension modules. It may attempt recovery, unload the problematic
         extension, or notify the user.
         """
-        ...
+        pass
         
     def _handle_low_memory(self, event_data: Dict[str, Any]) -> None:
         """
@@ -966,7 +1162,7 @@ class MaggieAI(EventEmitter, EventListener):
         crash the application. It implements various strategies to reduce memory
         pressure, such as unloading models or clearing caches.
         """
-        ...
+        pass
         
     def _handle_gpu_memory_warning(self, event_data: Dict[str, Any]) -> None:
         """
@@ -986,7 +1182,7 @@ class MaggieAI(EventEmitter, EventListener):
         This handler implements strategies to prevent GPU memory exhaustion, such
         as reducing model precision, unloading GPU models, or limiting batch sizes.
         """
-        ...
+        pass
         
     def _handle_input_activation(self, data: Any = None) -> None:
         """
@@ -1005,7 +1201,7 @@ class MaggieAI(EventEmitter, EventListener):
         This handler prepares the system for receiving user input, potentially
         adjusting system state or activating input-specific components.
         """
-        ...
+        pass
         
     def _handle_input_deactivation(self, data: Any = None) -> None:
         """
@@ -1024,7 +1220,7 @@ class MaggieAI(EventEmitter, EventListener):
         When input is deactivated, this handler may update system state or
         deactivate input-specific components to conserve resources.
         """
-        ...
+        pass
         
     def _handle_intermediate_transcription(self, text: str) -> None:
         """
@@ -1043,7 +1239,7 @@ class MaggieAI(EventEmitter, EventListener):
         recognition. This handler may update the UI to show what's being heard
         or perform preliminary processing.
         """
-        ...
+        pass
         
     def _handle_final_transcription(self, text: str) -> None:
         """
@@ -1062,7 +1258,7 @@ class MaggieAI(EventEmitter, EventListener):
         This handler typically triggers command processing or sends the text to
         the language model for understanding.
         """
-        ...
+        pass
         
     def process_command(self, command: str = None, extension: Any = None) -> None:
         """
@@ -1096,4 +1292,4 @@ class MaggieAI(EventEmitter, EventListener):
         >>> recipe_extension = maggie.extensions["recipe_creator"]
         >>> maggie.process_command(extension=recipe_extension)
         """
-        ...
+        pass
