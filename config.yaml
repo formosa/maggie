@@ -129,6 +129,12 @@ logging:
   console_level: "INFO"
   # Separate level for file logging
   file_level: "DEBUG"
+  # Batch size for asynchronous logging
+  batch_size: 50
+  # Timeout for batched logging in seconds
+  batch_timeout: 5.0
+  # Enable/disable asynchronous logging
+  async_enabled: true
 
 # Extensions configuration
 extensions:
