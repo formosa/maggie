@@ -1,52 +1,27 @@
-"""
-Maggie AI Assistant - Abstractions Module
-=========================================
-
-This module provides interfaces and a registry for component discovery,
-enabling loosely coupled architecture and dependency injection 
-throughout the Maggie AI Assistant system.
-
-The abstractions module implements several key software design patterns:
-
-- **Dependency Inversion Principle**: Defines interfaces that high-level modules
-  depend on, rather than concrete implementations, promoting loose coupling.
-  See: https://en.wikipedia.org/wiki/Dependency_inversion_principle
-
-- **Service Locator Pattern**: Implements a registry (CapabilityRegistry) for
-  locating and accessing services without direct dependencies.
-  See: https://en.wikipedia.org/wiki/Service_locator_pattern
-
-- **Abstract Factory Pattern**: Through interfaces, enables creation of families
-  of related objects without specifying concrete classes.
-  See: https://refactoring.guru/design-patterns/abstract-factory
-
-This module serves as the foundation for Maggie's plugin architecture,
-allowing components to interact through well-defined interfaces while
-remaining decoupled from specific implementations.
-"""
-
 from abc import ABC, abstractmethod
 from enum import Enum, auto
 from typing import Dict, Any, Optional, List, Callable, Tuple, Union, Set, Type, TypeVar, cast
+import threading
 
 T = TypeVar('T')
 
 class ILoggerProvider(ABC):
-    """
-    Abstract interface for logging providers.
-    
+    """Abstract interface for logging providers.
+
     This interface defines the contract that any logging implementation
     must satisfy to be used within the Maggie AI system. It ensures that
     any logger can be used interchangeably, regardless of implementation.
-    
+
+    Notes
+    -----
     The ILoggerProvider follows both the Strategy and Adapter patterns,
     allowing different logging backends (like standard library logging,
     loguru, etc.) to be used without affecting the rest of the codebase.
-    
+
     See Also
     --------
     LoggingManagerAdapter : A concrete implementation adapter in maggie.utils.adapters
-    
+
     Examples
     --------
     >>> class CustomLogger(ILoggerProvider):
@@ -58,12 +33,11 @@ class ILoggerProvider(ABC):
     ...     
     ...     # Implement other required methods...
     """
-    
+
     @abstractmethod
     def debug(self, message: str, **kwargs) -> None:
-        """
-        Log a debug message.
-        
+        """Log a debug message.
+
         Parameters
         ----------
         message : str
@@ -71,7 +45,6 @@ class ILoggerProvider(ABC):
         **kwargs : dict, optional
             Additional parameters to include with the log message.
             Common parameters include:
-            
             - exception: Exception object
             - component: str, name of the component logging the message
             - operation: str, specific operation being performed
@@ -81,9 +54,8 @@ class ILoggerProvider(ABC):
     
     @abstractmethod
     def info(self, message: str, **kwargs) -> None:
-        """
-        Log an informational message.
-        
+        """Log an informational message.
+
         Parameters
         ----------
         message : str
@@ -91,7 +63,6 @@ class ILoggerProvider(ABC):
         **kwargs : dict, optional
             Additional parameters to include with the log message.
             Common parameters include:
-            
             - exception: Exception object
             - component: str, name of the component logging the message
             - operation: str, specific operation being performed
@@ -101,9 +72,8 @@ class ILoggerProvider(ABC):
     
     @abstractmethod
     def warning(self, message: str, **kwargs) -> None:
-        """
-        Log a warning message.
-        
+        """Log a warning message.
+
         Parameters
         ----------
         message : str
@@ -111,7 +81,6 @@ class ILoggerProvider(ABC):
         **kwargs : dict, optional
             Additional parameters to include with the log message.
             Common parameters include:
-            
             - exception: Exception object
             - component: str, name of the component logging the message
             - operation: str, specific operation being performed
@@ -121,9 +90,8 @@ class ILoggerProvider(ABC):
     
     @abstractmethod
     def error(self, message: str, exception: Optional[Exception] = None, **kwargs) -> None:
-        """
-        Log an error message.
-        
+        """Log an error message.
+
         Parameters
         ----------
         message : str
@@ -133,7 +101,6 @@ class ILoggerProvider(ABC):
         **kwargs : dict, optional
             Additional parameters to include with the log message.
             Common parameters include:
-            
             - component: str, name of the component logging the message
             - operation: str, specific operation being performed
             - correlation_id: str, ID for tracing related log entries
@@ -142,9 +109,8 @@ class ILoggerProvider(ABC):
     
     @abstractmethod
     def critical(self, message: str, exception: Optional[Exception] = None, **kwargs) -> None:
-        """
-        Log a critical message.
-        
+        """Log a critical message.
+
         Parameters
         ----------
         message : str
@@ -154,7 +120,6 @@ class ILoggerProvider(ABC):
         **kwargs : dict, optional
             Additional parameters to include with the log message.
             Common parameters include:
-            
             - component: str, name of the component logging the message
             - operation: str, specific operation being performed
             - correlation_id: str, ID for tracing related log entries
@@ -162,20 +127,21 @@ class ILoggerProvider(ABC):
         pass
 
 class IErrorHandler(ABC):
-    """
-    Abstract interface for error handling.
-    
+    """Abstract interface for error handling.
+
     This interface defines the contract that error handling components must
     implement. It provides a centralized way to record errors and safely execute
     functions with error handling, separating error handling logic from business logic.
-    
+
+    Notes
+    -----
     The pattern used here is a combination of the Observer pattern (for error events)
     and the Command pattern (for safe execution).
-    
+
     See Also
     --------
     ErrorHandlerAdapter : A concrete implementation adapter in maggie.utils.adapters
-    
+
     Examples
     --------
     >>> class SimpleErrorHandler(IErrorHandler):
@@ -192,15 +158,14 @@ class IErrorHandler(ABC):
     ...             self.record_error(f"Error executing function: {e}", e)
     ...             return kwargs.get('default_return', None)
     """
-    
+
     @abstractmethod
     def record_error(self, message: str, exception: Optional[Exception] = None, **kwargs) -> Any:
-        """
-        Record an error.
-        
+        """Record an error.
+
         Creates a structured error record and handles appropriate logging,
         event emission, and tracking as configured.
-        
+
         Parameters
         ----------
         message : str
@@ -209,14 +174,13 @@ class IErrorHandler(ABC):
             Exception object associated with the error.
         **kwargs : dict, optional
             Additional error context parameters, commonly including:
-            
             - category: ErrorCategory, type of error
             - severity: ErrorSeverity, how severe the error is
             - source: str, component or function that generated the error
             - details: dict, additional structured data about the error
             - publish: bool, whether to publish an error event
             - correlation_id: str, for correlating related errors
-            
+
         Returns
         -------
         Any
@@ -227,12 +191,11 @@ class IErrorHandler(ABC):
     
     @abstractmethod
     def safe_execute(self, func: Callable, *args, **kwargs) -> Any:
-        """
-        Safely execute a function handling exceptions.
-        
+        """Safely execute a function handling exceptions.
+
         Executes the provided function, handling any exceptions that might occur
         and returning a default value in case of failure.
-        
+
         Parameters
         ----------
         func : callable
@@ -242,7 +205,6 @@ class IErrorHandler(ABC):
         **kwargs : dict, optional
             Keyword arguments to pass to the function, including special
             error handling parameters:
-            
             - error_code: str, identifier for this error scenario
             - default_return: Any, value to return if execution fails
             - error_details: dict, additional error context
@@ -250,7 +212,7 @@ class IErrorHandler(ABC):
             - error_severity: ErrorSeverity, how severe the error is
             - publish_error: bool, whether to publish an error event
             - include_state_info: bool, whether to include app state info
-            
+
         Returns
         -------
         Any
@@ -260,21 +222,22 @@ class IErrorHandler(ABC):
         pass
 
 class IEventPublisher(ABC):
-    """
-    Abstract interface for event publishing.
-    
+    """Abstract interface for event publishing.
+
     This interface defines the contract that event publishing components must
     implement. It enables pub/sub patterns throughout the application, promoting
     loose coupling between components.
-    
+
+    Notes
+    -----
     The pattern used here is primarily the Observer pattern, allowing components
     to communicate without direct dependencies.
-    
+
     See Also
     --------
     EventBusAdapter : A concrete implementation adapter in maggie.utils.adapters
     EventBus : Main implementation in maggie.core.event
-    
+
     Examples
     --------
     >>> class SimpleEventPublisher(IEventPublisher):
@@ -286,14 +249,13 @@ class IEventPublisher(ABC):
     ...             for callback in self.subscribers[event_type]:
     ...                 callback(data)
     """
-    
+
     @abstractmethod
     def publish(self, event_type: str, data: Any = None, **kwargs) -> None:
-        """
-        Publish an event.
-        
+        """Publish an event.
+
         Distributes an event to all subscribers of the specified event type.
-        
+
         Parameters
         ----------
         event_type : str
@@ -302,7 +264,6 @@ class IEventPublisher(ABC):
             Event payload data to be sent to subscribers.
         **kwargs : dict, optional
             Additional parameters for event processing, including:
-            
             - priority: int/enum, priority level for event processing
             - async: bool, whether to process event asynchronously
             - timeout: float, maximum time to wait for processing
@@ -311,21 +272,22 @@ class IEventPublisher(ABC):
         pass
 
 class IStateProvider(ABC):
-    """
-    Abstract interface for state information.
-    
+    """Abstract interface for state information.
+
     This interface defines the contract for components that provide state
     information about the application. It enables components to react to
     state changes without direct dependencies on the state management system.
-    
+
+    Notes
+    -----
     The pattern used is a combination of the State pattern and Observer pattern,
     allowing components to query current state and react to state changes.
-    
+
     See Also
     --------
     StateManagerAdapter : A concrete implementation adapter in maggie.utils.adapters
     StateManager : Main implementation in maggie.core.state
-    
+
     Examples
     --------
     >>> class SimpleStateProvider(IStateProvider):
@@ -335,14 +297,13 @@ class IStateProvider(ABC):
     ...     def get_current_state(self) -> Any:
     ...         return self.current_state
     """
-    
+
     @abstractmethod
     def get_current_state(self) -> Any:
-        """
-        Get the current state.
-        
+        """Get the current state.
+
         Retrieves the current state of the application or component.
-        
+
         Returns
         -------
         Any
@@ -352,33 +313,30 @@ class IStateProvider(ABC):
         """
         pass
 
-
 class LogLevel(Enum):
-    """
-    Enumeration of log severity levels.
-    
+    """Enumeration of log severity levels.
+
     Defines standard log levels used throughout the Maggie AI system.
     These levels match the common logging levels in most logging systems
     and are organized in increasing order of severity.
-    
+
     Attributes
     ----------
-    DEBUG : auto
+    DEBUG
         Detailed information, typically of interest only when diagnosing problems.
-    INFO : auto
+    INFO
         Confirmation that things are working as expected.
-    WARNING : auto
+    WARNING
         Indication that something unexpected happened, or may happen in the near future.
-    ERROR : auto
+    ERROR
         Due to a more serious problem, the software has not been able to perform a function.
-    CRITICAL : auto
+    CRITICAL
         A serious error, indicating that the program itself may be unable to continue running.
-    
+
     See Also
     --------
     logging.LogRecord : Standard library logging levels
-    https://docs.python.org/3/library/logging.html#logging-levels
-    
+
     Examples
     --------
     >>> level = LogLevel.INFO
@@ -391,39 +349,37 @@ class LogLevel(Enum):
     ERROR = auto()
     CRITICAL = auto()
 
-
 class ErrorCategory(Enum):
-    """
-    Enumeration of error categories.
-    
+    """Enumeration of error categories.
+
     Categorizes errors by domain or subsystem to help with error grouping,
     filtering, and handling throughout the Maggie AI system.
-    
+
     Attributes
     ----------
-    SYSTEM : auto
+    SYSTEM
         Errors related to system operations, typically OS or environment issues.
-    NETWORK : auto
+    NETWORK
         Errors related to network connectivity, requests, or related operations.
-    RESOURCE : auto
+    RESOURCE
         Errors related to resource allocation, like memory, CPU, GPU, etc.
-    PERMISSION : auto
+    PERMISSION
         Errors related to insufficient permissions or authorization issues.
-    CONFIGURATION : auto
+    CONFIGURATION
         Errors related to configuration issues, like invalid settings.
-    INPUT : auto
+    INPUT
         Errors related to user input or data validation.
-    PROCESSING : auto
+    PROCESSING
         Errors during data processing operations.
-    MODEL : auto
+    MODEL
         Errors specific to AI model operations, like loading or inference.
-    EXTENSION : auto
+    EXTENSION
         Errors from extension modules or plugins.
-    STATE : auto
+    STATE
         Errors related to application state management.
-    UNKNOWN : auto
+    UNKNOWN
         Default category for uncategorized errors.
-    
+
     Examples
     --------
     >>> def classify_error(error: Exception) -> ErrorCategory:
@@ -446,27 +402,25 @@ class ErrorCategory(Enum):
     STATE = auto()
     UNKNOWN = auto()
 
-
 class ErrorSeverity(Enum):
-    """
-    Enumeration of error severity levels.
-    
+    """Enumeration of error severity levels.
+
     Classifies errors by their impact level, helping to prioritize responses
     and determine appropriate handling strategies.
-    
+
     Attributes
     ----------
-    DEBUG : auto
+    DEBUG
         Minor issues that don't affect operation but might be useful for debugging.
-    INFO : auto
+    INFO
         Informational events that don't require action but should be noted.
-    WARNING : auto
+    WARNING
         Issues that don't prevent operation but might indicate problems.
-    ERROR : auto
+    ERROR
         Significant problems that prevent specific operations from completing.
-    CRITICAL : auto
+    CRITICAL
         Severe issues that might prevent the application from functioning.
-    
+
     Examples
     --------
     >>> def determine_severity(error: Exception) -> ErrorSeverity:
@@ -487,41 +441,30 @@ class ErrorSeverity(Enum):
     ERROR = auto()
     CRITICAL = auto()
 
-
 class CapabilityRegistry:
-    """
-    Registry for application capabilities and services.
-    
+    """Registry for application capabilities and services.
+
     This class implements the Service Locator pattern, providing a central registry
     for capability discovery and dependency injection. It helps to decouple
     component implementations from their consumers.
-    
+
+    Notes
+    -----
     The registry is implemented as a thread-safe singleton with lazy initialization,
-    ensuring consistent access throughout the application.
-    
-    This pattern is particularly useful in architectures where:
+    ensuring consistent access throughout the application. This pattern is particularly
+    useful in architectures where:
     - Components need to be swapped at runtime
     - Dependencies are resolved dynamically
     - Cross-cutting concerns (like logging) need consistent access
-    
+
     See Also
     --------
-    get_logger_provider, get_error_handler, get_event_publisher, get_state_provider :
-        Helper functions that use this registry
-    
+    get_logger_provider : Helper function that uses this registry
+    get_error_handler : Helper function that uses this registry
+    get_event_publisher : Helper function that uses this registry
+    get_state_provider : Helper function that uses this registry
     ServiceLocator : A more extensive implementation in maggie.service.locator
-    
-    Notes
-    -----
-    While the Service Locator pattern can be controversial in some circles 
-    (compared to direct Dependency Injection), it provides a pragmatic approach
-    for loosely coupled systems where component creation is not centralized.
-    
-    References
-    ----------
-    - Service Locator Pattern: https://en.wikipedia.org/wiki/Service_locator_pattern
-    - Martin Fowler on Service Locator: https://martinfowler.com/articles/injection.html
-    
+
     Examples
     --------
     >>> registry = CapabilityRegistry.get_instance()
@@ -529,26 +472,24 @@ class CapabilityRegistry:
     >>> logger = registry.get(ILoggerProvider)
     >>> logger.info("Using the registered logger")
     """
-    
     _instance: Optional['CapabilityRegistry'] = None
-    _lock: threading.RLock
-    
+    _lock: threading.RLock = threading.RLock()
+
     @classmethod
     def get_instance(cls) -> 'CapabilityRegistry':
-        """
-        Get the singleton instance of the registry.
-        
+        """Get the singleton instance of the registry.
+
         This method implements the lazy initialization pattern, creating the
         singleton instance only when first needed and then reusing it for
         subsequent calls.
-        
+
         Returns
         -------
         CapabilityRegistry
             The singleton instance of the capability registry.
-        
-        Thread Safety
-        -------------
+
+        Notes
+        -----
         This method is thread-safe due to the use of a reentrant lock during
         the singleton instance creation.
         """
@@ -559,28 +500,26 @@ class CapabilityRegistry:
         return cls._instance
     
     def __init__(self) -> None:
-        """
-        Initialize the registry.
-        
+        """Initialize the registry.
+
         Creates an empty registry. This should not be called directly;
         use get_instance() instead to access the singleton.
         """
         self._registry: Dict[Type, Any] = {}
     
     def register(self, capability_type: Type, instance: Any) -> None:
-        """
-        Register a capability instance.
-        
+        """Register a capability instance.
+
         Associates a capability implementation with its interface type for later retrieval.
         If a capability of the same type was already registered, it will be replaced.
-        
+
         Parameters
         ----------
         capability_type : Type
             The interface type (usually an ABC) that the instance implements.
         instance : Any
             The implementation instance to register.
-        
+
         Examples
         --------
         >>> registry = CapabilityRegistry.get_instance()
@@ -591,23 +530,22 @@ class CapabilityRegistry:
         self._registry[capability_type] = instance
     
     def get(self, capability_type: Type[T]) -> Optional[T]:
-        """
-        Get a capability instance.
-        
+        """Get a capability instance.
+
         Retrieves the registered implementation for the specified capability type.
-        
+
         Parameters
         ----------
         capability_type : Type[T]
             The interface type to retrieve. This should be the same type that
             was used when registering the capability.
-        
+
         Returns
         -------
         Optional[T]
             The registered instance if found, None otherwise.
             The return type T is determined by the capability_type parameter.
-        
+
         Examples
         --------
         >>> registry = CapabilityRegistry.get_instance()
@@ -619,20 +557,18 @@ class CapabilityRegistry:
         """
         return self._registry.get(capability_type)
 
-
 def get_logger_provider() -> Optional[ILoggerProvider]:
-    """
-    Get the registered logger provider.
-    
+    """Get the registered logger provider.
+
     Retrieves the currently registered logger provider from the capability registry.
     This is a convenience function that simplifies access to the logger provider
     without directly interacting with the registry.
-    
+
     Returns
     -------
     Optional[ILoggerProvider]
         The registered logger provider if available, None otherwise.
-    
+
     Examples
     --------
     >>> logger = get_logger_provider()
@@ -643,20 +579,18 @@ def get_logger_provider() -> Optional[ILoggerProvider]:
     """
     return CapabilityRegistry.get_instance().get(ILoggerProvider)
 
-
 def get_error_handler() -> Optional[IErrorHandler]:
-    """
-    Get the registered error handler.
-    
+    """Get the registered error handler.
+
     Retrieves the currently registered error handler from the capability registry.
     This is a convenience function that simplifies access to the error handler
     without directly interacting with the registry.
-    
+
     Returns
     -------
     Optional[IErrorHandler]
         The registered error handler if available, None otherwise.
-    
+
     Examples
     --------
     >>> handler = get_error_handler()
@@ -671,20 +605,18 @@ def get_error_handler() -> Optional[IErrorHandler]:
     """
     return CapabilityRegistry.get_instance().get(IErrorHandler)
 
-
 def get_event_publisher() -> Optional[IEventPublisher]:
-    """
-    Get the registered event publisher.
-    
+    """Get the registered event publisher.
+
     Retrieves the currently registered event publisher from the capability registry.
     This is a convenience function that simplifies access to the event publisher
     without directly interacting with the registry.
-    
+
     Returns
     -------
     Optional[IEventPublisher]
         The registered event publisher if available, None otherwise.
-    
+
     Examples
     --------
     >>> publisher = get_event_publisher()
@@ -693,20 +625,18 @@ def get_event_publisher() -> Optional[IEventPublisher]:
     """
     return CapabilityRegistry.get_instance().get(IEventPublisher)
 
-
 def get_state_provider() -> Optional[IStateProvider]:
-    """
-    Get the registered state provider.
-    
+    """Get the registered state provider.
+
     Retrieves the currently registered state provider from the capability registry.
     This is a convenience function that simplifies access to the state provider
     without directly interacting with the registry.
-    
+
     Returns
     -------
     Optional[IStateProvider]
         The registered state provider if available, None otherwise.
-    
+
     Examples
     --------
     >>> state_provider = get_state_provider()
