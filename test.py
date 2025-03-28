@@ -81,7 +81,7 @@ class RobustComponent:
 
 if __name__ == "__main__":
 
-    if result := RobustComponent().process_data({"key_1": "value_1", "key_2": "value_2", "key_3": "value_3"})
+    if result := RobustComponent().process_data({"key_1": "value_1", "key_2": "value_2", "key_3": "value_3"}):
         print(f"Type:     {type(result)}")
         print(f"Length:   {len(result)}")
         print(f"Content:  {result}")
