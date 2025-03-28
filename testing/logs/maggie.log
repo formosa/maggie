@@ -1,0 +1,57 @@
+2025-03-28 16:27:21,759 - DecoratorDemo - INFO - Starting decorator demonstration script
+2025-03-28 16:27:21,759 - maggie.error_handling - INFO - Starting decorator demonstration script
+2025-03-28 16:27:21,759 - DecoratorDemo - INFO - === Testing with decorator pattern ===
+2025-03-28 16:27:21,759 - maggie.error_handling - INFO - === Testing with decorator pattern ===
+2025-03-28 16:27:21,759 - DataProcessor - DEBUG - process_data called with args: complexity=1
+2025-03-28 16:27:21,975 - maggie.error_handling - WARNING - Error executing process_data: Random processing failure for data_id=0
+2025-03-28 16:27:21,975 - DataProcessor - DEBUG - process_data returned: None
+2025-03-28 16:27:21,976 - maggie.error_handling - DEBUG - Performance: DataProcessor/process_data - process_data took 0.216s
+2025-03-28 16:27:21,976 - DataProcessor - DEBUG - DataProcessor/process_data completed in 0.217s
+2025-03-28 16:27:21,976 - maggie.error_handling - DEBUG - Performance: DataProcessor/process_data - process_data took 0.217s
+2025-03-28 16:27:21,976 - DecoratorDemo - INFO - Processed data 0 with complexity 1: None
+2025-03-28 16:27:21,976 - maggie.error_handling - INFO - Processed data 0 with complexity 1: None
+2025-03-28 16:27:21,976 - DataProcessor - DEBUG - process_data called with args: complexity=2
+2025-03-28 16:27:22,508 - DataProcessor - DEBUG - process_data returned: 2
+2025-03-28 16:27:22,508 - maggie.error_handling - DEBUG - Performance: DataProcessor/process_data - process_data took 0.532s
+2025-03-28 16:27:22,508 - DataProcessor - DEBUG - DataProcessor/process_data completed in 0.532s
+2025-03-28 16:27:22,508 - maggie.error_handling - DEBUG - Performance: DataProcessor/process_data - process_data took 0.532s
+2025-03-28 16:27:22,508 - DecoratorDemo - INFO - Processed data 1 with complexity 2: 2
+2025-03-28 16:27:22,508 - maggie.error_handling - INFO - Processed data 1 with complexity 2: 2
+2025-03-28 16:27:22,508 - DataProcessor - DEBUG - process_data called with args: complexity=1
+2025-03-28 16:27:22,674 - maggie.error_handling - WARNING - Error executing process_data: Random processing failure for data_id=2
+2025-03-28 16:27:22,675 - DataProcessor - DEBUG - process_data returned: None
+2025-03-28 16:27:22,675 - maggie.error_handling - DEBUG - Performance: DataProcessor/process_data - process_data took 0.167s
+2025-03-28 16:27:22,675 - DataProcessor - DEBUG - DataProcessor/process_data completed in 0.167s
+2025-03-28 16:27:22,675 - maggie.error_handling - DEBUG - Performance: DataProcessor/process_data - process_data took 0.167s
+2025-03-28 16:27:22,675 - DecoratorDemo - INFO - Processed data 2 with complexity 1: None
+2025-03-28 16:27:22,675 - maggie.error_handling - INFO - Processed data 2 with complexity 1: None
+2025-03-28 16:27:22,675 - DataProcessor - DEBUG - process_data called with args: complexity=3
+2025-03-28 16:27:23,041 - DataProcessor - DEBUG - process_data returned: dict
+2025-03-28 16:27:23,041 - maggie.error_handling - DEBUG - Performance: DataProcessor/process_data - process_data took 0.366s
+2025-03-28 16:27:23,041 - DataProcessor - DEBUG - DataProcessor/process_data completed in 0.366s
+2025-03-28 16:27:23,041 - maggie.error_handling - DEBUG - Performance: DataProcessor/process_data - process_data took 0.366s
+2025-03-28 16:27:23,041 - DecoratorDemo - INFO - Processed data 3 with complexity 3: {'data_id': 3, 'result': 'Processed data 3', 'timestamp': 1743193643.041202, 'complexity': 3}
+2025-03-28 16:27:23,041 - maggie.error_handling - INFO - Processed data 3 with complexity 3: {'data_id': 3, 'result': 'Processed data 3', 'timestamp': 1743193643.041202, 'complexity': 3}
+2025-03-28 16:27:23,041 - DataProcessor - DEBUG - process_data called with args: complexity=2
+2025-03-28 16:27:23,448 - DataProcessor - DEBUG - process_data returned: 8
+2025-03-28 16:27:23,448 - maggie.error_handling - DEBUG - Performance: DataProcessor/process_data - process_data took 0.407s
+2025-03-28 16:27:23,448 - DataProcessor - DEBUG - DataProcessor/process_data completed in 0.407s
+2025-03-28 16:27:23,448 - maggie.error_handling - DEBUG - Performance: DataProcessor/process_data - process_data took 0.407s
+2025-03-28 16:27:23,448 - DecoratorDemo - INFO - Processed data 4 with complexity 2: 8
+2025-03-28 16:27:23,448 - maggie.error_handling - INFO - Processed data 4 with complexity 2: 8
+2025-03-28 16:27:23,448 - DecoratorDemo - INFO - === Testing with direct safe_execute ===
+2025-03-28 16:27:23,448 - maggie.error_handling - INFO - === Testing with direct safe_execute ===
+2025-03-28 16:27:23,689 - DecoratorDemo - INFO - Processed data 5 with complexity 2: String result for data_id=5
+2025-03-28 16:27:23,689 - maggie.error_handling - INFO - Processed data 5 with complexity 2: String result for data_id=5
+2025-03-28 16:27:23,969 - maggie.error_handling - WARNING - Error executing _process_data_internal: Random processing failure for data_id=6
+2025-03-28 16:27:23,969 - DecoratorDemo - INFO - Processed data 6 with complexity 1: None
+2025-03-28 16:27:23,969 - maggie.error_handling - INFO - Processed data 6 with complexity 1: None
+2025-03-28 16:27:24,206 - DecoratorDemo - INFO - Processed data 7 with complexity 1: 7
+2025-03-28 16:27:24,206 - maggie.error_handling - INFO - Processed data 7 with complexity 1: 7
+2025-03-28 16:27:24,549 - DecoratorDemo - INFO - Processed data 8 with complexity 2: String result for data_id=8
+2025-03-28 16:27:24,549 - maggie.error_handling - INFO - Processed data 8 with complexity 2: String result for data_id=8
+2025-03-28 16:27:25,014 - maggie.error_handling - WARNING - Error executing _process_data_internal: Random processing failure for data_id=9
+2025-03-28 16:27:25,014 - DecoratorDemo - INFO - Processed data 9 with complexity 3: None
+2025-03-28 16:27:25,014 - maggie.error_handling - INFO - Processed data 9 with complexity 3: None
+2025-03-28 16:27:25,014 - DecoratorDemo - INFO - Decorator demonstration completed
+2025-03-28 16:27:25,014 - maggie.error_handling - INFO - Decorator demonstration completed

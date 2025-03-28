@@ -12,11 +12,14 @@ import time
 import os
 from typing import Any, Dict, Union
 
+import os
+import sys  # noqa
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))  # noqa
 # Import necessary components from the Maggie AI Assistant project
-from .maggie.utils.logging import log_operation, ComponentLogger, LoggingManager
-from .maggie.utils.error_handling import with_error_handling, safe_execute, ErrorCategory, ErrorSeverity
-from .maggie.utils.abstractions import CapabilityRegistry
-from .maggie.utils.adapters import LoggingManagerAdapter, ErrorHandlerAdapter
+from maggie.utils.logging import log_operation, ComponentLogger, LoggingManager
+from maggie.utils.error_handling import with_error_handling, safe_execute, ErrorCategory, ErrorSeverity
+from maggie.utils.abstractions import CapabilityRegistry
+from maggie.utils.adapters import LoggingManagerAdapter, ErrorHandlerAdapter
 
 
 @log_operation(component='DataProcessor', log_args=True, log_result=True)
