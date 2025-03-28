@@ -8,6 +8,10 @@ from maggie.utils.abstractions import (
 from maggie.utils.logging import log_operation
 from maggie.utils.error_handling import with_error_handling, ErrorCategory, ErrorSeverity
 
+get_logger_provider = get_logger_provider()
+get_error_handler = get_error_handler()
+get_event_publisher = get_event_publisher()
+get_state_provider = get_state_provider()
 
 class RobustComponent:
     """
