@@ -13,8 +13,9 @@ import os
 from typing import Any, Dict, Union
 
 import os
-import sys  # noqa
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))  # noqa
+import sys
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+
 # Import necessary components from the Maggie AI Assistant project
 from maggie.utils.logging import log_operation, ComponentLogger, LoggingManager
 from maggie.utils.error_handling import with_error_handling, safe_execute, ErrorCategory, ErrorSeverity
@@ -55,7 +56,7 @@ def process_data(data_id: int, complexity: int = 1) -> Union[Dict[str, Any], int
     
     # Randomly fail with 20% probability
     if random.random() < 0.2:
-        raise ValueError(f"Random processing failure for data_id={data_id}")
+        raise ValueError(f"\n\n   **** Random processing failure for data_id={data_id} ****")
     
     # Return different types based on data_id modulo 3
     if data_id % 3 == 0:
@@ -82,8 +83,8 @@ def process_data_alternative(data_id: int, complexity: int = 1) -> Union[Dict[st
         # Same implementation as process_data
         time.sleep(random.uniform(0.1, 0.3) * complexity)
         
-        if random.random() < 0.2:
-            raise ValueError(f"Random processing failure for data_id={data_id}")
+        if random.random() < 0.5:
+            raise ValueError(f"\n\n   **** Random processing failure for data_id={data_id} ****")
         
         if data_id % 3 == 0:
             return {
@@ -136,7 +137,8 @@ def main():
     
     # Process multiple data items using the decorated function
     logger.info("=== Testing with decorator pattern ===")
-    for i in range(5):
+    for i in range(1,6):
+        print(f"\n     Processing data {i} of 5(10)")
         # Randomly vary the complexity
         complexity = random.randint(1, 3)
         
@@ -148,7 +150,8 @@ def main():
     
     # Demonstrate alternative approach with direct safe_execute
     logger.info("=== Testing with direct safe_execute ===")
-    for i in range(5, 10):
+    for i in range(6, 11):
+        print(f"\n     Processing data {i} of 10")
         complexity = random.randint(1, 3)
         result = process_data_alternative(i, complexity)
         logger.info(f"Processed data {i} with complexity {complexity}: {result}")
