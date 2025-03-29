@@ -496,58 +496,100 @@ def start_maggie(args: argparse.Namespace, maggie: Any, config: Dict[str, Any]) 
             return 0
 
 def main() -> int:
-    """
-    Main entry point for the Maggie AI Assistant application.
+	"""
+	Main entry point for the Maggie AI Assistant application.
 
-    This function serves as the application's entry point, orchestrating
-    the complete initialization, startup, execution, and shutdown process.
-    It implements top-level exception handling to ensure clean termination
-    under all circumstances.
+	This function serves as the application's entry point, orchestrating
+	the complete initialization, startup, execution, and shutdown process.
+	It implements top-level exception handling to ensure clean termination
+	under all circumstances.
 
-    Returns
-    -------
-    int
-        Exit code indicating success (0) or failure (non-zero)
+	Returns
+	-------
+	int
+		Exit code indicating success (0) or failure (non-zero)
 
-    Notes
-    -----
-    The function implements the following execution flow:
-    1. Parses command-line arguments
-    2. Sets up the application environment and components
-    3. Starts the Maggie AI Assistant services
-    4. Handles execution based on mode (GUI or headless)
-    5. Provides comprehensive exception handling
+	Parameters
+	----------
+	Command Line Arguments:
+		--config : str, optional
+			Path to the configuration YAML file (default: 'config.yaml')
+			Specifies the location of the YAML configuration file containing all 
+			application settings including hardware optimizations, speech processing 
+			parameters, language model configurations, and system thresholds.
+			
+		--debug : flag, optional
+			Enable detailed debug logging (default: False)
+			When present, sets logging level to DEBUG for more verbose output,
+			providing comprehensive diagnostics information throughout the application
+			lifecycle. Useful for troubleshooting issues or development.
+			
+		--verify : flag, optional
+			Verify system configuration without starting the assistant (default: False)
+			Performs hardware detection and configuration validation only, reporting
+			any issues without actually launching the assistant. Useful for checking
+			if the system meets requirements and if the configuration is valid.
+			
+		--create-template : flag, optional
+			Create the recipe template file if it doesn't exist (default: False)
+			Generates the default template file for the recipe_creator extension
+			specified in the configuration. This ensures the required template exists
+			before attempting to use the extension.
+			
+		--headless : flag, optional
+			Run in headless mode without GUI (default: False)
+			Launches the assistant without the graphical user interface, operating
+			through console and programmatic interactions only. Useful for server
+			environments or when integrating with other systems.
 
-    The main function follows a defensive programming approach with
-    structured exception handling to catch and report all errors that
-    might occur during application execution. This ensures that the
-    application can provide meaningful error messages and exit gracefully
-    even in case of unexpected failures.
+	Notes
+	-----
+	The function implements the following execution flow:
+	1. Parses command-line arguments
+	2. Sets up the application environment and components
+	3. Starts the Maggie AI Assistant services
+	4. Handles execution based on mode (GUI or headless)
+	5. Provides comprehensive exception handling
 
-    This implementation follows the command pattern for application
-    control flow, where each major step is encapsulated in its own
-    function with clear responsibilities.
+	The main function follows a defensive programming approach with
+	structured exception handling to catch and report all errors that
+	might occur during application execution. This ensures that the
+	application can provide meaningful error messages and exit gracefully
+	even in case of unexpected failures.
 
-    Examples
-    --------
-    >>> # Standard execution as module entry point
-    >>> if __name__ == '__main__':
-    ...     sys.exit(main())
-    """
-    try:
-        args = parse_arguments()
-        maggie, config = setup_application(args)
-        if maggie is None:
-            print('Failed to set up application')
-            return 1
-        return start_maggie(args, maggie, config)
-    except KeyboardInterrupt:
-        print('\nApplication interrupted by user')
-        return 1
-    except Exception as e:
-        # Use basic print since logging might not be available
-        print(f"Unexpected error in main: {e}")
-        return 1
+	This implementation follows the command pattern for application
+	control flow, where each major step is encapsulated in its own
+	function with clear responsibilities.
+
+	Examples
+	--------
+	>>> # Standard execution as module entry point
+	>>> if __name__ == '__main__':
+	...     sys.exit(main())
+
+	>>> # Running with specific config and in debug mode
+	>>> # python main.py --config custom_config.yaml --debug
+
+	>>> # Running in verification mode to check system compatibility
+	>>> # python main.py --verify
+
+	>>> # Running without GUI in server environment
+	>>> # python main.py --headless
+	"""
+	try:
+		args = parse_arguments()
+		maggie, config = setup_application(args)
+		if maggie is None:
+			print('Failed to set up application')
+			return 1
+		return start_maggie(args, maggie, config)
+	except KeyboardInterrupt:
+		print('\nApplication interrupted by user')
+		return 1
+	except Exception as e:
+		# Use basic print since logging might not be available
+		print(f"Unexpected error in main: {e}")
+		return 1
 
 if __name__ == '__main__':
     sys.exit(main())
