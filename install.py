@@ -824,6 +824,7 @@ except Exception as e:
     def _create_recipe_template(self) -> bool:
         template_dir = os.path.join(self.base_dir, 'maggie', 'templates')
         template_path = os.path.join(template_dir, 'recipe_template.docx')
+        normalized_path = template_path.replace('\\', '/')
         if os.path.exists(template_path) and not self.force_reinstall:
             self.color.print('Recipe template already exists', 'green')
             return True
@@ -857,7 +858,7 @@ doc.add_paragraph("2. Step 2", style='ListNumber')
 doc.add_paragraph("3. Step 3", style='ListNumber')
 doc.add_heading("Notes", level=2)
 doc.add_paragraph("Add any additional notes, tips, or variations here.")
-doc.save("{template_path.replace('\\', '\\\\')}")
+doc.save("{normalized_path}")
 '''])
             if returncode == 0:
                 self.color.print('Recipe template created successfully', 'green')
