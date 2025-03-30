@@ -8,6 +8,52 @@ logging.basicConfig(level=logging.INFO,format='%(asctime)s - %(name)s - %(leveln
 logger=logging.getLogger('maggie.error_handling')
 class LogLevel(Enum):DEBUG=auto();INFO=auto();WARNING=auto();ERROR=auto();CRITICAL=auto()
 class LogDestination(Enum):CONSOLE='CONSOLE';FILE='FILE';EVENT_BUS='EVENT_BUS'
+
+# Custom formatter to include class name and other details
+class DetailedFormatter(logging.Formatter):
+    """
+    A custom formatter that adds file, class, method, and line number information
+    to log messages.
+    """
+    def format(self, record):
+        # Get the original formatted message
+        formatted_msg = super().format(record)
+        
+        # Extract class name if available
+        class_name = ""
+        if hasattr(record, 'pathname') and record.pathname:
+            try:
+                # Try to extract class from frame information
+                frame_info = inspect.getframeinfo(inspect.currentframe().f_back)
+                for frame in inspect.stack()[1:]:
+                    if 'self' in frame.frame.f_locals:
+                        class_name = frame.frame.f_locals['self'].__class__.__name__
+                        break
+            except (AttributeError, IndexError, ValueError):
+                # If we can't get class info, use module name
+                class_name = record.module
+
+        # If we couldn't get class name, try to extract from logger name
+        if not class_name and record.name:
+            parts = record.name.split('.')
+            if len(parts) > 1:
+                class_name = parts[-1]
+        
+        # Add location info to the formatted message
+        location_info = f"[{os.path.basename(record.pathname)}:{record.lineno}"
+        if class_name:
+            location_info += f":{class_name}"
+        if record.funcName and record.funcName != '<module>':
+            location_info += f".{record.funcName}"
+        location_info += "]"
+        
+        # Insert location info right before the message
+        parts = formatted_msg.split(" - ", 3)
+        if len(parts) >= 4:
+            return f"{parts[0]} - {parts[1]} - {parts[2]} - {location_info} {parts[3]}"
+        else:
+            return f"{formatted_msg} {location_info}"
+
 class LoggingManager:
 	_instance=None;_lock=threading.RLock()
 	@classmethod
@@ -21,7 +67,27 @@ class LoggingManager:
 			if cls._instance is None:cls._instance=LoggingManager(config)
 		return cls._instance
 	def __init__(self,config:Dict[str,Any])->None:self.config=config.get('logging',{});self.log_dir=Path(self.config.get('path','logs')).resolve();self.log_dir.mkdir(exist_ok=True,parents=True);self.console_level=self.config.get('console_level','INFO');self.file_level=self.config.get('file_level','DEBUG');self._enhanced_logging=False;self._event_publisher=None;self._error_handler=None;self._state_provider=None;self.log_batch_size=self.config.get('batch_size',50);self.log_batch_timeout=self.config.get('batch_timeout',5.);self.async_logging=self.config.get('async_enabled',True);self.correlation_id=None;self._configure_basic_logging()
-	def _configure_basic_logging(self)->None:console_handler=logging.StreamHandler(sys.stdout);console_handler.setLevel(getattr(logging,self.console_level));console_formatter=logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s');console_handler.setFormatter(console_formatter);log_file=self.log_dir/'maggie.log';file_handler=logging.FileHandler(log_file);file_handler.setLevel(getattr(logging,self.file_level));file_formatter=logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s');file_handler.setFormatter(file_formatter);root_logger=logging.getLogger();root_logger.handlers.clear();root_logger.addHandler(console_handler);root_logger.addHandler(file_handler);root_logger.setLevel(logging.DEBUG)
+	def _configure_basic_logging(self)->None:
+		# Create console handler with enhanced format
+		console_handler=logging.StreamHandler(sys.stdout)
+		console_handler.setLevel(getattr(logging,self.console_level))
+		console_formatter=DetailedFormatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+		console_handler.setFormatter(console_formatter)
+		
+		# Create file handler with enhanced format
+		log_file=self.log_dir/'maggie.log'
+		file_handler=logging.FileHandler(log_file)
+		file_handler.setLevel(getattr(logging,self.file_level))
+		file_formatter=DetailedFormatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+		file_handler.setFormatter(file_formatter)
+		
+		# Set up the root logger
+		root_logger=logging.getLogger()
+		root_logger.handlers.clear()
+		root_logger.addHandler(console_handler)
+		root_logger.addHandler(file_handler)
+		root_logger.setLevel(logging.DEBUG)
+
 	def enhance_with_event_publisher(self,event_publisher:Any)->None:self._event_publisher=event_publisher;self._enhanced_logging=True
 	def enhance_with_error_handler(self,error_handler:Any)->None:self._error_handler=error_handler;self._enhanced_logging=True
 	def enhance_with_state_provider(self,state_provider:Any)->None:self._state_provider=state_provider;self._enhanced_logging=True
