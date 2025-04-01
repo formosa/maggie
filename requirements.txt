@@ -16,8 +16,8 @@ PyAudio==0.2.14
 faster-whisper==0.9.0
 
 # TTS
-kokoro>=0.8.4  # TTS engine
-kokoro-onnx>=0.4.5  # TTS engine with ONNX support
+kokoro==0.8.4  # TTS engine
+kokoro-onnx==0.4.5  # TTS engine with ONNX support
 huggingface_hub>=0.15.1  # Compatible with Kokoro 0.8.4
 soundfile>=0.12.1
 librosa>=0.10.0
