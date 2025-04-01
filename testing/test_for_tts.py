@@ -3,6 +3,7 @@ import soundfile as sf
 from kokoro_onnx import Kokoro
 from misaki import en, espeak
 import os
+
 # Misaki G2P with espeak-ng fallback
 fallback = espeak.EspeakFallback(british=False)
 g2p = en.G2P(trf=False, british=False, fallback=fallback)
@@ -25,4 +26,7 @@ samples, sample_rate = kokoro.create(phonemes, "af_heart", is_phonemes=True)
 
 # Save
 sf.write("audio.wav", samples, sample_rate)
+
+
 print("Created audio.wav")
+
