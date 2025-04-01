@@ -36,9 +36,6 @@ class ProgressTracker:
 		msg=f"  {status}"
 		if message:msg+=f": {message}"
 		self.color.print(msg,color=color)
-	def progress_bar(self,iteration:int,total:int,prefix:str='',suffix:str='',decimals:int=1,length:int=50,fill:str='█',print_end:str='\r'):
-		percent=('{0:.'+str(decimals)+'f}').format(100*(iteration/float(total)));filled_length=int(length*iteration//total);bar=fill*filled_length+'-'*(length-filled_length);print(f"\r{prefix} |{bar}| {percent}% {suffix}",end=print_end)
-		if iteration==total:print()
 	def elapsed_time(self)->float:return time.time()-self.start_time
 	def display_summary(self,success:bool=True):
 		elapsed=self.elapsed_time()
@@ -69,11 +66,17 @@ class MaggieInstaller:
 			with urllib.request.urlopen(url)as response,open(destination,'wb')as out_file:
 				file_size=int(response.info().get('Content-Length',0));downloaded=0;block_size=8192*8
 				if show_progress and file_size>0:self.color.print(f"Total file size: {file_size/1024/1024:.1f} MB")
+				last_percent=0
 				while True:
 					buffer=response.read(block_size)
 					if not buffer:break
 					downloaded+=len(buffer);out_file.write(buffer)
-					if show_progress and file_size>0:self.progress.progress_bar(downloaded,file_size,prefix=f"  Progress:",suffix=f"{downloaded/1024/1024:.1f}/{file_size/1024/1024:.1f} MB")
+					if show_progress and file_size>0:
+						percent=int(downloaded*100/file_size)
+						# Only print progress every 10%
+						if percent>=last_percent+10:
+							last_percent=percent
+							self.color.print(f"  Progress: {percent}% ({downloaded/1024/1024:.1f}/{file_size/1024/1024:.1f} MB)")
 			self.color.print(f"Download completed: {destination}",'green');return True
 		except Exception as e:self.color.print(f"Error downloading file: {e}",'red');return False
 	def _verify_python_version(self)->bool:
