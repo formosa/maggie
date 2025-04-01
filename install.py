@@ -361,6 +361,57 @@ except Exception as e:
 				if file_size>=MIN_SIZE:self.color.print(f"af_heart model download successful ({file_size/(1024*1024):.2f} MB)",'green');return True
 				else:self.color.print(f"Downloaded file has incorrect size: {file_size/(1024*1024):.2f} MB",'yellow');os.remove(model_path)
 		self.color.print('Failed to download af_heart voice model from any source','red');self.color.print('You may need to download it manually from: https://github.com/hexgrad/kokoro/releases','yellow');return False
+	def _download_kokoro_onnx_models(self)->bool:
+		model_dir=os.path.join(self.base_dir,'maggie','models','tts')
+		os.makedirs(model_dir,exist_ok=True)
+		
+		# List of models to download with their URLs and minimum expected sizes
+		models=[
+			{
+				'name':'kokoro-v1.0.onnx',
+				'url':'https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx',
+				'min_size':10*1024*1024  # 10 MB minimum size check
+			},
+			{
+				'name':'voices-v1.0.bin',
+				'url':'https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin',
+				'min_size':5*1024*1024   # 5 MB minimum size check
+			}
+		]
+		
+		all_successful=True
+		for model in models:
+			model_path=os.path.join(model_dir,model['name'])
+			
+			# Check if file already exists and has sufficient size
+			if os.path.exists(model_path):
+				file_size=os.path.getsize(model_path)
+				if file_size>=model['min_size']:
+					self.color.print(f"{model['name']} already exists ({file_size/(1024*1024):.2f} MB) ✓",'green')
+					continue
+				else:
+					self.color.print(f"{model['name']} has incorrect size: {file_size/(1024*1024):.2f} MB",'yellow')
+			
+			# Download the file
+			self.color.print(f"Downloading {model['name']}...",'cyan')
+			if self._download_file(model['url'],model_path):
+				file_size=os.path.getsize(model_path)
+				if file_size>=model['min_size']:
+					self.color.print(f"{model['name']} download successful ({file_size/(1024*1024):.2f} MB)",'green')
+				else:
+					self.color.print(f"Downloaded file has incorrect size: {file_size/(1024*1024):.2f} MB",'yellow')
+					os.remove(model_path)
+					all_successful=False
+			else:
+				self.color.print(f"Failed to download {model['name']}",'red')
+				all_successful=False
+		
+		if all_successful:
+			self.color.print('All kokoro-onnx models downloaded successfully','green')
+			return True
+		else:
+			self.color.print('Some kokoro-onnx models failed to download','yellow')
+			return False
 	def _download_mistral_model(self)->bool:
 		if self.skip_models:self.color.print('Skipping Mistral model download (--skip-models)','yellow');return True
 		mistral_dir=os.path.join(self.base_dir,'maggie','models','llm','mistral-7b-instruct-v0.3-GPTQ-4bit');essential_files=['config.json','tokenizer.json','tokenizer_config.json','quantize_config.json','special_tokens_map.json'];essential_patterns=[lambda files:any(file.endswith('.safetensors')for file in files)]
@@ -537,6 +588,7 @@ os.remove(hardware_file)
 		if not self._setup_config():self.progress.complete_step(False,'Failed to set up configuration');return False
 		self.progress.complete_step(True);self.progress.start_step('Downloading models')
 		if not self._download_af_heart_model():self.color.print('Warning: Failed to download TTS voice model','yellow');self.color.print('Text-to-speech functionality may be limited','yellow')
+		if not self._download_kokoro_onnx_models():self.color.print('Warning: Failed to download some kokoro-onnx model files','yellow');self.color.print('ONNX-based TTS functionality may be limited','yellow')
 		if not self._download_whisper_model():self.color.print('Warning: Failed to download Whisper model','yellow');self.color.print('Speech recognition functionality may be limited','yellow')
 		if not self.skip_models:self._download_mistral_model()
 		else:self.color.print('Skipping LLM model download (--skip-models)','yellow')

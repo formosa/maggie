@@ -1,22 +1,28 @@
-import numpy as np
-from scipy.io.wavfile import write
-from IPython.display import display, Audio
+# -*- coding: utf-8 -*-
+import soundfile as sf
+from kokoro_onnx import Kokoro
+from misaki import en, espeak
+import os
+# Misaki G2P with espeak-ng fallback
+fallback = espeak.EspeakFallback(british=False)
+g2p = en.G2P(trf=False, british=False, fallback=fallback)
 
-import torch
+# Kokoro
+kokoro_model = os.path("C:\AI\claude\service\maggie\maggie\models\tts\kokoro-v1.0.onnx")
+kokoro_weights = os.path("C:\AI\claude\service\maggie\maggie\models\tts\voices-v1.0.bin")
+kokoro = Kokoro(kokoro_model, kokoro_weights)
 
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
-print(f'Using device: {device}')
+# Text
+text = "[Misaki](/misˈɑki/) is a G2P engine designed for [Kokoro](/kˈOkəɹO/) models."
+print("Text:", text)
 
-# Language is determined by the first letter of the VOICE_NAME:
-# 🇺🇸 'a' => American English => en-us
-# 🇬🇧 'b' => British English => en-gb
+# Phonemize
+phonemes, _ = g2p(text)
+print("Phonemes:", phonemes)
 
-VOICE_NAME = [
-    'af', # Default voice is a 50-50 mix of Bella & Sarah
-    'af_bella', 'af_sarah', 'am_adam', 'am_michael',
-    'bf_emma', 'bf_isabella', 'bm_george', 'bm_lewis',
-    'af_nicole', 'af_sky',
-][8]
+# Create
+samples, sample_rate = kokoro.create(phonemes, "af_heart", is_phonemes=True)
 
-VOICEPACK = torch.load(f'voices/{VOICE_NAME}.pt', weights_only=True).to(device)
-print(f'Loaded voice: {VOICE_NAME}')
+# Save
+sf.write("audio.wav", samples, sample_rate)
+print("Created audio.wav")
