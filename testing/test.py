@@ -1,5 +1,6 @@
 import asyncio
 import random
+import re
 from functools import partial
 
 # Constants and initial values
@@ -72,6 +73,45 @@ def extract_oversized(text, max_words=15):
     return None, text
 
 
+def sanitize_for_tts(text):
+    """
+    Sanitize text for Text-to-Speech compatibility.
+    
+    Parameters
+    ----------
+    text : str
+        The text to sanitize.
+    
+    Returns
+    -------
+    str
+        Sanitized text ready for TTS processing.
+    """
+    if not text:
+        return text
+        
+    # Normalize spacing (remove multiple spaces)
+    text = re.sub(r'\s+', ' ', text)
+    
+    # Ensure proper spacing after punctuation
+    text = re.sub(r'([.!?,;:])(\S)', r'\1 \2', text)
+    
+    # Remove or replace problematic symbols for TTS
+    text = text.replace("'", "'")  # Smart apostrophes
+    text = text.replace('"', '')   # Remove quotes
+    text = text.replace('—', '-')  # Em dash to hyphen
+    text = text.replace('–', '-')  # En dash to hyphen
+    
+    # Normalize ellipses
+    text = re.sub(r'\.{2,}', '...', text)
+    
+    # Ensure sentence starts with capital letter
+    if text and text[0].isalpha():
+        text = text[0].upper() + text[1:]
+        
+    return text.strip()
+
+
 def print_output(text, color="32"):
     """
     Print text in the specified color.
@@ -88,8 +128,10 @@ def print_output(text, color="32"):
     None
     """
     if text:
+        # Sanitize text before output
+        sanitized_text = sanitize_for_tts(text)
         print("\r", end="")  # Moves to the start of the current line
-        print(f"\033[{color}m{text}\033[0m")
+        print(f"\033[{color}m{sanitized_text}\033[0m")
 
 
 async def input_processor(source_text, input_queue, input_text_speed=0.1):
@@ -116,17 +158,21 @@ async def input_processor(source_text, input_queue, input_text_speed=0.1):
     async def process_char(char, state):
         input_text, submit_words = state
         
-        # Add the character and check word count
+        # Check if adding this character would reach threshold
         test_text = input_text + char
         word_count = len(test_text.split())
         
-        if word_count >= submit_words:
-            # If adding this character reaches threshold, submit then reset
-            print(f"\r: {test_text}", end="", flush=True)
+        # If we're at the threshold with current text, submit without adding char
+        if input_text and len(input_text.split()) >= submit_words:
+            print(f"\r: {input_text}", end="", flush=True)
             await asyncio.sleep(input_text_speed)
-            print(f"\n\033[33m{test_text}\033[0m")
-            await input_queue.put(test_text)
-            return "", random.randint(submit_words_low, submit_words_high)
+            print(f"\n\033[33m{input_text}\033[0m")
+            await input_queue.put(input_text)
+            
+            # Start new input text with current character
+            next_input = char
+            print(f"\r: {next_input}", end="", flush=True)
+            return next_input, random.randint(submit_words_low, submit_words_high)
         else:
             # Otherwise just add the character normally
             input_text = test_text
