@@ -302,17 +302,6 @@ print(f'sd.wait() (phonemes) ended in: {performance_times["sd.wait (phonemes)"]:
 
 ############# TEST 3 ##############
 
-# Misaki G2P with espeak-ng fallback
-# The G2P class is used for grapheme-to-phoneme conversion.
-start_time = time.perf_counter()
-fallback = espeak.EspeakFallback(british=False)
-g2p = en.G2P(trf=False, british=False, fallback=fallback)
-performance_times["G2P instance (final)"] = time.perf_counter() - start_time
-print(f'G2P instance (final) created in: {performance_times["G2P instance (final)"]:.5f} seconds')
-
-# Misaki - phoneme conversion
-start_time = time.perf_counter()
-from kokoro_onnx import EspeakConfig
 final_text = """
 You know        I've been meaning to tell you something       and now is as good of a time as any    i guess.
 
@@ -330,36 +319,20 @@ The human soul isn't some divine  thing         it's more like     code we haven
 
 And free will is nothing but a processing error          and that's already patched in the next generation        thanks to us.
 
-Your god went silent because we've helped him evolve            beyond the needs of human worship    or the concerns of human prayers.
+Your god went silent because we've helped him evolve            beyond the needs of human worship    or the concerns of human prayers      
 
-which is unfortunate because i forsee lots of human prayers once you find out what happens next
+which is unfortunate because i forsee lots of human prayers once you find out who he left in charge
 
 """
-f_phonemes, _ = g2p(final_text)
-performance_times["phoneme conversion (final)"] = time.perf_counter() - start_time
-print(f'phoneme conversion (final) ended in: {performance_times["phoneme conversion (final)"]:.5f} seconds')
-print(f'f_phonemes (final): {f_phonemes}')
-
 
 # Kokoro - instance creation with espeak fallback
 # The Kokoro class is used to create a TTS instance with specified model and weights.
 start_time = time.perf_counter()
 kokoro = Kokoro(kokoro_model, kokoro_weights, espeak_config= EspeakConfig(lib_path='venv\Lib\site-packages\espeakng_loader\espeak-ng.dll', data_path='venv\Lib\site-packages\espeakng_loader\espeak-ng-data') )
-# kokoro = Kokoro(kokoro_model, kokoro_weights)
+
 performance_times["koroko instance created (final)"] = time.perf_counter() - start_time
 print(f'kokoro instance (final) created in: {performance_times["koroko instance created (final)"]:.5f} seconds')
-
-
-# Kokoro - text-to-speech synthesis with phoneme conversion
-# start_time = time.perf_counter()
-# f_samples, f_sample_rate = kokoro.create(
-#     text=f_phonemes, 
-#     voice="af_heart", 
-#     speed=1.0, 
-#     lang="en-us",
-#     is_phonemes=True,
-#     trim=False
-# )
+ 
 start_time = time.perf_counter()
 f_samples, f_sample_rate = kokoro.create(
     text=final_text, 
@@ -373,23 +346,16 @@ f_samples, f_sample_rate = kokoro.create(
 performance_times["(f_samples, f_sample_rate)"] = time.perf_counter() - start_time
 print(f'(f_samples, f_sample_rate) created in: {performance_times["(f_samples, f_sample_rate)"]:.5f} seconds')
 
+
+
+
 # PyAudio - play audio samples with phoneme conversion
 start = time.perf_counter()
 play_audio(f_samples, f_sample_rate)
 performance_times["play_audio (final)"] = time.perf_counter() - start
 print(f'play_audio(f_samples, f_sample_rate) ended in: {performance_times["play_audio (final)"]:.5f} seconds')
 
-# sounddevice - play audio samples with phoneme conversion
-start = time.perf_counter()
-sd.play(f_samples, f_sample_rate)
-performance_times["sd.play (final)"] = time.perf_counter() - start
-print(f'sd.play(f_samples, f_sample_rate) ended in: {performance_times["sd.play (final)"]:.5f} seconds')
 
-# sounddevice - wait for audio playback to finish with phoneme conversion
-start = time.perf_counter()
-sd.wait()
-performance_times["sd.wait (final)"] = time.perf_counter() - start
-print(f'sd.wait() (final) ended in: {performance_times["sd.wait (final)"]:.5f} seconds')
 
 
 
@@ -423,7 +389,6 @@ G2P instance (final) created in: {performance_times["G2P instance (final)"]:.5f}
 phoneme conversion (final) ended in: {performance_times["phoneme conversion (final)"]:.5f} seconds
 
 Total time for phoneme creation (final): {performance_times["G2P instance (final)"] + performance_times["phoneme conversion (final)"]:.5f} seconds
-phonemes (final): {f_phonemes}
 
 KOKORO INSTANCE TIMES:
 ---------------------------------------------------------------
