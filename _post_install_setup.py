@@ -25,19 +25,23 @@ try:
     from huggingface_hub import snapshot_download, hf_hub_download
 except ImportError:
     print("ERROR: huggingface-hub not found.", file=sys.stderr)
-    sys.exit(1)
+    # Set to None so checks later fail gracefully
+    snapshot_download = None
+    hf_hub_download = None
 try:
     import yaml
     try: from yaml import CLoader as Loader, CDumper as Dumper
     except ImportError: from yaml import Loader, Dumper
 except ImportError:
     print("ERROR: PyYAML not found.", file=sys.stderr)
-    sys.exit(1)
+    yaml = None # Flag as unavailable
+    Loader = None
+    Dumper = None
 try:
     import docx
 except ImportError:
     print("ERROR: python-docx not found.", file=sys.stderr)
-    sys.exit(1)
+    docx = None # Flag as unavailable
 # Optional imports for hardware detection
 try:
     import psutil
@@ -48,7 +52,7 @@ try:
     import torch
 except ImportError:
     torch = None # Flag that torch is not available
-    print("Warning: PyTorch not found, GPU detection will fail.", file=sys.stderr)
+    print("Warning: PyTorch not found or failed to import, GPU detection will fail.", file=sys.stderr)
 if platform.system() == "Windows":
     try:
         import wmi
@@ -144,8 +148,7 @@ class PostInstallSetup:
             'gpu': {'is_rtx_3080': False, 'model': 'Unknown', 'vram_gb': 0, 'cuda_available': False, 'cuda_version': '', 'cudnn_available': False, 'cudnn_version': ''},
             'memory': {'total_gb': 0, 'available_gb': 0, 'is_32gb': False}
         }
-        # Git/Compiler checks are done in bootstrap script, assume present if needed by now
-        self.has_git = self._check_git_exists() # Simple check if git command works
+        self.has_git = self._check_git_exists()
 
     def _check_git_exists(self) -> bool:
         """Checks if git command is available."""
@@ -215,7 +218,7 @@ class PostInstallSetup:
                     print()
                 else:
                     self.color.print("Downloading (size unknown)...", "blue")
-                    while True: buffer = response.read(block_size);  out_file.write(buffer)
+                    while True: buffer = response.read(block_size); out_file.write(buffer)
             self.color.print(f"Download completed: {dest_path}", 'green'); return True
         except urllib.error.URLError as e:
              self.color.print(f"Error downloading file (URL Error: {e.reason}): {url}", 'red')
@@ -228,7 +231,6 @@ class PostInstallSetup:
 
     def _detect_hardware(self) -> None:
         """Detects CPU, Memory, and GPU hardware using installed libraries."""
-        # *** Uses direct imports now ***
         self.color.print('Detecting Hardware Configuration...', 'cyan', bold=True)
         self.hardware_info['cpu'] = self._detect_cpu()
         self.hardware_info['memory'] = self._detect_memory()
@@ -237,7 +239,6 @@ class PostInstallSetup:
 
     def _detect_cpu(self)->Dict[str,Any]:
         """Detects CPU information."""
-        # *** Uses direct imports now ***
         cpu_info = {'is_ryzen_9_5900x': False, 'model':'Unknown','cores':0,'threads':0}
         try: cpu_info['model'] = platform.processor() or 'Unknown'
         except Exception: pass
@@ -259,8 +260,7 @@ class PostInstallSetup:
                     cpu_info['model'] = processor.Name.strip()
                     if cpu_info['cores'] == 0 and hasattr(processor, 'NumberOfCores'): cpu_info['cores'] = processor.NumberOfCores
                     if cpu_info['threads'] == 0 and hasattr(processor, 'NumberOfLogicalProcessors'): cpu_info['threads'] = processor.NumberOfLogicalProcessors
-                # else: # WMI optional, no warning needed here if import failed at top
-                #    if self.verbose: self.color.print("WMI library not available.", "yellow")
+                # else: No warning needed if import failed at top
             except Exception as e:
                  if self.verbose: self.color.print(f"WMI CPU detection error: {e}", "yellow")
 
@@ -270,9 +270,8 @@ class PostInstallSetup:
 
     def _detect_memory(self)->Dict[str,Any]:
         """Detects memory information."""
-         # *** Uses direct imports now ***
         memory_info={'total_gb':0,'available_gb':0,'is_32gb':False}
-        if not psutil:
+        if not psutil: # Check if import succeeded at top
              self.color.print("psutil library not available. Cannot determine RAM details.", "yellow")
              return memory_info
         try:
@@ -286,7 +285,6 @@ class PostInstallSetup:
 
     def _detect_gpu(self)->Dict[str,Any]:
         """Detects GPU information using PyTorch."""
-        # *** Uses direct imports now ***
         gpu_info = {'available': False, 'is_rtx_3080': False, 'model': 'Unknown','vram_gb': 0, 'cuda_available': False, 'cuda_version': '', 'cudnn_available': False, 'cudnn_version': ''}
         if self.cpu_only: return gpu_info
 
@@ -326,17 +324,21 @@ class PostInstallSetup:
 
     def _print_hardware_summary(self):
         """Prints hardware summary previously gathered."""
-        # (Same as previous version)
+        # *** MODIFIED: Check cuda_available before printing details ***
         self.color.print('Hardware Configuration Summary:', 'cyan', bold=True)
         cpu_info = self.hardware_info['cpu']; mem_info = self.hardware_info['memory']; gpu_info = self.hardware_info['gpu']
         self.color.print(f"  CPU: {cpu_info.get('model', 'Unknown')} ({cpu_info.get('cores', 'N/A')}c / {cpu_info.get('threads', 'N/A')}t)", 'green' if cpu_info.get('is_ryzen_9_5900x') else 'yellow')
         self.color.print(f"  RAM: {mem_info.get('total_gb', 0):.1f} GB", 'green' if mem_info.get('is_32gb') else 'yellow')
         if self.cpu_only: self.color.print('  GPU: CPU-only mode selected', 'yellow')
-        elif gpu_info.get('cuda_available'):
+        elif gpu_info.get('cuda_available'): # Only print details if CUDA was actually found by torch
              self.color.print(f"  GPU: {gpu_info.get('model', 'Unknown')} ✓", 'green')
              self.color.print(f"       {gpu_info.get('vram_gb', 0):.1f} GB VRAM", 'green')
              self.color.print(f"       CUDA {gpu_info.get('cuda_version', 'N/A')} | cuDNN {gpu_info.get('cudnn_version', 'N/A')}", 'green' if gpu_info.get('cudnn_available') else 'yellow')
-        else: self.color.print('  GPU: No CUDA-capable GPU detected by PyTorch', 'red')
+        elif gpu_info.get('available'): # GPU might exist (nvidia-smi found) but not usable by torch
+             self.color.print(f"  GPU: {gpu_info.get('model', 'Unknown')} (Detected, but PyTorch cannot use CUDA)", 'yellow')
+        else: # No GPU detected at all
+             self.color.print('  GPU: No CUDA-capable GPU detected', 'red')
+        # *** End of modification ***
 
     def _setup_config(self)->bool:
         """Creates or updates the config.yaml based on hardware detection."""
@@ -435,13 +437,12 @@ class PostInstallSetup:
             return False
         # *** End of modification ***
 
-
     def _download_whisper_model(self)->bool:
         """Downloads the Whisper base.en model using huggingface_hub directly."""
         # *** Uses direct import/call ***
         if self.skip_models: self.color.print('Skipping Whisper model download (--skip-models)', 'yellow'); return True
-        try: from huggingface_hub import snapshot_download, hf_hub_download
-        except ImportError: self.color.print("ERROR: huggingface-hub not available.", "red"); return False
+        if not snapshot_download or not hf_hub_download: # Check if import succeeded at top
+            self.color.print("ERROR: huggingface-hub not available.", "red"); return False
 
         model_dir = self.base_dir / 'maggie/models/stt/whisper-base.en'
         essential_files = ['model.bin', 'config.json', 'tokenizer.json', 'vocab.json']
@@ -474,8 +475,8 @@ class PostInstallSetup:
         """Downloads the necessary ONNX model files for kokoro-onnx."""
         # *** Uses direct import/call ***
         if self.skip_models: self.color.print('Skipping kokoro-onnx model download (--skip-models)', 'yellow'); return True
-        try: from huggingface_hub import snapshot_download, hf_hub_download
-        except ImportError: self.color.print("ERROR: huggingface-hub not available.", "red"); return False
+        if not snapshot_download or not hf_hub_download: # Check if import succeeded at top
+            self.color.print("ERROR: huggingface-hub not available.", "red"); return False
 
         self.color.print("Downloading Kokoro ONNX models...", "cyan")
         model_dir = self.base_dir / 'maggie/models/tts'; model_dir.mkdir(parents=True, exist_ok=True)
@@ -565,8 +566,10 @@ class PostInstallSetup:
             return True
 
         self.color.print("Creating default recipe template...", "cyan")
+        if not docx: # Check if import failed at top
+            self.color.print("Error: python-docx library not available. Cannot create template.", 'red')
+            return False
         try:
-            import docx
             doc = docx.Document(); doc.add_heading("Recipe Name", level=1); doc.add_paragraph()
             doc.add_heading("Recipe Information", level=2); info_table = doc.add_table(rows=3, cols=2); info_table.style = 'Table Grid'
             info_table.cell(0, 0).text = "Preparation Time"; info_table.cell(0, 1).text = "00 minutes"
@@ -578,10 +581,6 @@ class PostInstallSetup:
             doc.save(template_path)
             self.color.print(f"Template saved to {template_path} ✓", 'green')
             return True
-        except ImportError:
-             self.color.print("Error: python-docx library not found. Cannot create template.", 'red')
-             self.color.print("       Please ensure 'python-docx' is listed in pyproject.toml dependencies.", 'yellow')
-             return False
         except Exception as e:
             self.color.print(f"Error creating docx template: {e}", 'red')
             if template_path.exists():
@@ -589,110 +588,13 @@ class PostInstallSetup:
                 except: pass
             return False
 
-    def _setup_config(self)->bool:
-        """Creates or updates the config.yaml based on hardware detection."""
-        # *** Uses direct import/call ***
-        config_path = self.base_dir / 'config.yaml'; example_path = self.base_dir / 'config.yaml.example'
-        if not example_path.exists(): example_path = self.base_dir / 'config.yaml.txt'
-        if not example_path.exists(): example_path = self.base_dir / 'config-yaml-example.txt'
-        if not config_path.exists() and not example_path.exists(): self.color.print("ERROR: Config/Example file not found.", 'red'); return False
-
-        self.color.print("Setting up configuration file (config.yaml)...", "cyan")
-
-        if not yaml: # Check if import failed at top
-             self.color.print("Error: PyYAML library not available. Cannot setup config.", 'red')
-             return False
-
-        try:
-            config = {}
-            # Load existing or copy example
-            if config_path.exists():
-                self.color.print(f"Loading existing config: {config_path}", "blue")
-                try:
-                    with open(config_path, 'r', encoding='utf-8') as f: config = yaml.load(f, Loader=Loader)
-                    if not isinstance(config, MutableMapping): self.color.print("Warning: Existing config invalid.", "yellow"); config = {}
-                except Exception as e: self.color.print(f"Error loading config: {e}.", "red"); config = {}
-            elif example_path and example_path.exists():
-                self.color.print(f"Creating config from example: {example_path}", "blue")
-                try:
-                    shutil.copyfile(example_path, config_path)
-                    with open(config_path, 'r', encoding='utf-8') as f: config = yaml.load(f, Loader=Loader)
-                    if not isinstance(config, MutableMapping): self.color.print("Warning: Example config invalid.", "yellow"); config = {}
-                except Exception as e: self.color.print(f"Error copying/loading example: {e}.", "red"); config = {}
-            else: self.color.print("No config/example found. Starting fresh.", "yellow"); config = {}
-
-            # Helper to ensure nested keys exist
-            def ensure_keys(d, keys):
-                current = d
-                for key in keys:
-                    if not isinstance(current, MutableMapping): return None
-                    current = current.setdefault(key, {})
-                return current
-
-            # Apply settings (same logic as before)
-            llm_config = ensure_keys(config, ['llm']); gpu_config = ensure_keys(config, ['gpu']); cpu_config = ensure_keys(config, ['cpu']); mem_config = ensure_keys(config, ['memory']); stt_config = ensure_keys(config, ['stt']); stt_whisper_config = ensure_keys(stt_config, ['whisper']) if stt_config else None; tts_config = ensure_keys(config, ['tts'])
-            if llm_config is not None: llm_config.update({'model_path': 'maggie/models/llm/mistral-7b-instruct-v0.3-GPTQ-4bit', 'model_type': 'mistral', 'use_autogptq': True})
-            if stt_whisper_config is not None: stt_whisper_config['model_path'] = 'maggie/models/stt/whisper-base.en'
-            if tts_config is not None: tts_config.update({'model_path': 'maggie/models/tts', 'voice_model': 'af_heart'}) # Corrected voice name
-            gpu_hw = self.hardware_info.get('gpu', {}); cpu_hw = self.hardware_info.get('cpu', {}); mem_hw = self.hardware_info.get('memory', {})
-            if self.cpu_only:
-                self.color.print("Applying CPU-only optimizations...", "blue")
-                if llm_config: llm_config.update({'gpu_layers': 0, 'gpu_layer_auto_adjust': False}); llm_config.pop('rtx_3080_optimized', None)
-                if gpu_config: gpu_config.update({'max_percent': 0, 'model_unload_threshold': 0}); gpu_config.pop('rtx_3080_optimized', None)
-                if tts_config: tts_config['gpu_acceleration'] = False
-                if stt_whisper_config: stt_whisper_config['compute_type'] = 'int8'
-            else:
-                if gpu_hw.get('cuda_available'):
-                    self.color.print("Applying GPU optimizations...", "blue")
-                    if llm_config: llm_config.update({'gpu_layer_auto_adjust': True, 'precision_type': 'float16', 'mixed_precision_enabled': True})
-                    if tts_config: tts_config.update({'gpu_acceleration': True})
-                    if stt_whisper_config: stt_whisper_config['compute_type'] = 'float16'
-                    if gpu_hw.get('is_rtx_3080'):
-                        self.color.print("Applying RTX 3080 specific optimizations...", "blue")
-                        if llm_config: llm_config.update({'gpu_layers': 32, 'rtx_3080_optimized': True})
-                        if gpu_config: gpu_config.update({'max_percent': 90, 'model_unload_threshold': 95, 'rtx_3080_optimized': True})
-                        if tts_config: tts_config['gpu_precision'] = 'mixed_float16'
-                    else:
-                        self.color.print("Applying generic GPU optimizations...", "blue")
-                        if llm_config: llm_config.update({'gpu_layers': -1}); llm_config.pop('rtx_3080_optimized', None)
-                        if gpu_config: gpu_config.update({'max_percent': 85, 'model_unload_threshold': 90}); gpu_config.pop('rtx_3080_optimized', None)
-                        if tts_config: tts_config['gpu_precision'] = 'float16'
-                else:
-                     self.color.print("CUDA not available via PyTorch. Forcing CPU settings.", "yellow")
-                     if llm_config: llm_config.update({'gpu_layers': 0, 'gpu_layer_auto_adjust': False}); llm_config.pop('rtx_3080_optimized', None)
-                     if gpu_config: gpu_config.update({'max_percent': 0, 'model_unload_threshold': 0}); gpu_config.pop('rtx_3080_optimized', None)
-                     if tts_config: tts_config['gpu_acceleration'] = False
-                     if stt_whisper_config: stt_whisper_config['compute_type'] = 'int8'
-            if cpu_hw.get('is_ryzen_9_5900x'):
-                self.color.print("Applying Ryzen 9 5900X optimizations...", "blue")
-                if cpu_config: cpu_config.update({'max_threads': 8, 'thread_timeout': 30, 'ryzen_9_5900x_optimized': True})
-            else:
-                if cpu_config: cpu_config.pop('ryzen_9_5900x_optimized', None)
-            if mem_hw.get('is_32gb'):
-                self.color.print("Applying 32GB+ RAM optimizations...", "blue")
-                if mem_config: mem_config.update({'max_percent': 75, 'model_unload_threshold': 85, 'xpg_d10_memory': True})
-            else:
-                if mem_config: mem_config.pop('xpg_d10_memory', None)
-
-            # Write config
-            with open(config_path, 'w', encoding='utf-8') as f:
-                yaml.dump(config, f, Dumper=Dumper, default_flow_style=False, sort_keys=False, allow_unicode=True)
-            self.color.print(f"Configuration saved to {config_path} ✓", 'green')
-            self.color.print('NOTE: Edit config.yaml to add Picovoice Access Key.', 'yellow')
-            return True
-
-        except Exception as e:
-            self.color.print(f"Error setting up configuration file: {e}", 'red')
-            return False
-        # *** End of modification ***
-
     def run_all_steps(self):
         """Runs all post-install steps."""
         # This method is called by main() after bootstrap
         self.progress.start_step('Detecting Hardware')
         self._detect_hardware()
         # Check hardware detection results (optional, could add checks here)
-        self.progress.complete_step(True) # Assume detection itself worked
+        self.progress.complete_step(True) # Assume detection itself worked for progress
 
         self.progress.start_step('Setting up configuration file')
         if not self._setup_config():
@@ -702,15 +604,17 @@ class PostInstallSetup:
 
         self.progress.start_step('Downloading models')
         models_ok = True
+        # *** REMOVED CALL to _download_af_heart_model ***
         if not self._download_kokoro_onnx_models():
              self.color.print('Warning: Failed kokoro-onnx download.', 'yellow')
-             models_ok = False
+             # models_ok = False # Decide if this should be fatal
         if not self._download_whisper_model():
              self.color.print('Warning: Failed Whisper download.', 'yellow')
-             models_ok = False
+             # models_ok = False # Decide if this should be fatal
         if not self._download_mistral_model():
              self.color.print('Warning: Failed Mistral download.', 'yellow')
-             models_ok = False
+             # models_ok = False # Decide if this should be fatal
+
         self.progress.complete_step(models_ok)
 
         self.progress.start_step('Setting up templates & completing installation')
@@ -729,7 +633,7 @@ class PostInstallSetup:
         # if not self.has_cpp_compiler: self.color.print('6. C++ Compiler not found - building packages may fail.', 'yellow')
         self.color.print('\n--- To start Maggie AI Assistant ---', 'cyan', bold=True)
         self.color.print('   Run: poetry run python main.py', 'green')
-        self.progress.complete_step(True)
+        self.progress.complete_step(True) # Mark final step complete
         return models_ok
 
 
