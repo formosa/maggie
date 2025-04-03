@@ -20,12 +20,10 @@ from typing import Dict, Any, List, Tuple, Optional, Union, Callable
 from collections.abc import MutableMapping
 
 # --- Imports for libraries installed by Poetry ---
-# These should now succeed because this script runs inside the venv
 try:
     from huggingface_hub import snapshot_download, hf_hub_download
 except ImportError:
     print("ERROR: huggingface-hub not found.", file=sys.stderr)
-    # Set to None so checks later fail gracefully
     snapshot_download = None
     hf_hub_download = None
 try:
@@ -34,33 +32,35 @@ try:
     except ImportError: from yaml import Loader, Dumper
 except ImportError:
     print("ERROR: PyYAML not found.", file=sys.stderr)
-    yaml = None # Flag as unavailable
-    Loader = None
-    Dumper = None
+    yaml = None; Loader = None; Dumper = None
 try:
     import docx
 except ImportError:
     print("ERROR: python-docx not found.", file=sys.stderr)
-    docx = None # Flag as unavailable
-# Optional imports for hardware detection
+    docx = None
 try:
     import psutil
 except ImportError:
-    psutil = None # Flag that psutil is not available
+    psutil = None
     print("Warning: psutil not found, RAM detection will be limited.", file=sys.stderr)
 try:
     import torch
-except ImportError:
-    torch = None # Flag that torch is not available
-    print("Warning: PyTorch not found or failed to import, GPU detection will fail.", file=sys.stderr)
+except ImportError as e:
+    torch = None
+    print(f"Warning: PyTorch not found or failed to import ({e}), GPU detection will fail.", file=sys.stderr)
+except UserWarning as w: # Catch NumPy compatibility warning specifically
+    torch = None # Assume import failed for detection purposes
+    print(f"Warning: PyTorch import generated a warning (likely NumPy incompatibility): {w}", file=sys.stderr)
+    print("         GPU detection might fail or be inaccurate.", file=sys.stderr)
+
 if platform.system() == "Windows":
     try:
         import wmi
     except ImportError:
-        wmi = None # Flag that WMI is not available
+        wmi = None
         print("Warning: WMI not found, detailed Windows CPU info unavailable.", file=sys.stderr)
 else:
-    wmi = None # WMI is windows-only
+    wmi = None
 
 
 # --- Helper Classes (ColorOutput, ProgressTracker) ---
@@ -79,7 +79,6 @@ class ColorOutput:
 
     def _supports_color(self) -> bool:
         """Checks if the terminal supports color."""
-        # (Code remains the same)
         if platform.system() == 'Windows':
             try:
                 import ctypes
@@ -100,13 +99,28 @@ class ColorOutput:
 
     def print(self, message: str, color: Optional[str] = None, bold: bool = False):
         """Prints a message with optional color and bold formatting."""
-        # (Code remains the same)
         formatted = message
         if self.enabled:
             if bold and 'bold' in self.colors: formatted = f"{self.colors['bold']}{formatted}"
             if color and color in self.colors: formatted = f"{self.colors[color]}{formatted}"
             if (bold or color) and 'reset' in self.colors: formatted = f"{formatted}{self.colors['reset']}"
         print(formatted)
+
+    # *** ADDED Missing input method ***
+    def input(self, prompt: str, color: Optional[str] = None, bold: bool = False) -> str:
+        """Gets input with a formatted prompt."""
+        formatted = prompt
+        if self.enabled:
+            if bold and 'bold' in self.colors:
+                formatted = f"{self.colors['bold']}{formatted}"
+            if color and color in self.colors:
+                formatted = f"{self.colors[color]}{formatted}"
+            if (bold or color) and 'reset' in self.colors:
+                formatted = f"{formatted}{self.colors['reset']}"
+        # Flush stdout ensures prompt appears before input is read
+        sys.stdout.flush()
+        return input(formatted)
+    # *** End of addition ***
 
 class ProgressTracker:
     """Tracks and displays installation progress."""
@@ -182,7 +196,7 @@ class PostInstallSetup:
 
     def _download_file(self, url: str, destination: str, show_progress: bool = True) -> bool:
         """Downloads a file from a URL with improved progress."""
-        # *** CORRECTED Indentation in except blocks ***
+        # (Same as previous corrected version)
         dest_path = Path(destination)
         try:
             self.color.print(f"Downloading {url}", 'blue')
@@ -217,22 +231,15 @@ class PostInstallSetup:
         except urllib.error.URLError as e:
              self.color.print(f"Error downloading file (URL Error: {e.reason}): {url}", 'red')
              if dest_path.exists():
-                 # Indent this block
-                 try:
-                     dest_path.unlink()
-                 except OSError:
-                     pass # Ignore errors during cleanup
+                 try: dest_path.unlink()
+                 except OSError: pass
              return False
         except Exception as e:
             self.color.print(f"Error downloading file {url}: {e}", 'red')
             if dest_path.exists():
-                # Indent this block too
-                try:
-                    dest_path.unlink()
-                except OSError:
-                    pass # Ignore errors during cleanup
+                try: dest_path.unlink()
+                except OSError: pass
             return False
-        # *** End of Correction ***
 
     def _detect_hardware(self) -> None:
         """Detects CPU, Memory, and GPU hardware using installed libraries."""
@@ -444,7 +451,6 @@ class PostInstallSetup:
         except Exception as e:
             self.color.print(f"Error setting up configuration file: {e}", 'red')
             return False
-        # *** End of modification ***
 
     def _download_whisper_model(self)->bool:
         """Downloads the Whisper base.en model using huggingface_hub directly."""
@@ -515,7 +521,15 @@ class PostInstallSetup:
                 if asset['type'] == 'file': hf_hub_download(repo_id=repo_id, repo_type=repo_type, filename=filename, local_dir=str(model_dir), local_dir_use_symlinks=False, resume_download=True); download_success = True
                 elif asset['type'] == 'dir': snapshot_download(repo_id=repo_id, repo_type=repo_type, local_dir=str(asset_path), local_dir_use_symlinks=False, resume_download=True); download_success = True
                 else: self.color.print(f"Unknown asset type '{asset['type']}'", 'red'); all_successful = False if not is_optional else all_successful; continue
-            except Exception as e: self.color.print(f"Download failed for {asset_name}: {e!r}", "red"); all_successful = False if not is_optional else all_successful; continue
+            except Exception as e:
+                self.color.print(f"Download failed for {asset_name}: {e!r}", "red")
+                # Add more specific check for auth errors
+                if '401' in str(e) or '404' in str(e) or 'Repository Not Found' in str(e) or 'Entry Not Found' in str(e):
+                     self.color.print(f"  -> This might be due to an invalid repo/file path OR missing authentication.", "yellow")
+                     self.color.print(f"     Check URL/Repo: https://huggingface.co/{repo_id}/tree/main", "blue")
+                     self.color.print(f"     Consider running 'huggingface-cli login' if needed.", "blue")
+                all_successful = False if not is_optional else all_successful
+                continue
             if download_success:
                 if asset['type'] == 'file':
                     try:
@@ -537,7 +551,9 @@ class PostInstallSetup:
         if self.skip_models: self.color.print('Skipping Mistral model download (--skip-models)', 'yellow'); return True
         mistral_dir = self.base_dir / 'maggie/models/llm/mistral-7b-instruct-v0.3-GPTQ-4bit'; repo_url = 'https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.3-GPTQ'
         if mistral_dir.exists() and any(mistral_dir.iterdir()):
-             self.color.print(f"Mistral dir exists: {mistral_dir}", 'yellow'); response = self.color.input("  Download again (y) or keep existing (n)? [n]: ", color='magenta')
+             self.color.print(f"Mistral dir exists: {mistral_dir}", 'yellow')
+             # *** Use self.color.input (fixed) ***
+             response = self.color.input("  Download again (y) or keep existing (n)? [n]: ", color='magenta')
              if response.lower() != 'y': self.color.print("Keeping existing model files.", 'green'); return True
              else: self.color.print("Removing existing dir...", 'yellow'); shutil.rmtree(mistral_dir, ignore_errors=True)
         mistral_dir.parent.mkdir(parents=True, exist_ok=True)
