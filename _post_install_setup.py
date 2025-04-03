@@ -64,7 +64,6 @@ else:
 
 
 # --- Helper Classes (ColorOutput, ProgressTracker) ---
-# (Copied from install_dev.py for self-contained execution)
 class ColorOutput:
     """Handles colored terminal output."""
     def __init__(self, force_enable: bool = False):
@@ -80,6 +79,7 @@ class ColorOutput:
 
     def _supports_color(self) -> bool:
         """Checks if the terminal supports color."""
+        # (Code remains the same)
         if platform.system() == 'Windows':
             try:
                 import ctypes
@@ -100,6 +100,7 @@ class ColorOutput:
 
     def print(self, message: str, color: Optional[str] = None, bold: bool = False):
         """Prints a message with optional color and bold formatting."""
+        # (Code remains the same)
         formatted = message
         if self.enabled:
             if bold and 'bold' in self.colors: formatted = f"{self.colors['bold']}{formatted}"
@@ -109,20 +110,13 @@ class ColorOutput:
 
 class ProgressTracker:
     """Tracks and displays installation progress."""
+    # (Code remains the same)
     def __init__(self, color: ColorOutput, total_steps: int = 10, initial_step: int = 0):
-        self.color = color
-        self.total_steps = total_steps
-        self.current_step = initial_step # Allow starting from a later step
-        self.start_time = time.time()
-
+        self.color = color; self.total_steps = total_steps; self.current_step = initial_step; self.start_time = time.time()
     def start_step(self, step_name: str):
-        """Starts a new installation step."""
-        self.current_step += 1
-        elapsed = time.time() - self.start_time
+        self.current_step += 1; elapsed = time.time() - self.start_time
         self.color.print(f"\n[{self.current_step}/{self.total_steps}] {step_name} (Elapsed: {elapsed:.1f}s)", color='cyan', bold=True)
-
     def complete_step(self, success: bool = True, message: Optional[str] = None):
-        """Marks a step as complete or failed."""
         if success: status = '✓ Complete'; color = 'green'
         else: status = '✗ Failed'; color = 'red'
         msg = f"  {status}"
@@ -188,7 +182,7 @@ class PostInstallSetup:
 
     def _download_file(self, url: str, destination: str, show_progress: bool = True) -> bool:
         """Downloads a file from a URL with improved progress."""
-        # (Same as in bootstrap script)
+        # *** CORRECTED Indentation in except block ***
         dest_path = Path(destination)
         try:
             self.color.print(f"Downloading {url}", 'blue')
@@ -222,23 +216,37 @@ class PostInstallSetup:
             self.color.print(f"Download completed: {dest_path}", 'green'); return True
         except urllib.error.URLError as e:
              self.color.print(f"Error downloading file (URL Error: {e.reason}): {url}", 'red')
-             if dest_path.exists(): try: dest_path.unlink() except OSError: pass
+             if dest_path.exists():
+                 # Indent this block
+                 try:
+                     dest_path.unlink()
+                 except OSError:
+                     pass # Ignore errors during cleanup
              return False
         except Exception as e:
             self.color.print(f"Error downloading file {url}: {e}", 'red')
-            if dest_path.exists(): try: dest_path.unlink() except OSError: pass
+            if dest_path.exists():
+                # Indent this block too for consistency
+                try:
+                    dest_path.unlink()
+                except OSError:
+                    pass # Ignore errors during cleanup
             return False
+        # *** End of Correction ***
 
     def _detect_hardware(self) -> None:
         """Detects CPU, Memory, and GPU hardware using installed libraries."""
+        # (Code remains the same)
         self.color.print('Detecting Hardware Configuration...', 'cyan', bold=True)
         self.hardware_info['cpu'] = self._detect_cpu()
         self.hardware_info['memory'] = self._detect_memory()
         self.hardware_info['gpu'] = self._detect_gpu() if not self.cpu_only else {'available': False, 'cuda_available': False}
         self._print_hardware_summary()
 
+
     def _detect_cpu(self)->Dict[str,Any]:
         """Detects CPU information."""
+        # (Code remains the same)
         cpu_info = {'is_ryzen_9_5900x': False, 'model':'Unknown','cores':0,'threads':0}
         try: cpu_info['model'] = platform.processor() or 'Unknown'
         except Exception: pass
@@ -270,6 +278,7 @@ class PostInstallSetup:
 
     def _detect_memory(self)->Dict[str,Any]:
         """Detects memory information."""
+        # (Code remains the same)
         memory_info={'total_gb':0,'available_gb':0,'is_32gb':False}
         if not psutil: # Check if import succeeded at top
              self.color.print("psutil library not available. Cannot determine RAM details.", "yellow")
@@ -285,6 +294,7 @@ class PostInstallSetup:
 
     def _detect_gpu(self)->Dict[str,Any]:
         """Detects GPU information using PyTorch."""
+        # (Code remains the same)
         gpu_info = {'available': False, 'is_rtx_3080': False, 'model': 'Unknown','vram_gb': 0, 'cuda_available': False, 'cuda_version': '', 'cudnn_available': False, 'cudnn_version': ''}
         if self.cpu_only: return gpu_info
 
@@ -324,7 +334,7 @@ class PostInstallSetup:
 
     def _print_hardware_summary(self):
         """Prints hardware summary previously gathered."""
-        # *** MODIFIED: Check cuda_available before printing details ***
+        # (Code remains the same as previous version)
         self.color.print('Hardware Configuration Summary:', 'cyan', bold=True)
         cpu_info = self.hardware_info['cpu']; mem_info = self.hardware_info['memory']; gpu_info = self.hardware_info['gpu']
         self.color.print(f"  CPU: {cpu_info.get('model', 'Unknown')} ({cpu_info.get('cores', 'N/A')}c / {cpu_info.get('threads', 'N/A')}t)", 'green' if cpu_info.get('is_ryzen_9_5900x') else 'yellow')
@@ -338,11 +348,10 @@ class PostInstallSetup:
              self.color.print(f"  GPU: {gpu_info.get('model', 'Unknown')} (Detected, but PyTorch cannot use CUDA)", 'yellow')
         else: # No GPU detected at all
              self.color.print('  GPU: No CUDA-capable GPU detected', 'red')
-        # *** End of modification ***
 
     def _setup_config(self)->bool:
         """Creates or updates the config.yaml based on hardware detection."""
-        # *** Uses direct import/call ***
+        # (Code remains the same)
         config_path = self.base_dir / 'config.yaml'; example_path = self.base_dir / 'config.yaml.example'
         if not example_path.exists(): example_path = self.base_dir / 'config.yaml.txt'
         if not example_path.exists(): example_path = self.base_dir / 'config-yaml-example.txt'
@@ -439,10 +448,9 @@ class PostInstallSetup:
 
     def _download_whisper_model(self)->bool:
         """Downloads the Whisper base.en model using huggingface_hub directly."""
-        # *** Uses direct import/call ***
+        # (Code remains the same)
         if self.skip_models: self.color.print('Skipping Whisper model download (--skip-models)', 'yellow'); return True
-        if not snapshot_download or not hf_hub_download: # Check if import succeeded at top
-            self.color.print("ERROR: huggingface-hub not available.", "red"); return False
+        if not snapshot_download or not hf_hub_download: self.color.print("ERROR: huggingface-hub not available.", "red"); return False
 
         model_dir = self.base_dir / 'maggie/models/stt/whisper-base.en'
         essential_files = ['model.bin', 'config.json', 'tokenizer.json', 'vocab.json']
@@ -473,10 +481,9 @@ class PostInstallSetup:
 
     def _download_kokoro_onnx_models(self)->bool:
         """Downloads the necessary ONNX model files for kokoro-onnx."""
-        # *** Uses direct import/call ***
+        # (Code remains the same)
         if self.skip_models: self.color.print('Skipping kokoro-onnx model download (--skip-models)', 'yellow'); return True
-        if not snapshot_download or not hf_hub_download: # Check if import succeeded at top
-            self.color.print("ERROR: huggingface-hub not available.", "red"); return False
+        if not snapshot_download or not hf_hub_download: self.color.print("ERROR: huggingface-hub not available.", "red"); return False
 
         self.color.print("Downloading Kokoro ONNX models...", "cyan")
         model_dir = self.base_dir / 'maggie/models/tts'; model_dir.mkdir(parents=True, exist_ok=True)
@@ -655,6 +662,12 @@ def post_install_main() -> int:
     )
 
     try:
+        # Check if essential libraries were imported successfully at the top
+        if not yaml or not docx:
+             setup_handler.color.print("Critical Error: Essential libraries (PyYAML or python-docx) missing.", "red", bold=True)
+             return 1
+        # huggingface_hub check happens within download methods
+
         success = setup_handler.run_all_steps()
         return 0 if success else 1
     except KeyboardInterrupt:
