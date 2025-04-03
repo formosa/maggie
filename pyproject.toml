@@ -9,11 +9,7 @@ license = "MIT"
 readme = "README.md"
 packages = [{include = "maggie"}] # Assumes your main package code is in a 'maggie' directory
 
-# Specify Python 3.10 compatibility
-# ~3.10 means >=3.10.0, <3.11
-# Alternatively, use ">=3.10,<3.11"
-dependencies = { python = "~3.10" }
-
+# Classifiers, URLs, keywords remain under [tool.poetry]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: End Users/Desktop",
@@ -22,8 +18,7 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
-
-homepage = "https://github.com/formosa/maggie" # Add project URLs if available
+homepage = "https://github.com/formosa/maggie"
 repository = "https://github.com/formosa/maggie"
 documentation = "https://github.com/formosa/maggie" # Example URL
 keywords = ["ai", "assistant", "llm", "tts", "stt"]
@@ -35,15 +30,17 @@ url = "https://download.pytorch.org/whl/cu118"
 priority = "explicit" # Ensure this source is used for specified packages
 
 
+# --- Main Dependencies Section (ONLY ONE of these headers) ---
 [tool.poetry.dependencies]
+# --- Python Version ---
+python = "~3.10" # Specify Python 3.10 compatibility here
+
 # --- Pinned Dependencies (Using specific source) ---
 torch = {version = "2.1.2", source = "pytorch_cu118"}
 torchvision = {version = "0.16.2", source = "pytorch_cu118"}
 torchaudio = {version = "0.16.2", source = "pytorch_cu118"}
 
 # --- Core Dependencies (Let Poetry Resolve) ---
-# Using caret (^) allows compatible updates within the major version
-# Using asterisk (*) allows any version (use with caution)
 PyYAML = "^6.0"
 loguru = "^0.7"
 numpy = "*" # Let torch/others constrain this
@@ -55,17 +52,13 @@ psutil = "^5.9"
 pvporcupine = "^3.0" # Version from original requirements
 SpeechRecognition = "^3.10"
 PyAudio = "*" # May require system libraries (portaudio) and build tools
-# Note: faster-whisper 0.9.0 had tokenizer<0.15 conflict.
-# Using >=0.10.0 should resolve this, let Poetry pick latest compatible.
-faster-whisper = ">=0.10.0"
+faster-whisper = ">=0.10.0" # Avoids tokenizer<0.15 conflict
 sounddevice = "^0.4.6" # Version from original requirements
 
 # --- TTS Dependencies ---
-# Install kokoro directly from GitHub (main branch)
 kokoro = {git = "https://github.com/hexgrad/kokoro.git"}
-# kokoro-onnx had conflicts, let Poetry try to resolve or omit if causing issues
-kokoro-onnx = "*" # Or specify a known compatible version like "^0.4.7" if conflicts persist
-huggingface-hub = ">=0.15.1" # Version from original requirements comment
+kokoro-onnx = "*" # Let Poetry try to resolve
+huggingface-hub = ">=0.15.1"
 soundfile = ">=0.12.1"
 librosa = ">=0.10.0"
 phonemizer = ">=3.2.1"
@@ -76,8 +69,8 @@ optimum = "^1.17"
 accelerate = "^0.27"
 safetensors = ">=0.4.0"
 sentencepiece = ">=0.1.99"
-protobuf = "*" # Usually a dependency of others
-ninja = ">=1.11.1" # Often needed for building extensions
+protobuf = "*"
+ninja = ">=1.11.1"
 
 # --- UI and Document Processing ---
 PySide6 = "^6.5" # Based on original requirements
@@ -86,14 +79,12 @@ transitions = "^0.9.0"
 mammoth = "^1.7.0"
 
 # --- Optional GPU Dependencies (defined in extras) ---
-# Mark as optional here if they are *only* needed for the 'gpu' extra
-onnxruntime-gpu = { version = "*", optional = true } # Let poetry resolve, check kokoro-onnx compatibility
-auto-gptq = { version = "^0.7.1", optional = true } # Based on original requirements
+onnxruntime-gpu = { version = "*", optional = true }
+auto-gptq = { version = "^0.7.1", optional = true }
 
 
 # --- Define Optional Dependency Groups ---
 [tool.poetry.extras]
-# Dependencies needed only for GPU acceleration
 gpu = ["onnxruntime-gpu", "auto-gptq"]
 
 
@@ -103,7 +94,7 @@ pytest = ">=7.0.0"
 black = ">=23.0.0"
 isort = ">=5.0.0"
 flake8 = ">=6.0.0"
-pipdeptree = "*" # Useful for debugging dependencies
+pipdeptree = "*"
 
 
 # --- Build System Definition (Required for Poetry) ---
@@ -112,7 +103,7 @@ requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
 
 
-# --- Tool Configurations (Optional, e.g., for linters/formatters) ---
+# --- Tool Configurations (Optional) ---
 [tool.black]
 line-length = 100
 target-version = ["py310"]
@@ -123,4 +114,4 @@ line_length = 100
 
 [tool.flake8]
 max-line-length = 100
-exclude = [".git", "__pycache__", "build", "dist", ".venv"] # Add .venv
+exclude = [".git", "__pycache__", "build", "dist", ".venv"]
