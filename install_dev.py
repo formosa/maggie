@@ -9,6 +9,7 @@ import sys
 import time
 import urllib.request
 import zipfile
+import tempfile # Added for temporary script files
 from pathlib import Path
 from typing import Dict, Any, List, Tuple, Optional, Union, Callable
 from collections.abc import MutableMapping # Use abc for compatibility
@@ -253,7 +254,8 @@ class MaggieInstaller:
         self.hardware_info['cpu'] = self._detect_cpu()
         self.hardware_info['memory'] = self._detect_memory()
         self.hardware_info['gpu'] = self._detect_gpu() if not self.cpu_only else {'available': False, 'cuda_available': False}
-        self._print_hardware_summary()
+        self._print_hardware_summary() # Print summary after all detection is done
+
 
     def _detect_cpu(self)->Dict[str,Any]:
         """Detects CPU information."""
@@ -266,6 +268,7 @@ class MaggieInstaller:
              cpu_info['cores']=psutil.cpu_count(logical=False) or 0
              cpu_info['threads']=psutil.cpu_count(logical=True) or 0
         except ImportError:
+             if self.verbose: self.color.print("psutil not found or import failed, using os.cpu_count().", "yellow")
              cpu_info['threads'] = os.cpu_count() or 0
              cpu_info['cores'] = cpu_info['threads'] // 2 if cpu_info['threads'] > 1 else cpu_info['threads']
         except Exception as e:
@@ -297,14 +300,15 @@ class MaggieInstaller:
             memory_info['available_gb']=mem.available / (1024**3)
             memory_info['is_32gb'] = memory_info['total_gb'] >= 30.0
         except ImportError:
-             if self.verbose: self.color.print("psutil not installed, cannot determine exact RAM.", "yellow")
+             self.color.print("Error: psutil library not found. Cannot determine RAM details.", "red")
+             self.color.print("       Please ensure 'psutil' is listed in pyproject.toml dependencies.", "yellow")
         except Exception as e:
              if self.verbose: self.color.print(f"Memory detection error: {e}", "yellow")
         return memory_info
 
     def _detect_gpu(self)->Dict[str,Any]:
         """Detects GPU information using PyTorch (assumes installed via Poetry)."""
-        # (Code remains the same as previous version, except for the correction below)
+        # (Code remains the same as previous corrected version)
         gpu_info = {'available': False, 'is_rtx_3080': False, 'model': 'Unknown','vram_gb': 0, 'cuda_available': False, 'cuda_version': '', 'cudnn_available': False, 'cudnn_version': ''}
         if self.cpu_only: return gpu_info
         check_script = """
@@ -319,10 +323,10 @@ try:
             props = torch.cuda.get_device_properties(0)
             print(f"Device_Name: {props.name}")
             print(f"VRAM_GB: {props.total_memory / (1024**3):.2f}")
-            print(f"CUDA_Version: {torch.version.cuda}")
+            print(f"CUDA_Version: {torch.version.cuda}") # CUDA version PyTorch built against
             cudnn_available = torch.backends.cudnn.is_available()
             print(f"cuDNN_Available: {cudnn_available}")
-            if cudnn_available: print(f"cuDNN_Version: {torch.backends.cudnn.version()}")
+            if cudnn_available: print(f"cuDNN_Version: {torch.backends.cudnn.version()}") # cuDNN version PyTorch built against
 except Exception as e: print(f"GPU_Check_Error: {e!r}", file=sys.stderr)
 """
         returncode, stdout, stderr = self._run_command(['poetry', 'run', 'python', '-c', check_script], check=False, capture_output=True)
@@ -346,13 +350,15 @@ except Exception as e: print(f"GPU_Check_Error: {e!r}", file=sys.stderr)
                 elif key == 'CUDA_Version': gpu_info['cuda_version'] = value
                 elif key == 'cuDNN_Available': gpu_info['cudnn_available'] = (value == 'True')
                 elif key == 'cuDNN_Version': gpu_info['cudnn_version'] = str(value)
-            except ValueError: # Catch potential float conversion error specifically
+            except ValueError:
                  if self.verbose: self.color.print(f"Could not parse GPU info line (ValueError): {line}", "yellow")
             except Exception as e:
-                # *** CORRECTED LINE ***
-                if self.verbose: # Indent this block
+                if self.verbose:
                     self.color.print(f"Error parsing GPU info: {e}", "yellow")
-        if not gpu_info['cuda_available']: self.color.print('No CUDA-capable GPU detected by PyTorch.', 'yellow')
+        if not gpu_info['cuda_available']:
+             self.color.print('No CUDA-capable GPU detected by PyTorch.', 'yellow')
+             self.color.print('Ensure NVIDIA drivers, CUDA Toolkit 11.8, and cuDNN 8.9.7 are installed and compatible.', 'yellow')
+
         return gpu_info
 
     def _check_tools(self) -> Dict[str, bool]:
@@ -369,25 +375,34 @@ except Exception as e: print(f"GPU_Check_Error: {e!r}", file=sys.stderr)
             rc_pip_install, out_pip, err_pip = self._run_command(pip_cmd, check=False, capture_output=True)
             if rc_pip_install == 0:
                 self.color.print('  Poetry installed via pip successfully.', 'green')
-                returncode_poetry_after, stdout_poetry_after, _ = self._run_command(['poetry', '--version'], check=False)
-                if returncode_poetry_after == 0: tools_status['poetry'] = True; self.has_poetry = True; self.color.print(f"  Poetry found: {stdout_poetry_after.strip()} ✓", 'green'); self.color.print('  IMPORTANT: May need terminal restart or PATH update.', 'magenta')
-                else: self.color.print('  Poetry installed via pip, but command still fails.', 'red'); self.color.print('  Check PATH.', 'red'); return tools_status
+                check_cmds = [['poetry', '--version'], [sys.executable, '-m', 'poetry', '--version']]
+                verified_after_install = False
+                for cmd in check_cmds:
+                    returncode_poetry_after, stdout_poetry_after, _ = self._run_command(cmd, check=False)
+                    if returncode_poetry_after == 0: tools_status['poetry'] = True; self.has_poetry = True; self.color.print(f"  Poetry verified using `{' '.join(cmd)}`: {stdout_poetry_after.strip()} ✓", 'green'); self.color.print('  IMPORTANT: May need terminal restart or PATH update.', 'magenta'); verified_after_install = True; break
+                if not verified_after_install: self.color.print('  Poetry installed via pip, but command still fails.', 'red'); self.color.print('  Check PATH.', 'red'); return tools_status
             else: self.color.print('  Failed to install Poetry using pip.', 'red', bold=True); self.color.print(f"  Pip Error: {err_pip}", 'red'); self.color.print('  Install Poetry manually.', 'yellow'); return tools_status
+        if self.has_poetry:
+            self.color.print("  Configuring Poetry to create virtualenv in project (.venv)...", "blue")
+            config_cmd = ['poetry', 'config', 'virtualenvs.in-project', 'true', '--local']
+            rc_config, out_config, err_config = self._run_command(config_cmd, check=False, capture_output=True)
+            if rc_config == 0: self.color.print("  Poetry configured for in-project venv successfully.", "green")
+            else: self.color.print("  Warning: Failed to set Poetry's virtualenvs.in-project config locally.", "yellow"); self.color.print(f"    Error: {err_config}", "yellow")
         returncode_git, stdout_git, _ = self._run_command(['git', '--version'], check=False)
         if returncode_git == 0: tools_status['git'] = True; self.has_git = True; self.color.print(f"  Git found: {stdout_git.strip()} ✓", 'green')
         else: self.color.print('  Git not found - Required for some models.', 'yellow')
         compiler_found = False
         if self.platform_system == 'Windows':
             rc_where, _, _ = self._run_command(['where', 'cl.exe'], check=False, capture_output=False)
-            if rc_where == 0: compiler_found = True; self.color.print('  Visual C++ compiler (cl.exe) found ✓', 'green')
-            else: self.color.print('  Visual C++ compiler (cl.exe) not found.', 'yellow')
+            if rc_where == 0: compiler_found = True; self.color.print('  Visual C++ compiler (cl.exe) found in PATH ✓', 'green')
+            else: self.color.print('  Visual C++ compiler (cl.exe) not found in PATH.', 'yellow')
         else:
             rc_gpp, _, _ = self._run_command(['which', 'g++'], check=False, capture_output=False)
             rc_gcc, _, _ = self._run_command(['which', 'gcc'], check=False, capture_output=False)
             if rc_gpp == 0 or rc_gcc == 0: compiler_found = True; compiler_name = "g++" if rc_gpp == 0 else "gcc"; self.color.print(f'  C++ compiler ({compiler_name}) found ✓', 'green')
             else: self.color.print('  C++ compiler (g++/gcc) not found.', 'yellow')
         if compiler_found: tools_status['cpp_compiler'] = True; self.has_cpp_compiler = True
-        else: self.color.print('  Required for building some packages from source.', 'yellow')
+        else: self.color.print('  Required for building some packages from source if wheels are unavailable.', 'yellow')
         return tools_status
 
     def _create_directories(self) -> bool:
@@ -432,8 +447,6 @@ license = "MIT"
 readme = "README.md"
 packages = [{include = "maggie"}] # Assumes package code is in 'maggie' dir
 
-dependencies = { python = "~3.10" } # Requires Python 3.10.x
-
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: End Users/Desktop",
@@ -451,10 +464,12 @@ priority = "explicit"
 
 
 [tool.poetry.dependencies]
+python = "~3.10" # Requires Python 3.10.x
+
 # --- Pinned Dependencies (Using specific source) ---
 torch = {version = "2.1.2", source = "pytorch_cu118"}
 torchvision = {version = "0.16.2", source = "pytorch_cu118"}
-torchaudio = {version = "0.16.2", source = "pytorch_cu118"}
+torchaudio = {version = "2.1.2", source = "pytorch_cu118"} # Corrected version
 
 # --- Core Dependencies (Let Poetry Resolve) ---
 PyYAML = "^6.0"
@@ -543,7 +558,7 @@ build-backend = "poetry.core.masonry.api"
                 with open(pyproject_path, 'r', encoding='utf-8') as f: toml_content = f.read()
                 if '[tool.poetry.extras]' in toml_content and 'gpu = [' in toml_content: has_gpu_extra = True
                 if has_gpu_extra: self.color.print("Including [gpu] extras.", "blue"); poetry_cmd.extend(['--extras', 'gpu'])
-                else: self.color.print("No [gpu] extra found, installing base dependencies.", "yellow")
+                else: self.color.print("No [gpu] extra found/defined in pyproject.toml, installing base dependencies.", "yellow")
             except Exception as e: self.color.print(f"Could not check GPU extras: {e}", "yellow"); self.color.print("Attempting base install.", "yellow")
         if self.verbose: poetry_cmd.append('-vvv')
         self.color.print(f"Running: {' '.join(poetry_cmd)}", "blue")
@@ -554,8 +569,30 @@ build-backend = "poetry.core.masonry.api"
         else: self.color.print("Poetry install successful ✓", 'green'); return True
 
     # --- Model Downloading Methods (_download_whisper_model, etc.) ---
-    # (Code remains the same as previous version)
+
+    def _run_download_script(self, script_content: str, asset_name: str) -> Tuple[int, str, str]:
+        """Helper to run python download script using a temporary file."""
+        # (Code remains the same as previous version)
+        tmp_script = None
+        try:
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False, encoding='utf-8') as tmp_script_file:
+                tmp_script_file.write(script_content)
+                tmp_script = tmp_script_file.name
+            if self.verbose: self.color.print(f"Executing temporary download script for {asset_name}: {tmp_script}", "cyan")
+            returncode, stdout, stderr = self._run_command(['poetry', 'run', 'python', tmp_script], check=False, capture_output=True)
+            return returncode, stdout, stderr
+        except Exception as e:
+            self.color.print(f"Error creating/running temp script for {asset_name}: {e}", "red")
+            return -1, "", str(e)
+        finally:
+            if tmp_script and os.path.exists(tmp_script):
+                try: os.unlink(tmp_script); self.color.print(f"Removed temporary script: {tmp_script}", "cyan")
+                except OSError as e: self.color.print(f"Warning: Could not remove temporary script {tmp_script}: {e}", "yellow")
+
+
     def _download_whisper_model(self)->bool:
+        """Downloads the Whisper base.en model using huggingface_hub via Poetry."""
+        # (Code remains the same as previous version)
         if self.skip_models: self.color.print('Skipping Whisper model download (--skip-models)', 'yellow'); return True
         model_dir = self.base_dir / 'maggie/models/stt/whisper-base.en'
         essential_files = ['model.bin', 'config.json', 'tokenizer.json', 'vocab.json']
@@ -589,7 +626,7 @@ except Exception as e_snap:
     else: print("Failed to download some essential model files via fallback.", file=sys.stderr); sys.exit(1)
 '''
         self.color.print(f'Downloading Whisper model ({repo_id}) from Hugging Face...', 'cyan')
-        returncode, stdout, stderr = self._run_command(['poetry', 'run', 'python', '-c', download_script], check=False, capture_output=True)
+        returncode, stdout, stderr = self._run_download_script(download_script, "Whisper Model")
         if self.verbose and stdout: self.color.print(f"Whisper download stdout:\n{stdout}", "cyan")
         if stderr: self.color.print(f"Whisper download stderr:\n{stderr}", "yellow" if returncode == 0 else "red")
         if returncode != 0: self.color.print("Error downloading Whisper model.", 'red'); return False
@@ -600,30 +637,11 @@ except Exception as e_snap:
             else: self.color.print('Whisper model download appears incomplete.', 'yellow'); self.color.print(f'Missing essential files: {", ".join(missing_files)}', 'yellow'); return False
         except Exception as e: self.color.print(f"Error verifying downloaded Whisper model: {e}", 'red'); return False
 
-    def _download_af_heart_model(self)->bool:
-        if self.skip_models: self.color.print('Skipping af_heart model download (--skip-models)', 'yellow'); return True
-        model_dir = self.base_dir / 'maggie/models/tts'; model_path = model_dir / 'af_heart.pt'; MIN_SIZE = 40 * 1024 * 1024
-        if model_path.exists():
-            try:
-                file_size = model_path.stat().st_size
-                if file_size >= MIN_SIZE: self.color.print(f"af_heart voice model verified ({file_size / (1024 * 1024):.2f} MB) ✓", 'green'); return True
-                else: self.color.print(f"Existing af_heart model incorrect size: {file_size / (1024 * 1024):.2f} MB. Re-downloading...", 'yellow')
-            except Exception as e: self.color.print(f"Error checking existing af_heart model: {e}. Re-downloading...", 'yellow')
-        model_dir.mkdir(parents=True, exist_ok=True)
-        model_urls = ['https://huggingface.co/hexgrad/kokoro-voices/resolve/main/af_heart.pt', 'https://github.com/hexgrad/kokoro/releases/download/v0.1/af_heart.pt']
-        download_successful = False
-        for url in model_urls:
-            self.color.print(f"Attempting download from: {url}", 'cyan')
-            if self._download_file(url, str(model_path)):
-                try:
-                    file_size = model_path.stat().st_size
-                    if file_size >= MIN_SIZE: self.color.print(f"af_heart model download successful ({file_size / (1024 * 1024):.2f} MB) ✓", 'green'); download_successful = True; break
-                    else: self.color.print(f"Downloaded file incorrect size: {file_size / (1024 * 1024):.2f} MB", 'yellow'); model_path.unlink(missing_ok=True)
-                except Exception as e_verify: self.color.print(f"Error verifying downloaded af_heart model: {e_verify}", 'red'); model_path.unlink(missing_ok=True)
-        if not download_successful: self.color.print('Failed to download af_heart voice model.', 'red'); return False
-        return True
+    # *** REMOVED _download_af_heart_model METHOD ***
 
     def _download_kokoro_onnx_models(self)->bool:
+        """Downloads the necessary ONNX model files for kokoro-onnx."""
+        # (Code remains the same as previous version)
         if self.skip_models: self.color.print('Skipping kokoro-onnx model download (--skip-models)', 'yellow'); return True
         self.color.print("Downloading Kokoro ONNX models...", "cyan")
         model_dir = self.base_dir / 'maggie/models/tts'; model_dir.mkdir(parents=True, exist_ok=True)
@@ -650,10 +668,11 @@ except Exception as e_snap:
                 if is_ok: self.color.print(f"{asset_name} already exists ✓", 'green'); continue
             self.color.print(f"Downloading {asset_name} from {asset['repo']}...", 'cyan')
             repo_id = asset['repo']; repo_type = asset.get('repo_type', 'model'); filename = asset.get('subpath', asset_name)
-            if asset['type'] == 'file': dl_script = f'import sys; from huggingface_hub import hf_hub_download; try: hf_hub_download(repo_id="{repo_id}", repo_type="{repo_type}", filename="{filename}", local_dir=r"{str(model_dir)}", local_dir_use_symlinks=False, resume_download=True); sys.exit(0); except Exception as e: print(f"Download failed: {{e!r}}", file=sys.stderr); sys.exit(1)'
-            elif asset['type'] == 'dir': dl_script = f'import sys; from huggingface_hub import snapshot_download; try: snapshot_download(repo_id="{repo_id}", repo_type="{repo_type}", local_dir=r"{str(asset_path)}", local_dir_use_symlinks=False, resume_download=True); sys.exit(0); except Exception as e: print(f"Download failed: {{e!r}}", file=sys.stderr); sys.exit(1)'
+            dl_script = ""
+            if asset['type'] == 'file': dl_script = f'import sys; from huggingface_hub import hf_hub_download; try: hf_hub_download(repo_id="{repo_id}", repo_type="{repo_type}", filename="{filename}", local_dir=r"{str(model_dir).replace(os.sep, "/")}", local_dir_use_symlinks=False, resume_download=True); sys.exit(0); except Exception as e: print(f"Download failed: {{e!r}}", file=sys.stderr); sys.exit(1)'
+            elif asset['type'] == 'dir': dl_script = f'import sys; from huggingface_hub import snapshot_download; try: snapshot_download(repo_id="{repo_id}", repo_type="{repo_type}", local_dir=r"{str(asset_path).replace(os.sep, "/")}", local_dir_use_symlinks=False, resume_download=True); sys.exit(0); except Exception as e: print(f"Download failed: {{e!r}}", file=sys.stderr); sys.exit(1)'
             else: self.color.print(f"Unknown asset type '{asset['type']}'", 'red'); all_successful = False if not is_optional else all_successful; continue
-            rc_dl, out_dl, err_dl = self._run_command(['poetry', 'run', 'python', '-c', dl_script], check=False, capture_output=True)
+            rc_dl, out_dl, err_dl = self._run_download_script(dl_script, asset_name)
             if self.verbose and out_dl: self.color.print(f"{asset_name} download stdout:\n{out_dl}", "cyan")
             if err_dl: self.color.print(f"{asset_name} download stderr:\n{err_dl}", "yellow" if rc_dl == 0 else "red")
             if rc_dl == 0:
@@ -670,7 +689,10 @@ except Exception as e_snap:
         if all_successful: self.color.print('Kokoro ONNX models/data downloaded successfully ✓', 'green'); return True
         else: self.color.print('Some Kokoro ONNX models/data failed.', 'yellow'); return False
 
+
     def _download_mistral_model(self)->bool:
+        """Downloads the Mistral 7B Instruct GPTQ model using Git LFS."""
+        # (Code remains the same as previous version)
         if self.skip_models: self.color.print('Skipping Mistral model download (--skip-models)', 'yellow'); return True
         mistral_dir = self.base_dir / 'maggie/models/llm/mistral-7b-instruct-v0.3-GPTQ-4bit'; repo_url = 'https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.3-GPTQ'
         if mistral_dir.exists() and any(mistral_dir.iterdir()):
@@ -723,7 +745,7 @@ try:
 except ImportError: print("Error: python-docx not found.", file=sys.stderr); sys.exit(1)
 except Exception as e: print(f"Error creating template: {{e}}", file=sys.stderr); sys.exit(1)
 """
-        returncode, stdout, stderr = self._run_command(['poetry', 'run', 'python', '-c', create_script], check=False, capture_output=True)
+        returncode, stdout, stderr = self._run_download_script(create_script, "Recipe Template") # Use helper
         if self.verbose and stdout: self.color.print(f"Template stdout:\n{stdout}", "cyan")
         if stderr: self.color.print(f"Template stderr:\n{stderr}", "yellow" if returncode == 0 else "red")
         if returncode == 0: self.color.print('Recipe template created successfully ✓', 'green'); return True
@@ -824,7 +846,8 @@ try: os.remove(hardware_file)
 except Exception as e: print(f"Warning: Could not remove temp file: {{e}}", file=sys.stderr)
 sys.exit(0)
 """
-        returncode, stdout, stderr = self._run_command(['poetry', 'run', 'python', '-c', config_script], check=False, capture_output=True)
+        # Use helper to run the script
+        returncode, stdout, stderr = self._run_download_script(config_script, "Config Setup") # Use helper
         if self.verbose and stdout: self.color.print(f"Config script stdout:\n{stdout}", "cyan")
         if stderr: self.color.print(f"Config script stderr:\n{stderr}", "yellow" if returncode == 0 else "red")
         if returncode != 0: self.color.print('Error setting up configuration file.', 'red'); return False
@@ -838,7 +861,7 @@ sys.exit(0)
             self.progress.complete_step(False,'Incompatible Python version')
             return False
 
-        tools = self._check_tools() # This now attempts to install Poetry if missing
+        tools = self._check_tools() # This now attempts to install Poetry & set local config
         if not tools['poetry']:
             # _check_tools already printed error messages
             self.progress.complete_step(False, 'Poetry setup failed.')
@@ -850,7 +873,6 @@ sys.exit(0)
 
     def install(self)->bool:
         """Runs the complete installation process using Poetry."""
-        # (Code remains the same as previous version, calling the updated methods)
         self.color.print('\n=== Maggie AI Assistant Installation (using Poetry) ===', 'cyan', bold=True)
         self.color.print(f"Platform: {self.platform_system} ({platform.platform()})", 'cyan')
         self.color.print(f"Python: {platform.python_version()} (via Poetry environment)", 'cyan')
@@ -863,7 +885,7 @@ sys.exit(0)
         self.progress.complete_step(True)
         self.progress.start_step('Install dependencies & Detect Hardware')
         if not self._install_with_poetry(): self.progress.complete_step(False, 'Poetry dependency installation failed.'); return False
-        self._detect_hardware()
+        self._detect_hardware() # Detect hardware *after* install
         if not self.cpu_only and not self.hardware_info['gpu'].get('cuda_available'): self.color.print("  Warning: PyTorch installed, but CUDA unavailable.", 'yellow')
         self.progress.complete_step(True)
         self.progress.start_step('Setting up configuration file')
@@ -871,26 +893,34 @@ sys.exit(0)
         self.progress.complete_step(True)
         self.progress.start_step('Downloading models')
         models_ok = True
-        if not self._download_af_heart_model(): self.color.print('Warning: Failed TTS voice download.', 'yellow')
-        if not self._download_kokoro_onnx_models(): self.color.print('Warning: Failed kokoro-onnx download.', 'yellow')
-        if not self._download_whisper_model(): self.color.print('Warning: Failed Whisper download.', 'yellow')
-        if not self._download_mistral_model(): self.color.print('Warning: Failed Mistral download.', 'yellow')
-        self.progress.complete_step(models_ok)
+        # *** REMOVED CALL to _download_af_heart_model ***
+        if not self._download_kokoro_onnx_models():
+             self.color.print('Warning: Failed kokoro-onnx download.', 'yellow')
+             # models_ok = False # Decide if this should be fatal
+        if not self._download_whisper_model():
+             self.color.print('Warning: Failed Whisper download.', 'yellow')
+             # models_ok = False # Decide if this should be fatal
+        if not self._download_mistral_model():
+             self.color.print('Warning: Failed Mistral download.', 'yellow')
+             # models_ok = False # Decide if this should be fatal
+
+        self.progress.complete_step(models_ok) # Mark step based on overall success
         self.progress.start_step('Setting up templates & completing installation')
         template_ok = self._create_recipe_template()
         if not template_ok: self.color.print('Warning: Failed recipe template creation.', 'yellow')
-        self.progress.display_summary(True)
+        self.progress.display_summary(models_ok) # Display summary based on model download success
         self.color.print('\n--- Important Notes ---', 'cyan', bold=True)
         self.color.print('1. Dependencies installed via Poetry.', 'green')
         self.color.print(f"2. Non-Python Requirements: CUDA 11.8, cuDNN 8.9.7 (for GPU).", 'yellow')
         self.color.print(f"   (Detected CUDA: {self.hardware_info['gpu'].get('cuda_version', 'N/A')}, cuDNN: {self.hardware_info['gpu'].get('cudnn_version', 'N/A')})", 'yellow')
         self.color.print('3. Edit config.yaml for Picovoice Access Key.', 'yellow')
-        if not self.has_git: self.color.print('4. Git not installed - model updates affected.', 'yellow')
-        if not self.has_cpp_compiler: self.color.print('5. C++ Compiler not found - building packages may fail.', 'yellow')
+        self.color.print('4. Ensure Kokoro voices are available via the installed package.', 'yellow') # Added note
+        if not self.has_git: self.color.print('5. Git not installed - model updates affected.', 'yellow')
+        if not self.has_cpp_compiler: self.color.print('6. C++ Compiler not found - building packages may fail.', 'yellow')
         self.color.print('\n--- To start Maggie AI Assistant ---', 'cyan', bold=True)
         self.color.print('   Run: poetry run python main.py', 'green')
         self.progress.complete_step(True)
-        return True
+        return models_ok # Return overall success based on models
 
     def _print_hardware_summary(self):
         """Prints hardware summary previously gathered."""
