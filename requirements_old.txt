@@ -1,7 +1,5 @@
 # Maggie AI Assistant - Dependencies
 # REQUIRES PYTHON 3.10.x - Other versions are not supported
-# REQUIRES CUDA 11.8
-# REQUIRES cuDNN 8.9.7
 
 # ===== Core Dependencies =====
 PyYAML==6.0.1
@@ -12,11 +10,10 @@ requests==2.31.0
 psutil==5.9.6
 
 # STT
-pvporcupine==3.0.2
+pvporcupine==2.2.1
 SpeechRecognition==3.10.0
 PyAudio==0.2.14
 faster-whisper==0.9.0
-sounddevice==0.4.6 # For accessing microphone input on Windows
 
 # TTS
 kokoro==0.8.4  # TTS engine
@@ -27,14 +24,9 @@ librosa>=0.10.0
 phonemizer>=3.2.1
 
 # LLM
-transformers==4.38.2
-optimum==1.17.1
-auto-gptq==0.7.1  # Requires CUDA toolkit and potentially C++ build tools
-accelerate==0.27.2 # Helps with model loading and device mapping
-safetensors>=0.4.0
-sentencepiece>=0.1.99 # Often needed for tokenization
-protobuf # Often needed by sentencepiece or transformers
-ninja>=1.11.1 # For building AutoGPTQ CUDA kernels
+ctransformers>=0.2.27
+transformers>=4.27.4
+llama-cpp-python>=0.2.11
 
 # ===== UI and Document Processing =====
 PySide6==6.5.2
@@ -44,7 +36,5 @@ mammoth==1.7.0
 
 # ===== Hardware Acceleration =====
 # For CUDA 11.8 specific build:
-torch==2.1.2 --index-url https://download.pytorch.org/whl/cu118
-torchvision==0.16.2 --index-url https://download.pytorch.org/whl/cu118
-torchaudio==2.1.2 --index-url https://download.pytorch.org/whl/cu118
+torch==2.0.1+cu118 --extra-index-url https://download.pytorch.org/whl/cu118
 onnxruntime-gpu==1.15.1
