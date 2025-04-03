@@ -9,13 +9,14 @@ import sys
 import time
 import urllib.request
 import zipfile
-import tempfile # Added for temporary script files
+import tempfile
 from pathlib import Path
 from typing import Dict, Any, List, Tuple, Optional, Union, Callable
-from collections.abc import MutableMapping # Use abc for compatibility
+from collections.abc import MutableMapping
+
+# NOTE: huggingface-hub import moved into the methods that use it (_download_*)
 
 # --- Helper Classes (ColorOutput, ProgressTracker) ---
-# (ColorOutput and ProgressTracker classes remain the same as previous version)
 class ColorOutput:
     """Handles colored terminal output."""
     def __init__(self, force_enable: bool = False):
@@ -329,7 +330,9 @@ try:
             if cudnn_available: print(f"cuDNN_Version: {torch.backends.cudnn.version()}") # cuDNN version PyTorch built against
 except Exception as e: print(f"GPU_Check_Error: {e!r}", file=sys.stderr)
 """
+        # Use poetry run python -c "script" - safer than direct execution if env issues exist
         returncode, stdout, stderr = self._run_command(['poetry', 'run', 'python', '-c', check_script], check=False, capture_output=True)
+
         if returncode != 0 or "GPU_Check_Error" in stderr:
             if self.verbose: self.color.print('PyTorch check script failed.', 'yellow'); self.color.print(f"Error: {stderr}", "yellow")
             smi_path = "nvidia-smi"
@@ -570,79 +573,88 @@ build-backend = "poetry.core.masonry.api"
 
     # --- Model Downloading Methods (_download_whisper_model, etc.) ---
 
-    def _run_download_script(self, script_content: str, asset_name: str) -> Tuple[int, str, str]:
-        """Helper to run python download script using a temporary file."""
-        # (Code remains the same as previous version)
-        tmp_script = None
-        try:
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False, encoding='utf-8') as tmp_script_file:
-                tmp_script_file.write(script_content)
-                tmp_script = tmp_script_file.name
-            if self.verbose: self.color.print(f"Executing temporary download script for {asset_name}: {tmp_script}", "cyan")
-            returncode, stdout, stderr = self._run_command(['poetry', 'run', 'python', tmp_script], check=False, capture_output=True)
-            return returncode, stdout, stderr
-        except Exception as e:
-            self.color.print(f"Error creating/running temp script for {asset_name}: {e}", "red")
-            return -1, "", str(e)
-        finally:
-            if tmp_script and os.path.exists(tmp_script):
-                try: os.unlink(tmp_script); self.color.print(f"Removed temporary script: {tmp_script}", "cyan")
-                except OSError as e: self.color.print(f"Warning: Could not remove temporary script {tmp_script}: {e}", "yellow")
-
-
     def _download_whisper_model(self)->bool:
-        """Downloads the Whisper base.en model using huggingface_hub via Poetry."""
-        # (Code remains the same as previous version)
+        """Downloads the Whisper base.en model using huggingface_hub directly."""
         if self.skip_models: self.color.print('Skipping Whisper model download (--skip-models)', 'yellow'); return True
+
+        try:
+            # Import here, after poetry install should have run
+            from huggingface_hub import snapshot_download, hf_hub_download
+        except ImportError:
+            self.color.print("ERROR: huggingface-hub not available for Whisper download.", "red")
+            self.color.print("       Dependency installation might have failed.", "red")
+            return False
+
         model_dir = self.base_dir / 'maggie/models/stt/whisper-base.en'
         essential_files = ['model.bin', 'config.json', 'tokenizer.json', 'vocab.json']
         repo_id = "openai/whisper-base.en"
+
         if model_dir.exists():
             try:
                 files_in_dir = {f.name for f in model_dir.iterdir() if f.is_file()}
-                if all(essential_file in files_in_dir for essential_file in essential_files): self.color.print('Whisper base.en model is already available ✓', 'green'); return True
-                else: self.color.print('Whisper model directory exists but appears incomplete. Re-downloading...', 'yellow')
-            except Exception as e: self.color.print(f"Error checking existing Whisper model directory: {e}", 'yellow')
+                if all(essential_file in files_in_dir for essential_file in essential_files):
+                    self.color.print('Whisper base.en model is already available ✓', 'green')
+                    return True
+                else:
+                    self.color.print('Whisper model directory exists but appears incomplete. Re-downloading...', 'yellow')
+            except Exception as e:
+                self.color.print(f"Error checking existing Whisper model directory: {e}", 'yellow')
+
         model_dir.mkdir(parents=True, exist_ok=True)
-        download_script = f'''
-import os, sys
-from huggingface_hub import snapshot_download, HfApi, hf_hub_download
-model_dir_str = r"{str(model_dir).replace(os.sep, '/')}"
-repo_id = "{repo_id}"
-try:
-    print(f"Attempting to download model '{{repo_id}}' to '{{model_dir_str}}'")
-    snapshot_download(repo_id=repo_id, local_dir=model_dir_str, allow_patterns=["*.json", "*.bin", "*.txt", "preprocessor_config.json", "generation_config.json"], ignore_patterns=["*.safetensors", "*.h5", "*.ot", "flax*", "tf*"], local_dir_use_symlinks=False, resume_download=True)
-    print("Model downloaded successfully via snapshot_download.")
-    sys.exit(0)
-except Exception as e_snap:
-    print(f"Snapshot download failed: {{e_snap!r}}", file=sys.stderr)
-    print("Attempting to download essential files individually (fallback)...", file=sys.stderr)
-    essential_files_list = ['config.json', 'generation_config.json', 'model.bin', 'preprocessor_config.json', 'tokenizer.json', 'vocab.json']
-    all_downloaded = True
-    for filename in essential_files_list:
-        try: print(f"Downloading {{filename}}..."); hf_hub_download(repo_id=repo_id, filename=filename, local_dir=model_dir_str, resume_download=True)
-        except Exception as e_file: print(f"Failed to download {{filename}}: {{e_file!r}}", file=sys.stderr); all_downloaded = False
-    if all_downloaded: print("Essential files downloaded individually (fallback)."); sys.exit(0)
-    else: print("Failed to download some essential model files via fallback.", file=sys.stderr); sys.exit(1)
-'''
         self.color.print(f'Downloading Whisper model ({repo_id}) from Hugging Face...', 'cyan')
-        returncode, stdout, stderr = self._run_download_script(download_script, "Whisper Model")
-        if self.verbose and stdout: self.color.print(f"Whisper download stdout:\n{stdout}", "cyan")
-        if stderr: self.color.print(f"Whisper download stderr:\n{stderr}", "yellow" if returncode == 0 else "red")
-        if returncode != 0: self.color.print("Error downloading Whisper model.", 'red'); return False
+
+        try:
+            snapshot_download(
+                repo_id=repo_id, local_dir=str(model_dir),
+                allow_patterns=["*.json", "*.bin", "*.txt", "preprocessor_config.json", "generation_config.json"],
+                ignore_patterns=["*.safetensors", "*.h5", "*.ot", "flax*", "tf*"],
+                local_dir_use_symlinks=False, resume_download=True,
+            )
+            self.color.print("Snapshot download attempt complete.", "blue")
+        except Exception as e_snap:
+            self.color.print(f"Snapshot download failed: {e_snap!r}", "yellow")
+            self.color.print("Attempting to download essential files individually (fallback)...", "yellow")
+            all_downloaded = True
+            for filename in essential_files:
+                try:
+                    self.color.print(f"Downloading {filename}...", "blue")
+                    hf_hub_download(repo_id=repo_id, filename=filename, local_dir=str(model_dir), resume_download=True)
+                except Exception as e_file:
+                    self.color.print(f"Failed to download {filename}: {e_file!r}", "red")
+                    all_downloaded = False
+            if not all_downloaded:
+                 self.color.print("Failed to download some essential Whisper model files via fallback.", "red")
+                 return False
+
+        # Verify essential files exist after download attempt
         try:
             files_in_dir = {f.name for f in model_dir.iterdir() if f.is_file()}
             missing_files = [f for f in essential_files if f not in files_in_dir]
-            if not missing_files: self.color.print('Whisper base.en model downloaded and verified successfully ✓', 'green'); return True
-            else: self.color.print('Whisper model download appears incomplete.', 'yellow'); self.color.print(f'Missing essential files: {", ".join(missing_files)}', 'yellow'); return False
-        except Exception as e: self.color.print(f"Error verifying downloaded Whisper model: {e}", 'red'); return False
-
-    # *** REMOVED _download_af_heart_model METHOD ***
+            if not missing_files:
+                self.color.print('Whisper base.en model downloaded and verified successfully ✓', 'green')
+                return True
+            else:
+                self.color.print('Whisper model download appears incomplete.', 'yellow')
+                self.color.print(f'Missing essential files: {", ".join(missing_files)}', 'yellow')
+                # Fail if essential model.bin is missing
+                if 'model.bin' in missing_files: return False
+                return True # Allow continuing if only config/tokenizer missing? Maybe not.
+        except Exception as e:
+            self.color.print(f"Error verifying downloaded Whisper model: {e}", 'red')
+            return False
 
     def _download_kokoro_onnx_models(self)->bool:
         """Downloads the necessary ONNX model files for kokoro-onnx."""
-        # (Code remains the same as previous version)
         if self.skip_models: self.color.print('Skipping kokoro-onnx model download (--skip-models)', 'yellow'); return True
+
+        try:
+            # Import here, after poetry install should have run
+            from huggingface_hub import snapshot_download, hf_hub_download
+        except ImportError:
+            self.color.print("ERROR: huggingface-hub not available for Kokoro ONNX download.", "red")
+            self.color.print("       Dependency installation might have failed.", "red")
+            return False
+
         self.color.print("Downloading Kokoro ONNX models...", "cyan")
         model_dir = self.base_dir / 'maggie/models/tts'; model_dir.mkdir(parents=True, exist_ok=True)
         kokoro_onnx_repo = "onnx-community/Kokoro-82M-v1.0-ONNX"
@@ -666,16 +678,35 @@ except Exception as e_snap:
                         else: self.color.print(f"Existing {asset_name} incorrect size. Re-downloading...", 'yellow')
                     except Exception as e_check: self.color.print(f"Error checking {asset_name}: {e_check}. Re-downloading...", 'yellow')
                 if is_ok: self.color.print(f"{asset_name} already exists ✓", 'green'); continue
+
             self.color.print(f"Downloading {asset_name} from {asset['repo']}...", 'cyan')
             repo_id = asset['repo']; repo_type = asset.get('repo_type', 'model'); filename = asset.get('subpath', asset_name)
-            dl_script = ""
-            if asset['type'] == 'file': dl_script = f'import sys; from huggingface_hub import hf_hub_download; try: hf_hub_download(repo_id="{repo_id}", repo_type="{repo_type}", filename="{filename}", local_dir=r"{str(model_dir).replace(os.sep, "/")}", local_dir_use_symlinks=False, resume_download=True); sys.exit(0); except Exception as e: print(f"Download failed: {{e!r}}", file=sys.stderr); sys.exit(1)'
-            elif asset['type'] == 'dir': dl_script = f'import sys; from huggingface_hub import snapshot_download; try: snapshot_download(repo_id="{repo_id}", repo_type="{repo_type}", local_dir=r"{str(asset_path).replace(os.sep, "/")}", local_dir_use_symlinks=False, resume_download=True); sys.exit(0); except Exception as e: print(f"Download failed: {{e!r}}", file=sys.stderr); sys.exit(1)'
-            else: self.color.print(f"Unknown asset type '{asset['type']}'", 'red'); all_successful = False if not is_optional else all_successful; continue
-            rc_dl, out_dl, err_dl = self._run_download_script(dl_script, asset_name)
-            if self.verbose and out_dl: self.color.print(f"{asset_name} download stdout:\n{out_dl}", "cyan")
-            if err_dl: self.color.print(f"{asset_name} download stderr:\n{err_dl}", "yellow" if rc_dl == 0 else "red")
-            if rc_dl == 0:
+            download_success = False
+            try:
+                if asset['type'] == 'file':
+                    hf_hub_download(
+                        repo_id=repo_id, repo_type=repo_type, filename=filename,
+                        local_dir=str(model_dir), local_dir_use_symlinks=False, resume_download=True
+                    )
+                    download_success = True
+                elif asset['type'] == 'dir':
+                    snapshot_download(
+                        repo_id=repo_id, repo_type=repo_type,
+                        local_dir=str(asset_path), local_dir_use_symlinks=False, resume_download=True
+                    )
+                    download_success = True
+                else:
+                    self.color.print(f"Unknown asset type '{asset['type']}' for {asset_name}", 'red')
+                    if not is_optional: all_successful = False
+                    continue # Skip to next asset
+
+            except Exception as e:
+                self.color.print(f"Download failed for {asset_name}: {e!r}", "red")
+                if not is_optional: all_successful = False
+                continue # Skip verification if download failed
+
+            if download_success:
+                # Verify downloaded asset
                 if asset['type'] == 'file':
                     try:
                         file_size = asset_path.stat().st_size
@@ -685,7 +716,10 @@ except Exception as e_snap:
                 elif asset['type'] == 'dir':
                      if asset_path.is_dir() and any(asset_path.iterdir()): self.color.print(f"{asset_name} download successful ✓", 'green')
                      else: self.color.print(f"Downloaded {asset_name} dir empty.", 'yellow'); all_successful = False if not is_optional else all_successful
-            else: self.color.print(f"Failed to download {asset_name}.", 'red'); all_successful = False if not is_optional else all_successful
+            else:
+                 # Error already printed in except block
+                 if not is_optional: all_successful = False
+
         if all_successful: self.color.print('Kokoro ONNX models/data downloaded successfully ✓', 'green'); return True
         else: self.color.print('Some Kokoro ONNX models/data failed.', 'yellow'); return False
 
@@ -722,136 +756,140 @@ except Exception as e_snap:
 
     def _create_recipe_template(self)->bool:
         """Creates a default recipe template if it doesn't exist using python-docx."""
-        # (Code remains the same as previous version)
-        template_dir = self.base_dir / 'maggie/templates'; template_path = template_dir / 'recipe_template.docx'; template_dir.mkdir(parents=True, exist_ok=True)
-        if template_path.exists(): self.color.print('Recipe template already exists ✓', 'green'); return True
+        # *** Uses direct import/call ***
+        template_dir = self.base_dir / 'maggie/templates'
+        template_path = template_dir / 'recipe_template.docx'
+        template_dir.mkdir(parents=True, exist_ok=True)
+
+        if template_path.exists():
+            self.color.print('Recipe template already exists ✓', 'green')
+            return True
+
         self.color.print("Creating default recipe template...", "cyan")
-        template_path_str_escaped = str(template_path).replace('\\', '\\\\')
-        create_script = f"""
-import docx, os, sys
-from pathlib import Path
-template_path_str = r'{template_path_str_escaped}'
-template_path = Path(template_path_str)
-try:
-    doc = docx.Document(); doc.add_heading("Recipe Name", level=1); doc.add_paragraph()
-    doc.add_heading("Recipe Information", level=2); info_table = doc.add_table(rows=3, cols=2); info_table.style = 'Table Grid'
-    info_table.cell(0, 0).text = "Preparation Time"; info_table.cell(0, 1).text = "00 minutes"
-    info_table.cell(1, 0).text = "Cooking Time"; info_table.cell(1, 1).text = "00 minutes"
-    info_table.cell(2, 0).text = "Servings"; info_table.cell(2, 1).text = "0 servings"; doc.add_paragraph()
-    doc.add_heading("Ingredients", level=2); doc.add_paragraph("• Ingredient 1", style='List Bullet'); doc.add_paragraph("• Ingredient 2", style='List Bullet'); doc.add_paragraph("• Ingredient 3", style='List Bullet'); doc.add_paragraph()
-    doc.add_heading("Instructions", level=2); doc.add_paragraph("Step 1", style='List Number'); doc.add_paragraph("Step 2", style='List Number'); doc.add_paragraph("Step 3", style='List Number'); doc.add_paragraph()
-    doc.add_heading("Notes", level=2); doc.add_paragraph("Add any additional notes, tips, or variations here.")
-    doc.save(template_path); print(f"Template saved to {{template_path}}"); sys.exit(0)
-except ImportError: print("Error: python-docx not found.", file=sys.stderr); sys.exit(1)
-except Exception as e: print(f"Error creating template: {{e}}", file=sys.stderr); sys.exit(1)
-"""
-        returncode, stdout, stderr = self._run_download_script(create_script, "Recipe Template") # Use helper
-        if self.verbose and stdout: self.color.print(f"Template stdout:\n{stdout}", "cyan")
-        if stderr: self.color.print(f"Template stderr:\n{stderr}", "yellow" if returncode == 0 else "red")
-        if returncode == 0: self.color.print('Recipe template created successfully ✓', 'green'); return True
-        else: self.color.print('Failed to create recipe template.', 'red'); return False
+        try:
+            import docx
+            doc = docx.Document(); doc.add_heading("Recipe Name", level=1); doc.add_paragraph()
+            doc.add_heading("Recipe Information", level=2); info_table = doc.add_table(rows=3, cols=2); info_table.style = 'Table Grid'
+            info_table.cell(0, 0).text = "Preparation Time"; info_table.cell(0, 1).text = "00 minutes"
+            info_table.cell(1, 0).text = "Cooking Time"; info_table.cell(1, 1).text = "00 minutes"
+            info_table.cell(2, 0).text = "Servings"; info_table.cell(2, 1).text = "0 servings"; doc.add_paragraph()
+            doc.add_heading("Ingredients", level=2); doc.add_paragraph("• Ingredient 1", style='List Bullet'); doc.add_paragraph("• Ingredient 2", style='List Bullet'); doc.add_paragraph("• Ingredient 3", style='List Bullet'); doc.add_paragraph()
+            doc.add_heading("Instructions", level=2); doc.add_paragraph("Step 1", style='List Number'); doc.add_paragraph("Step 2", style='List Number'); doc.add_paragraph("Step 3", style='List Number'); doc.add_paragraph()
+            doc.add_heading("Notes", level=2); doc.add_paragraph("Add any additional notes, tips, or variations here.")
+            doc.save(template_path)
+            self.color.print(f"Template saved to {template_path} ✓", 'green')
+            return True
+        except ImportError:
+             self.color.print("Error: python-docx library not found. Cannot create template.", 'red')
+             self.color.print("       Please ensure 'python-docx' is listed in pyproject.toml dependencies.", 'yellow')
+             return False
+        except Exception as e:
+            self.color.print(f"Error creating docx template: {e}", 'red')
+            if template_path.exists():
+                try: os.remove(template_path)
+                except: pass
+            return False
 
     def _setup_config(self)->bool:
         """Creates or updates the config.yaml based on hardware detection."""
-        # (Code remains the same as previous version)
+        # *** Uses direct import/call, avoids temp file ***
         config_path = self.base_dir / 'config.yaml'; example_path = self.base_dir / 'config.yaml.example'
         if not example_path.exists(): example_path = self.base_dir / 'config.yaml.txt'
         if not example_path.exists(): example_path = self.base_dir / 'config-yaml-example.txt'
         if not config_path.exists() and not example_path.exists(): self.color.print("ERROR: Config/Example file not found.", 'red'); return False
+
         self.color.print("Setting up configuration file (config.yaml)...", "cyan")
-        temp_hardware_file = self.base_dir / 'hardware_info.json.tmp'
+
         try:
-            with open(temp_hardware_file, 'w') as f: json.dump(self.hardware_info, f, indent=2)
-        except Exception as e: self.color.print(f"Error writing temp hardware info: {e}", 'red'); return False
-        base_dir_str = repr(str(self.base_dir)); config_path_str_esc = str(config_path).replace('\\','\\\\'); example_path_str_esc = str(example_path).replace('\\','\\\\') if example_path.exists() else ''; hardware_file_str_esc = str(temp_hardware_file).replace('\\','\\\\'); cpu_only_flag = self.cpu_only
-        config_script = f"""
-import yaml, json, os, shutil, sys
-from pathlib import Path
-from collections.abc import MutableMapping
-try: from yaml import CLoader as Loader, CDumper as Dumper
-except ImportError: from yaml import Loader, Dumper
-base_dir = Path({base_dir_str}); config_path = Path(r'{config_path_str_esc}'); example_path = Path(r'{example_path_str_esc}') if '{example_path_str_esc}' else None; hardware_file = Path(r'{hardware_file_str_esc}'); cpu_only = {cpu_only_flag}
-def ensure_keys(d, keys):
-    current = d
-    for key in keys:
-        if not isinstance(current, MutableMapping): return None
-        current = current.setdefault(key, {{}})
-    return current
-config = {{}}; hardware_info = {{}}
-try:
-    with open(hardware_file, 'r', encoding='utf-8') as f: hardware_info = json.load(f)
-except Exception as e: print(f"Error loading hardware info: {{e}}", file=sys.stderr)
-if config_path.exists():
-    print(f"Loading existing config: {{config_path}}")
-    try:
-        with open(config_path, 'r', encoding='utf-8') as f: config = yaml.load(f, Loader=Loader)
-        if not isinstance(config, MutableMapping): print("Warning: Existing config invalid.", file=sys.stderr); config = {{}}
-    except Exception as e: print(f"Error loading config: {{e}}.", file=sys.stderr); config = {{}}
-elif example_path and example_path.exists():
-    print(f"Creating config from example: {{example_path}}")
-    try:
-        shutil.copyfile(example_path, config_path)
-        with open(config_path, 'r', encoding='utf-8') as f: config = yaml.load(f, Loader=Loader)
-        if not isinstance(config, MutableMapping): print("Warning: Example config invalid.", file=sys.stderr); config = {{}}
-    except Exception as e: print(f"Error copying/loading example: {{e}}.", file=sys.stderr); config = {{}}
-else: print("No config/example found. Starting fresh."); config = {{}}
-llm_config = ensure_keys(config, ['llm']); gpu_config = ensure_keys(config, ['gpu']); cpu_config = ensure_keys(config, ['cpu']); mem_config = ensure_keys(config, ['memory']); stt_config = ensure_keys(config, ['stt']); stt_whisper_config = ensure_keys(stt_config, ['whisper']) if stt_config else None; tts_config = ensure_keys(config, ['tts'])
-if llm_config is not None: llm_config.update({{'model_path': 'maggie/models/llm/mistral-7b-instruct-v0.3-GPTQ-4bit', 'model_type': 'mistral', 'use_autogptq': True}})
-if stt_whisper_config is not None: stt_whisper_config['model_path'] = 'maggie/models/stt/whisper-base.en'
-if tts_config is not None: tts_config.update({{'model_path': 'maggie/models/tts', 'voice_model': 'af_heart.pt'}})
-gpu_hw = hardware_info.get('gpu', {{}}); cpu_hw = hardware_info.get('cpu', {{}}); mem_hw = hardware_info.get('memory', {{}})
-if cpu_only:
-    print("Applying CPU-only optimizations...")
-    if llm_config: llm_config.update({{'gpu_layers': 0, 'gpu_layer_auto_adjust': False}}); llm_config.pop('rtx_3080_optimized', None)
-    if gpu_config: gpu_config.update({{'max_percent': 0, 'model_unload_threshold': 0}}); gpu_config.pop('rtx_3080_optimized', None)
-    if tts_config: tts_config['gpu_acceleration'] = False
-    if stt_whisper_config: stt_whisper_config['compute_type'] = 'int8'
-else:
-    if gpu_hw.get('cuda_available'):
-        print("Applying GPU optimizations...")
-        if llm_config: llm_config.update({{'gpu_layer_auto_adjust': True, 'precision_type': 'float16', 'mixed_precision_enabled': True}})
-        if tts_config: tts_config.update({{'gpu_acceleration': True}})
-        if stt_whisper_config: stt_whisper_config['compute_type'] = 'float16'
-        if gpu_hw.get('is_rtx_3080'):
-            print("Applying RTX 3080 specific optimizations...")
-            if llm_config: llm_config.update({{'gpu_layers': 32, 'rtx_3080_optimized': True}})
-            if gpu_config: gpu_config.update({{'max_percent': 90, 'model_unload_threshold': 95, 'rtx_3080_optimized': True}})
-            if tts_config: tts_config['gpu_precision'] = 'mixed_float16'
-        else:
-            print("Applying generic GPU optimizations...")
-            if llm_config: llm_config.update({{'gpu_layers': -1}}); llm_config.pop('rtx_3080_optimized', None)
-            if gpu_config: gpu_config.update({{'max_percent': 85, 'model_unload_threshold': 90}}); gpu_config.pop('rtx_3080_optimized', None)
-            if tts_config: tts_config['gpu_precision'] = 'float16'
-    else:
-         print("CUDA not available via PyTorch. Forcing CPU settings.", file=sys.stderr)
-         if llm_config: llm_config.update({{'gpu_layers': 0, 'gpu_layer_auto_adjust': False}}); llm_config.pop('rtx_3080_optimized', None)
-         if gpu_config: gpu_config.update({{'max_percent': 0, 'model_unload_threshold': 0}}); gpu_config.pop('rtx_3080_optimized', None)
-         if tts_config: tts_config['gpu_acceleration'] = False
-         if stt_whisper_config: stt_whisper_config['compute_type'] = 'int8'
-if cpu_hw.get('is_ryzen_9_5900x'):
-    print("Applying Ryzen 9 5900X optimizations...")
-    if cpu_config: cpu_config.update({{'max_threads': 8, 'thread_timeout': 30, 'ryzen_9_5900x_optimized': True}})
-else:
-    if cpu_config: cpu_config.pop('ryzen_9_5900x_optimized', None)
-if mem_hw.get('is_32gb'):
-    print("Applying 32GB+ RAM optimizations...")
-    if mem_config: mem_config.update({{'max_percent': 75, 'model_unload_threshold': 85, 'xpg_d10_memory': True}})
-else:
-    if mem_config: mem_config.pop('xpg_d10_memory', None)
-try:
-    with open(config_path, 'w', encoding='utf-8') as f: yaml.dump(config, f, Dumper=Dumper, default_flow_style=False, sort_keys=False, allow_unicode=True)
-    print(f"Configuration saved to {{config_path}}")
-except Exception as e: print(f"Error saving config: {{e}}", file=sys.stderr); sys.exit(1)
-try: os.remove(hardware_file)
-except Exception as e: print(f"Warning: Could not remove temp file: {{e}}", file=sys.stderr)
-sys.exit(0)
-"""
-        # Use helper to run the script
-        returncode, stdout, stderr = self._run_download_script(config_script, "Config Setup") # Use helper
-        if self.verbose and stdout: self.color.print(f"Config script stdout:\n{stdout}", "cyan")
-        if stderr: self.color.print(f"Config script stderr:\n{stderr}", "yellow" if returncode == 0 else "red")
-        if returncode != 0: self.color.print('Error setting up configuration file.', 'red'); return False
-        else: self.color.print('Configuration file created/updated ✓', 'green'); self.color.print('NOTE: Edit config.yaml to add Picovoice Access Key.', 'yellow'); return True
+            import yaml
+            try: from yaml import CLoader as Loader, CDumper as Dumper
+            except ImportError: from yaml import Loader, Dumper
+
+            config = {}
+            # Load existing or copy example
+            if config_path.exists():
+                self.color.print(f"Loading existing config: {config_path}", "blue")
+                try:
+                    with open(config_path, 'r', encoding='utf-8') as f: config = yaml.load(f, Loader=Loader)
+                    if not isinstance(config, MutableMapping): self.color.print("Warning: Existing config invalid.", "yellow"); config = {}
+                except Exception as e: self.color.print(f"Error loading config: {e}.", "red"); config = {}
+            elif example_path and example_path.exists():
+                self.color.print(f"Creating config from example: {example_path}", "blue")
+                try:
+                    shutil.copyfile(example_path, config_path)
+                    with open(config_path, 'r', encoding='utf-8') as f: config = yaml.load(f, Loader=Loader)
+                    if not isinstance(config, MutableMapping): self.color.print("Warning: Example config invalid.", "yellow"); config = {}
+                except Exception as e: self.color.print(f"Error copying/loading example: {e}.", "red"); config = {}
+            else: self.color.print("No config/example found. Starting fresh.", "yellow"); config = {}
+
+            # Helper to ensure nested keys exist
+            def ensure_keys(d, keys):
+                current = d
+                for key in keys:
+                    if not isinstance(current, MutableMapping): return None
+                    current = current.setdefault(key, {})
+                return current
+
+            # Apply settings
+            llm_config = ensure_keys(config, ['llm']); gpu_config = ensure_keys(config, ['gpu']); cpu_config = ensure_keys(config, ['cpu']); mem_config = ensure_keys(config, ['memory']); stt_config = ensure_keys(config, ['stt']); stt_whisper_config = ensure_keys(stt_config, ['whisper']) if stt_config else None; tts_config = ensure_keys(config, ['tts'])
+            if llm_config is not None: llm_config.update({'model_path': 'maggie/models/llm/mistral-7b-instruct-v0.3-GPTQ-4bit', 'model_type': 'mistral', 'use_autogptq': True})
+            if stt_whisper_config is not None: stt_whisper_config['model_path'] = 'maggie/models/stt/whisper-base.en'
+            if tts_config is not None: tts_config.update({'model_path': 'maggie/models/tts', 'voice_model': 'af_heart'}) # Corrected voice name
+            gpu_hw = self.hardware_info.get('gpu', {}); cpu_hw = self.hardware_info.get('cpu', {}); mem_hw = self.hardware_info.get('memory', {})
+            if self.cpu_only:
+                self.color.print("Applying CPU-only optimizations...", "blue")
+                if llm_config: llm_config.update({'gpu_layers': 0, 'gpu_layer_auto_adjust': False}); llm_config.pop('rtx_3080_optimized', None)
+                if gpu_config: gpu_config.update({'max_percent': 0, 'model_unload_threshold': 0}); gpu_config.pop('rtx_3080_optimized', None)
+                if tts_config: tts_config['gpu_acceleration'] = False
+                if stt_whisper_config: stt_whisper_config['compute_type'] = 'int8'
+            else:
+                if gpu_hw.get('cuda_available'):
+                    self.color.print("Applying GPU optimizations...", "blue")
+                    if llm_config: llm_config.update({'gpu_layer_auto_adjust': True, 'precision_type': 'float16', 'mixed_precision_enabled': True})
+                    if tts_config: tts_config.update({'gpu_acceleration': True})
+                    if stt_whisper_config: stt_whisper_config['compute_type'] = 'float16'
+                    if gpu_hw.get('is_rtx_3080'):
+                        self.color.print("Applying RTX 3080 specific optimizations...", "blue")
+                        if llm_config: llm_config.update({'gpu_layers': 32, 'rtx_3080_optimized': True})
+                        if gpu_config: gpu_config.update({'max_percent': 90, 'model_unload_threshold': 95, 'rtx_3080_optimized': True})
+                        if tts_config: tts_config['gpu_precision'] = 'mixed_float16'
+                    else:
+                        self.color.print("Applying generic GPU optimizations...", "blue")
+                        if llm_config: llm_config.update({'gpu_layers': -1}); llm_config.pop('rtx_3080_optimized', None)
+                        if gpu_config: gpu_config.update({'max_percent': 85, 'model_unload_threshold': 90}); gpu_config.pop('rtx_3080_optimized', None)
+                        if tts_config: tts_config['gpu_precision'] = 'float16'
+                else:
+                     self.color.print("CUDA not available via PyTorch. Forcing CPU settings.", "yellow")
+                     if llm_config: llm_config.update({'gpu_layers': 0, 'gpu_layer_auto_adjust': False}); llm_config.pop('rtx_3080_optimized', None)
+                     if gpu_config: gpu_config.update({'max_percent': 0, 'model_unload_threshold': 0}); gpu_config.pop('rtx_3080_optimized', None)
+                     if tts_config: tts_config['gpu_acceleration'] = False
+                     if stt_whisper_config: stt_whisper_config['compute_type'] = 'int8'
+            if cpu_hw.get('is_ryzen_9_5900x'):
+                self.color.print("Applying Ryzen 9 5900X optimizations...", "blue")
+                if cpu_config: cpu_config.update({'max_threads': 8, 'thread_timeout': 30, 'ryzen_9_5900x_optimized': True})
+            else:
+                if cpu_config: cpu_config.pop('ryzen_9_5900x_optimized', None)
+            if mem_hw.get('is_32gb'):
+                self.color.print("Applying 32GB+ RAM optimizations...", "blue")
+                if mem_config: mem_config.update({'max_percent': 75, 'model_unload_threshold': 85, 'xpg_d10_memory': True})
+            else:
+                if mem_config: mem_config.pop('xpg_d10_memory', None)
+
+            # Write config
+            with open(config_path, 'w', encoding='utf-8') as f:
+                yaml.dump(config, f, Dumper=Dumper, default_flow_style=False, sort_keys=False, allow_unicode=True)
+            self.color.print(f"Configuration saved to {config_path} ✓", 'green')
+            self.color.print('NOTE: Edit config.yaml to add Picovoice Access Key.', 'yellow')
+            return True
+
+        except ImportError:
+            self.color.print("Error: PyYAML library not found. Cannot setup config.", 'red')
+            self.color.print("       Please ensure 'PyYAML' is listed in pyproject.toml dependencies.", 'yellow')
+            return False
+        except Exception as e:
+            self.color.print(f"Error setting up configuration file: {e}", 'red')
+            return False
+        # *** End of modification ***
 
     def verify_system(self)->bool:
         """Verifies Python version and essential tools (Poetry, Git, Compiler)."""
@@ -940,7 +978,6 @@ sys.exit(0)
 
 def main() -> int:
     """Parses arguments and runs the installer."""
-    # (Code remains the same as previous version)
     parser = argparse.ArgumentParser(description='Maggie AI Assistant Installer (Poetry Version)', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('--verbose', '-v', action='store_true', help='Enable verbose output')
     parser.add_argument('--cpu-only', action='store_true', help='Install CPU-only version')
@@ -950,6 +987,7 @@ def main() -> int:
     print(f"Running installer from directory: {script_dir}")
     installer = MaggieInstaller(verbose=args.verbose, cpu_only=args.cpu_only, skip_models=args.skip_models)
     try:
+        # *** REMOVED Check for snapshot_download/hf_hub_download here ***
         success = installer.install()
         return 0 if success else 1
     except KeyboardInterrupt: print('\n\nInstallation cancelled by user.'); return 1

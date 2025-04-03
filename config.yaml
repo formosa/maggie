@@ -17,7 +17,6 @@ cpu:
   - 6
   - 7
   precision_boost_overdrive: true
-  ryzen_9_5900x_optimized: true
   simultaneous_multithreading: true
   thread_affinity_enabled: true
   thread_timeout: 30
@@ -34,11 +33,10 @@ gpu:
   dynamic_memory: true
   fragmentation_threshold: 15
   max_batch_size: 16
-  max_percent: 90
-  model_unload_threshold: 95
+  max_percent: 0
+  model_unload_threshold: 0
   pre_allocation: true
   reserved_memory_mb: 256
-  rtx_3080_optimized: true
   tensor_cores_enabled: true
   tensor_precision: tf32
 inactivity_timeout: 60
@@ -46,15 +44,14 @@ llm:
   attention_optimization: true
   batch_size: 16
   context_length: 8192
-  gpu_layer_auto_adjust: true
-  gpu_layers: 32
+  gpu_layer_auto_adjust: false
+  gpu_layers: 0
   kv_cache_optimization: true
   mixed_precision_enabled: true
-  model_path: maggie\models\llm\mistral-7b-instruct-v0.3-GPTQ-4bit
+  model_path: maggie/models/llm/mistral-7b-instruct-v0.3-GPTQ-4bit
   model_type: mistral
   offload_strategy: auto
   precision_type: float16
-  rtx_3080_optimized: true
   tensor_cores_enabled: true
   use_autogptq: true
   vram_efficient_loading: true
@@ -92,11 +89,11 @@ stt:
   whisper:
     cache_models: true
     chunk_size: 512
-    compute_type: float16
+    compute_type: int8
     flash_attention_enabled: true
     max_batch_size: 16
     memory_efficient: true
-    model_path: \maggie\models\stt\whisper
+    model_path: maggie/models/stt/whisper-base.en
     model_size: base
     parallel_processing: true
     sample_rate: 16000
@@ -125,12 +122,12 @@ tts:
   cuda_graphs_enabled: true
   dedicated_threads: 2
   dynamic_memory_management: true
-  gpu_acceleration: true
+  gpu_acceleration: false
   gpu_device: 0
   gpu_precision: mixed_float16
   max_batch_size: 64
   max_workers: 4
-  model_path: \maggie\models\tts
+  model_path: maggie/models/tts
   realtime_priority: true
   sample_rate: 22050
   simd_optimization: true
@@ -141,5 +138,5 @@ tts:
   - 9
   thread_affinity_enabled: true
   use_cache: true
-  voice_model: af_heart.pt
+  voice_model: af_heart
   voice_preprocessing: true
