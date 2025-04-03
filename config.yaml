@@ -20,6 +20,7 @@ cpu:
   simultaneous_multithreading: true
   thread_affinity_enabled: true
   thread_timeout: 30
+  ryzen_9_5900x_optimized: true
 extensions:
   recipe_creator:
     enabled: true
@@ -33,19 +34,20 @@ gpu:
   dynamic_memory: true
   fragmentation_threshold: 15
   max_batch_size: 16
-  max_percent: 0
-  model_unload_threshold: 0
+  max_percent: 90
+  model_unload_threshold: 95
   pre_allocation: true
   reserved_memory_mb: 256
   tensor_cores_enabled: true
   tensor_precision: tf32
+  rtx_3080_optimized: true
 inactivity_timeout: 60
 llm:
   attention_optimization: true
   batch_size: 16
   context_length: 8192
-  gpu_layer_auto_adjust: false
-  gpu_layers: 0
+  gpu_layer_auto_adjust: true
+  gpu_layers: 32
   kv_cache_optimization: true
   mixed_precision_enabled: true
   model_path: maggie/models/llm/mistral-7b-instruct-v0.3-GPTQ-4bit
@@ -55,6 +57,7 @@ llm:
   tensor_cores_enabled: true
   use_autogptq: true
   vram_efficient_loading: true
+  rtx_3080_optimized: true
 logging:
   async_enabled: true
   batch_size: 50
@@ -89,7 +92,7 @@ stt:
   whisper:
     cache_models: true
     chunk_size: 512
-    compute_type: int8
+    compute_type: float16
     flash_attention_enabled: true
     max_batch_size: 16
     memory_efficient: true
@@ -122,7 +125,7 @@ tts:
   cuda_graphs_enabled: true
   dedicated_threads: 2
   dynamic_memory_management: true
-  gpu_acceleration: false
+  gpu_acceleration: true
   gpu_device: 0
   gpu_precision: mixed_float16
   max_batch_size: 64

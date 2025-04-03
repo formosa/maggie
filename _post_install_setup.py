@@ -182,7 +182,7 @@ class PostInstallSetup:
 
     def _download_file(self, url: str, destination: str, show_progress: bool = True) -> bool:
         """Downloads a file from a URL with improved progress."""
-        # *** CORRECTED Indentation in except block ***
+        # *** CORRECTED Indentation in except blocks ***
         dest_path = Path(destination)
         try:
             self.color.print(f"Downloading {url}", 'blue')
@@ -226,7 +226,7 @@ class PostInstallSetup:
         except Exception as e:
             self.color.print(f"Error downloading file {url}: {e}", 'red')
             if dest_path.exists():
-                # Indent this block too for consistency
+                # Indent this block too
                 try:
                     dest_path.unlink()
                 except OSError:
