@@ -4,12 +4,11 @@
 name = "maggie"
 version = "0.1.0"
 description = "Maggie AI Assistant - Finite State Machine AI Assistant with modular utilities"
-authors = ["Anthony Formosa <emailformosa@gmail.com>"] # Use the author info from original file
+authors = ["Anthony Formosa <emailformosa@gmail.com>"]
 license = "MIT"
 readme = "README.md"
-packages = [{include = "maggie"}] # Assumes your main package code is in a 'maggie' directory
+packages = [{include = "maggie"}]
 
-# Classifiers, URLs, keywords remain under [tool.poetry]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: End Users/Desktop",
@@ -20,51 +19,51 @@ classifiers = [
 ]
 homepage = "https://github.com/formosa/maggie"
 repository = "https://github.com/formosa/maggie"
-documentation = "https://github.com/formosa/maggie" # Example URL
+documentation = "https://github.com/formosa/maggie"
 keywords = ["ai", "assistant", "llm", "tts", "stt"]
 
 # --- PyTorch Source Definition for CUDA 11.8 ---
 [[tool.poetry.source]]
 name = "pytorch_cu118"
 url = "https://download.pytorch.org/whl/cu118"
-priority = "explicit" # Ensure this source is used for specified packages
+priority = "explicit"
 
 
-# --- Main Dependencies Section (ONLY ONE of these headers) ---
+# --- Main Dependencies Section ---
 [tool.poetry.dependencies]
-# --- Python Version ---
-python = "~3.10" # Specify Python 3.10 compatibility here
+python = "~3.10"
 
 # --- Pinned Dependencies (Using specific source) ---
 torch = {version = "2.1.2", source = "pytorch_cu118"}
 torchvision = {version = "0.16.2", source = "pytorch_cu118"}
-torchaudio = {version = "2.1.2", source = "pytorch_cu118"} # Corrected version
+torchaudio = {version = "2.1.2", source = "pytorch_cu118"}
 
 # --- Core Dependencies (Let Poetry Resolve) ---
 PyYAML = "^6.0"
 loguru = "^0.7"
-numpy = "*" # Let torch/others constrain this
+numpy = "*"
 tqdm = "^4.66"
 requests = "^2.31"
-psutil = "^5.9"
+psutil = "^5.9" # Already included, used for hardware detection
+WMI = { version = "*", markers = "sys_platform == 'win32'" } # Added: For Windows hardware detection
 
 # --- STT Dependencies ---
-pvporcupine = "^3.0" # Version from original requirements
+pvporcupine = "^3.0"
 SpeechRecognition = "^3.10"
 PyAudio = "*" # May require system libraries (portaudio) and build tools
-faster-whisper = ">=0.10.0" # Avoids tokenizer<0.15 conflict
-sounddevice = "^0.4.6" # Version from original requirements
+faster-whisper = ">=0.10.0"
+sounddevice = "^0.4.6"
 
 # --- TTS Dependencies ---
 kokoro = {git = "https://github.com/hexgrad/kokoro.git"}
-kokoro-onnx = "*" # Let Poetry try to resolve
+kokoro-onnx = "*"
 huggingface-hub = ">=0.15.1"
 soundfile = ">=0.12.1"
 librosa = ">=0.10.0"
 phonemizer = ">=3.2.1"
 
 # --- LLM Dependencies ---
-transformers = "^4.38" # Based on original requirements
+transformers = "^4.38"
 optimum = "^1.17"
 accelerate = "^0.27"
 safetensors = ">=0.4.0"
@@ -73,7 +72,7 @@ protobuf = "*"
 ninja = ">=1.11.1"
 
 # --- UI and Document Processing ---
-PySide6 = "^6.5" # Based on original requirements
+PySide6 = "^6.5"
 python-docx = ">=0.8.11"
 transitions = "^0.9.0"
 mammoth = "^1.7.0"
