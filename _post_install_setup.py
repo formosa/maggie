@@ -21,11 +21,15 @@ from collections.abc import MutableMapping
 
 # --- Imports for libraries installed by Poetry ---
 try:
-    from huggingface_hub import snapshot_download, hf_hub_download
+    from huggingface_hub import snapshot_download, hf_hub_download, HfHubHTTPError, RepositoryNotFoundError, EntryNotFoundError
 except ImportError:
     print("ERROR: huggingface-hub not found.", file=sys.stderr)
     snapshot_download = None
     hf_hub_download = None
+    # Define dummy exception classes if the library is missing
+    class HfHubHTTPError(Exception): pass
+    class RepositoryNotFoundError(HfHubHTTPError): pass
+    class EntryNotFoundError(HfHubHTTPError): pass
 try:
     import yaml
     try: from yaml import CLoader as Loader, CDumper as Dumper
@@ -66,26 +70,18 @@ else:
 # --- Helper Classes (ColorOutput, ProgressTracker) ---
 class ColorOutput:
     """Handles colored terminal output."""
+    # (Code remains the same)
     def __init__(self, force_enable: bool = False):
         self.enabled = force_enable or self._supports_color()
         if self.enabled:
-            self.colors = {
-                'reset': '\x1b[0m', 'bold': '\x1b[1m', 'red': '\x1b[91m',
-                'green': '\x1b[92m', 'yellow': '\x1b[93m', 'blue': '\x1b[94m',
-                'magenta': '\x1b[95m', 'cyan': '\x1b[96m', 'white': '\x1b[97m'
-            }
+            self.colors = {'reset': '\x1b[0m', 'bold': '\x1b[1m', 'red': '\x1b[91m', 'green': '\x1b[92m', 'yellow': '\x1b[93m', 'blue': '\x1b[94m', 'magenta': '\x1b[95m', 'cyan': '\x1b[96m', 'white': '\x1b[97m'}
         else:
             self.colors = {color: '' for color in ['reset', 'bold', 'red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'white']}
-
     def _supports_color(self) -> bool:
-        """Checks if the terminal supports color."""
         if platform.system() == 'Windows':
             try:
-                import ctypes
-                kernel32 = ctypes.windll.kernel32
-                ENABLE_VIRTUAL_TERMINAL_PROCESSING = 0x0004
-                stdout = kernel32.GetStdHandle(-11)
-                mode = ctypes.c_ulong()
+                import ctypes; kernel32 = ctypes.windll.kernel32; ENABLE_VIRTUAL_TERMINAL_PROCESSING = 0x0004
+                stdout = kernel32.GetStdHandle(-11); mode = ctypes.c_ulong()
                 if kernel32.GetConsoleMode(stdout, ctypes.byref(mode)):
                     if (mode.value & ENABLE_VIRTUAL_TERMINAL_PROCESSING) == ENABLE_VIRTUAL_TERMINAL_PROCESSING: return True
                     mode.value |= ENABLE_VIRTUAL_TERMINAL_PROCESSING
@@ -96,35 +92,23 @@ class ColorOutput:
         if os.environ.get('NO_COLOR'): return False
         if os.environ.get('FORCE_COLOR'): return True
         return hasattr(sys.stdout, 'isatty') and sys.stdout.isatty()
-
     def print(self, message: str, color: Optional[str] = None, bold: bool = False):
-        """Prints a message with optional color and bold formatting."""
         formatted = message
         if self.enabled:
             if bold and 'bold' in self.colors: formatted = f"{self.colors['bold']}{formatted}"
             if color and color in self.colors: formatted = f"{self.colors[color]}{formatted}"
             if (bold or color) and 'reset' in self.colors: formatted = f"{formatted}{self.colors['reset']}"
         print(formatted)
-
-    # *** ADDED Missing input method ***
     def input(self, prompt: str, color: Optional[str] = None, bold: bool = False) -> str:
-        """Gets input with a formatted prompt."""
         formatted = prompt
         if self.enabled:
-            if bold and 'bold' in self.colors:
-                formatted = f"{self.colors['bold']}{formatted}"
-            if color and color in self.colors:
-                formatted = f"{self.colors[color]}{formatted}"
-            if (bold or color) and 'reset' in self.colors:
-                formatted = f"{formatted}{self.colors['reset']}"
-        # Flush stdout ensures prompt appears before input is read
-        sys.stdout.flush()
-        return input(formatted)
-    # *** End of addition ***
+            if bold and 'bold' in self.colors: formatted = f"{self.colors['bold']}{formatted}"
+            if color and color in self.colors: formatted = f"{self.colors[color]}{formatted}"
+            if (bold or color) and 'reset' in self.colors: formatted = f"{formatted}{self.colors['reset']}"
+        sys.stdout.flush(); return input(formatted)
 
 class ProgressTracker:
     """Tracks and displays installation progress."""
-    # (Code remains the same)
     def __init__(self, color: ColorOutput, total_steps: int = 10, initial_step: int = 0):
         self.color = color; self.total_steps = total_steps; self.current_step = initial_step; self.start_time = time.time()
     def start_step(self, step_name: str):
@@ -136,6 +120,16 @@ class ProgressTracker:
         msg = f"  {status}"
         if message: msg += f": {message}"
         self.color.print(msg, color=color)
+    def elapsed_time(self) -> float: return time.time() - self.start_time
+    # *** ADDED Missing display_summary method ***
+    def display_summary(self, success: bool = True):
+        """Displays the final installation summary."""
+        elapsed = self.elapsed_time()
+        if success: status = 'Installation Completed Successfully'; color = 'green'
+        else: status = 'Installation Completed with Errors or Warnings'; color = 'yellow' # Changed message slightly
+        self.color.print(f"\n=== {status} ===", color=color, bold=True)
+        self.color.print(f"Total time: {elapsed:.1f} seconds")
+    # *** End of addition ***
 
 # --- Post-Install Setup Class ---
 
@@ -148,8 +142,6 @@ class PostInstallSetup:
         self.base_dir = Path(__file__).parent.resolve()
         self.platform_system = platform.system()
         self.color = ColorOutput()
-        # Steps for this script: HW Detect, Config, Models, Templates, Finish
-        # Start numbering after the main installer's steps
         self.progress = ProgressTracker(self.color, total_steps=7, initial_step=3) # Start at step 4/7
         self.hardware_info = { # Initialize default structure
             'cpu': {'is_ryzen_9_5900x': False, 'model': '', 'cores': 0, 'threads': 0},
@@ -202,11 +194,11 @@ class PostInstallSetup:
             self.color.print(f"Downloading {url}", 'blue')
             dest_path.parent.mkdir(parents=True, exist_ok=True)
             req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'})
-            with urllib.request.urlopen(req, timeout=60) as response, open(dest_path, 'wb') as out_file: # Add timeout
+            with urllib.request.urlopen(req, timeout=60) as response, open(dest_path, 'wb') as out_file:
                 content_length_header = response.info().get('Content-Length')
                 file_size = int(content_length_header) if content_length_header else 0
                 downloaded = 0
-                block_size = 8192 * 16 # Use larger 128KB chunks
+                block_size = 8192 * 16
                 start_time = time.time()
                 if show_progress and file_size > 0:
                     self.color.print(f"Total file size: {file_size / 1024 / 1024:.1f} MB")
@@ -231,13 +223,13 @@ class PostInstallSetup:
         except urllib.error.URLError as e:
              self.color.print(f"Error downloading file (URL Error: {e.reason}): {url}", 'red')
              if dest_path.exists():
-                 try: dest_path.unlink()
+                 try: dest_path.unlink(missing_ok=True) # Use missing_ok=True
                  except OSError: pass
              return False
         except Exception as e:
             self.color.print(f"Error downloading file {url}: {e}", 'red')
             if dest_path.exists():
-                try: dest_path.unlink()
+                try: dest_path.unlink(missing_ok=True) # Use missing_ok=True
                 except OSError: pass
             return False
 
@@ -487,7 +479,7 @@ class PostInstallSetup:
 
     def _download_kokoro_onnx_models(self)->bool:
         """Downloads the necessary ONNX model files for kokoro-onnx."""
-        # (Code remains the same)
+        # *** MODIFIED: Try different path for tokens.txt, improve verification ***
         if self.skip_models: self.color.print('Skipping kokoro-onnx model download (--skip-models)', 'yellow'); return True
         if not snapshot_download or not hf_hub_download: self.color.print("ERROR: huggingface-hub not available.", "red"); return False
 
@@ -498,7 +490,7 @@ class PostInstallSetup:
             {'type': 'file', 'name': 'model.onnx', 'repo': kokoro_onnx_repo, 'subpath': 'onnx/model.onnx', 'min_size': 10*1024*1024},
             {'type': 'file', 'name': 'model_quantized.onnx', 'repo': kokoro_onnx_repo, 'subpath': 'onnx/model_quantized.onnx', 'min_size': 5*1024*1024, 'optional': True},
             {'type': 'file', 'name': 'voices-v1.0.bin', 'repo': kokoro_onnx_repo, 'subpath': 'voices-v1.0.bin', 'min_size': 5*1024*1024},
-            {'type': 'file', 'name': 'tokens.txt', 'repo': kokoro_onnx_repo, 'subpath': 'tokens.txt', 'min_size': 100},
+            {'type': 'file', 'name': 'tokens.txt', 'repo': kokoro_onnx_repo, 'subpath': 'onnx/tokens.txt', 'min_size': 100}, # Try subpath
             {'type': 'dir', 'name': 'espeak-ng-data', 'repo': "rhasspy/espeak-ng-data", 'repo_type': 'dataset'},
         ]
         all_successful = True
@@ -511,38 +503,77 @@ class PostInstallSetup:
                     try:
                         file_size = asset_path.stat().st_size
                         if file_size >= min_size: is_ok = True
-                        else: self.color.print(f"Existing {asset_name} incorrect size. Re-downloading...", 'yellow')
+                        else: self.color.print(f"Existing {asset_name} has incorrect size. Re-downloading...", 'yellow')
                     except Exception as e_check: self.color.print(f"Error checking {asset_name}: {e_check}. Re-downloading...", 'yellow')
                 if is_ok: self.color.print(f"{asset_name} already exists ✓", 'green'); continue
+
             self.color.print(f"Downloading {asset_name} from {asset['repo']}...", 'cyan')
             repo_id = asset['repo']; repo_type = asset.get('repo_type', 'model'); filename = asset.get('subpath', asset_name)
             download_success = False
             try:
-                if asset['type'] == 'file': hf_hub_download(repo_id=repo_id, repo_type=repo_type, filename=filename, local_dir=str(model_dir), local_dir_use_symlinks=False, resume_download=True); download_success = True
-                elif asset['type'] == 'dir': snapshot_download(repo_id=repo_id, repo_type=repo_type, local_dir=str(asset_path), local_dir_use_symlinks=False, resume_download=True); download_success = True
-                else: self.color.print(f"Unknown asset type '{asset['type']}'", 'red'); all_successful = False if not is_optional else all_successful; continue
+                if asset['type'] == 'file':
+                    # hf_hub_download returns the path on success
+                    downloaded_path = hf_hub_download(
+                        repo_id=repo_id, repo_type=repo_type, filename=filename,
+                        local_dir=str(model_dir), local_dir_use_symlinks=False, resume_download=True,
+                        local_dir_creation=False # model_dir already created
+                    )
+                    # Explicitly check if the file exists after download call returns
+                    if Path(downloaded_path).exists() and Path(downloaded_path).name == asset_name:
+                         download_success = True
+                    else:
+                         # Sometimes hf_hub_download might place it differently if local_dir isn't perfect?
+                         # Check the expected final path again.
+                         if asset_path.exists():
+                             download_success = True
+                         else:
+                             self.color.print(f"Download call for {asset_name} finished but file not found at expected location: {asset_path}", "red")
+
+                elif asset['type'] == 'dir':
+                    snapshot_download(
+                        repo_id=repo_id, repo_type=repo_type,
+                        local_dir=str(asset_path), local_dir_use_symlinks=False, resume_download=True
+                    )
+                    # Check if dir exists and is not empty
+                    if asset_path.is_dir() and any(asset_path.iterdir()):
+                        download_success = True
+                    else:
+                        self.color.print(f"Snapshot download for {asset_name} finished but directory is empty or missing.", "red")
+                else:
+                    self.color.print(f"Unknown asset type '{asset['type']}' for {asset_name}", 'red')
+                    if not is_optional: all_successful = False
+                    continue
+
+            except (RepositoryNotFoundError, EntryNotFoundError) as e_nf:
+                self.color.print(f"Download failed for {asset_name}: {e_nf!r}", "red")
+                self.color.print(f"  -> Check path/repo ID or login via 'huggingface-cli login'.", "yellow")
+                if not is_optional: all_successful = False
+                continue
             except Exception as e:
                 self.color.print(f"Download failed for {asset_name}: {e!r}", "red")
-                # Add more specific check for auth errors
-                if '401' in str(e) or '404' in str(e) or 'Repository Not Found' in str(e) or 'Entry Not Found' in str(e):
-                     self.color.print(f"  -> This might be due to an invalid repo/file path OR missing authentication.", "yellow")
-                     self.color.print(f"     Check URL/Repo: https://huggingface.co/{repo_id}/tree/main", "blue")
-                     self.color.print(f"     Consider running 'huggingface-cli login' if needed.", "blue")
-                all_successful = False if not is_optional else all_successful
+                if not is_optional: all_successful = False
                 continue
+
             if download_success:
+                # Verify downloaded asset size/existence
                 if asset['type'] == 'file':
                     try:
                         file_size = asset_path.stat().st_size
                         if file_size >= min_size: self.color.print(f"{asset_name} download successful ✓", 'green')
                         else: self.color.print(f"Downloaded {asset_name} incorrect size.", 'yellow'); asset_path.unlink(missing_ok=True); all_successful = False if not is_optional else all_successful
+                    except FileNotFoundError:
+                         self.color.print(f"Verification failed: {asset_name} not found after download attempt.", "red"); all_successful = False if not is_optional else all_successful
                     except Exception as e_verify: self.color.print(f"Error verifying {asset_name}: {e_verify}", 'red'); all_successful = False if not is_optional else all_successful
                 elif asset['type'] == 'dir':
-                     if asset_path.is_dir() and any(asset_path.iterdir()): self.color.print(f"{asset_name} download successful ✓", 'green')
-                     else: self.color.print(f"Downloaded {asset_name} dir empty.", 'yellow'); all_successful = False if not is_optional else all_successful
-            else: all_successful = False if not is_optional else all_successful
+                     # Already checked existence/non-empty after snapshot_download
+                     self.color.print(f"{asset_name} download successful ✓", 'green')
+            else:
+                 # Error already printed
+                 if not is_optional: all_successful = False
+
         if all_successful: self.color.print('Kokoro ONNX models/data downloaded successfully ✓', 'green'); return True
         else: self.color.print('Some Kokoro ONNX models/data failed.', 'yellow'); return False
+        # *** End of modification ***
 
 
     def _download_mistral_model(self)->bool:
@@ -579,7 +610,7 @@ class PostInstallSetup:
 
     def _create_recipe_template(self)->bool:
         """Creates a default recipe template if it doesn't exist using python-docx."""
-        # *** Uses direct import/call ***
+        # (Code remains the same)
         template_dir = self.base_dir / 'maggie/templates'
         template_path = template_dir / 'recipe_template.docx'
         template_dir.mkdir(parents=True, exist_ok=True)
@@ -613,10 +644,9 @@ class PostInstallSetup:
 
     def run_all_steps(self):
         """Runs all post-install steps."""
-        # This method is called by main() after bootstrap
+        # (Code remains the same)
         self.progress.start_step('Detecting Hardware')
         self._detect_hardware()
-        # Check hardware detection results (optional, could add checks here)
         self.progress.complete_step(True) # Assume detection itself worked for progress
 
         self.progress.start_step('Setting up configuration file')
