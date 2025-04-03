@@ -14,7 +14,8 @@ from pathlib import Path
 from typing import Dict, Any, List, Tuple, Optional, Union, Callable
 from collections.abc import MutableMapping
 
-# NOTE: huggingface-hub import moved into the methods that use it (_download_*)
+# Note: Imports for external libraries used *after* poetry install
+# are now placed inside the methods that need them.
 
 # --- Helper Classes (ColorOutput, ProgressTracker) ---
 class ColorOutput:
@@ -46,6 +47,7 @@ class ColorOutput:
                     if kernel32.SetConsoleMode(stdout, mode):
                         return True
             except:
+                 # Fallback version check for older systems or if ctypes fails
                  if int(platform.release()) >= 10: return True
             return False
         if os.environ.get('NO_COLOR'): return False
@@ -108,7 +110,7 @@ class ProgressTracker:
         self.color.print(f"\n=== {status} ===", color=color, bold=True)
         self.color.print(f"Total time: {elapsed:.1f} seconds")
 
-# --- MaggieInstaller Class - Modified for Poetry ---
+# --- MaggieInstaller Class ---
 
 class MaggieInstaller:
     """Handles the installation process for Maggie AI Assistant using Poetry."""
@@ -276,6 +278,7 @@ class MaggieInstaller:
              if self.verbose: self.color.print(f"CPU count error: {e}", "yellow")
         if self.platform_system == 'Windows':
             try:
+                # WMI import is now conditional within the block
                 import wmi
                 c = wmi.WMI()
                 processor = c.Win32_Processor()[0]
@@ -283,8 +286,10 @@ class MaggieInstaller:
                 if cpu_info['cores'] == 0 and hasattr(processor, 'NumberOfCores'): cpu_info['cores'] = processor.NumberOfCores
                 if cpu_info['threads'] == 0 and hasattr(processor, 'NumberOfLogicalProcessors'): cpu_info['threads'] = processor.NumberOfLogicalProcessors
             except ImportError:
-                 if self.verbose: self.color.print("WMI not found, skipping detailed Windows CPU detection.", "yellow")
+                 # WMI is windows-only, failure here just means less detailed info
+                 if self.verbose: self.color.print("WMI library not found (pip install WMI), skipping detailed Windows CPU detection.", "yellow")
             except Exception as e:
+                 # Other errors during WMI query
                  if self.verbose: self.color.print(f"WMI CPU detection error: {e}", "yellow")
         model_lower = cpu_info['model'].lower()
         if 'ryzen 9' in model_lower and '5900x' in model_lower: cpu_info['is_ryzen_9_5900x'] = True
@@ -312,7 +317,10 @@ class MaggieInstaller:
         # (Code remains the same as previous corrected version)
         gpu_info = {'available': False, 'is_rtx_3080': False, 'model': 'Unknown','vram_gb': 0, 'cuda_available': False, 'cuda_version': '', 'cudnn_available': False, 'cudnn_version': ''}
         if self.cpu_only: return gpu_info
-        check_script = """
+        # Attempt to import torch here, as it should be installed by poetry now
+        try:
+            import torch
+            check_script = """
 import torch, sys, platform
 try:
     cuda_available = torch.cuda.is_available()
@@ -330,37 +338,45 @@ try:
             if cudnn_available: print(f"cuDNN_Version: {torch.backends.cudnn.version()}") # cuDNN version PyTorch built against
 except Exception as e: print(f"GPU_Check_Error: {e!r}", file=sys.stderr)
 """
-        # Use poetry run python -c "script" - safer than direct execution if env issues exist
-        returncode, stdout, stderr = self._run_command(['poetry', 'run', 'python', '-c', check_script], check=False, capture_output=True)
+            # Use poetry run python -c "script" - still safer for environment consistency
+            returncode, stdout, stderr = self._run_command(['poetry', 'run', 'python', '-c', check_script], check=False, capture_output=True)
 
-        if returncode != 0 or "GPU_Check_Error" in stderr:
-            if self.verbose: self.color.print('PyTorch check script failed.', 'yellow'); self.color.print(f"Error: {stderr}", "yellow")
-            smi_path = "nvidia-smi"
-            if self.platform_system == "Windows":
-                program_files = os.environ.get("ProgramFiles", "C:\\Program Files")
-                smi_path_win = Path(program_files) / "NVIDIA Corporation" / "NVSMI" / "nvidia-smi.exe"
-                if smi_path_win.exists(): smi_path = str(smi_path_win)
-            rc_smi, _, _ = self._run_command([smi_path], check=False, capture_output=False)
-            if rc_smi == 0: self.color.print('nvidia-smi found. GPU likely present but env needs config.', 'yellow'); gpu_info['available'] = True
-            return gpu_info
-        for line in stdout.splitlines():
-            try:
-                if ':' not in line: continue
-                key, value = line.split(':', 1); key = key.strip(); value = value.strip()
-                if key == 'CUDA_Available': gpu_info['cuda_available'] = (value == 'True')
-                elif key == 'Device_Name': gpu_info['model'] = value; gpu_info['available'] = True; gpu_info['is_rtx_3080'] = '3080' in value
-                elif key == 'VRAM_GB': gpu_info['vram_gb'] = float(value)
-                elif key == 'CUDA_Version': gpu_info['cuda_version'] = value
-                elif key == 'cuDNN_Available': gpu_info['cudnn_available'] = (value == 'True')
-                elif key == 'cuDNN_Version': gpu_info['cudnn_version'] = str(value)
-            except ValueError:
-                 if self.verbose: self.color.print(f"Could not parse GPU info line (ValueError): {line}", "yellow")
-            except Exception as e:
-                if self.verbose:
-                    self.color.print(f"Error parsing GPU info: {e}", "yellow")
-        if not gpu_info['cuda_available']:
-             self.color.print('No CUDA-capable GPU detected by PyTorch.', 'yellow')
-             self.color.print('Ensure NVIDIA drivers, CUDA Toolkit 11.8, and cuDNN 8.9.7 are installed and compatible.', 'yellow')
+            if returncode != 0 or "GPU_Check_Error" in stderr:
+                if self.verbose: self.color.print('PyTorch check script failed.', 'yellow'); self.color.print(f"Error: {stderr}", "yellow")
+                # Fallback check using nvidia-smi remains useful
+                smi_path = "nvidia-smi"
+                if self.platform_system == "Windows":
+                    program_files = os.environ.get("ProgramFiles", "C:\\Program Files")
+                    smi_path_win = Path(program_files) / "NVIDIA Corporation" / "NVSMI" / "nvidia-smi.exe"
+                    if smi_path_win.exists(): smi_path = str(smi_path_win)
+                rc_smi, _, _ = self._run_command([smi_path], check=False, capture_output=False)
+                if rc_smi == 0: self.color.print('nvidia-smi found. GPU likely present but env needs config.', 'yellow'); gpu_info['available'] = True
+                return gpu_info
+
+            # Parse output from successful torch check
+            for line in stdout.splitlines():
+                try:
+                    if ':' not in line: continue
+                    key, value = line.split(':', 1); key = key.strip(); value = value.strip()
+                    if key == 'CUDA_Available': gpu_info['cuda_available'] = (value == 'True')
+                    elif key == 'Device_Name': gpu_info['model'] = value; gpu_info['available'] = True; gpu_info['is_rtx_3080'] = '3080' in value
+                    elif key == 'VRAM_GB': gpu_info['vram_gb'] = float(value)
+                    elif key == 'CUDA_Version': gpu_info['cuda_version'] = value
+                    elif key == 'cuDNN_Available': gpu_info['cudnn_available'] = (value == 'True')
+                    elif key == 'cuDNN_Version': gpu_info['cudnn_version'] = str(value)
+                except ValueError:
+                     if self.verbose: self.color.print(f"Could not parse GPU info line (ValueError): {line}", "yellow")
+                except Exception as e:
+                    if self.verbose:
+                        self.color.print(f"Error parsing GPU info: {e}", "yellow")
+
+            if not gpu_info['cuda_available']:
+                 self.color.print('No CUDA-capable GPU detected by PyTorch.', 'yellow')
+                 self.color.print('Ensure NVIDIA drivers, CUDA Toolkit 11.8, and cuDNN 8.9.7 are installed and compatible.', 'yellow')
+
+        except ImportError:
+             self.color.print("Error: PyTorch library not found after 'poetry install'. Cannot detect GPU.", "red")
+             self.color.print("       Please check 'poetry install' logs and pyproject.toml.", "yellow")
 
         return gpu_info
 
@@ -638,7 +654,7 @@ build-backend = "poetry.core.masonry.api"
                 self.color.print(f'Missing essential files: {", ".join(missing_files)}', 'yellow')
                 # Fail if essential model.bin is missing
                 if 'model.bin' in missing_files: return False
-                return True # Allow continuing if only config/tokenizer missing? Maybe not.
+                return True # Allow continuing? Maybe not. Let's fail if anything essential is missing.
         except Exception as e:
             self.color.print(f"Error verifying downloaded Whisper model: {e}", 'red')
             return False
