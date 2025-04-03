@@ -50,7 +50,7 @@ llm:
   gpu_layers: 32
   kv_cache_optimization: true
   mixed_precision_enabled: true
-  model_path: maggie/models/llm/mistral-7b-instruct-v0.3-GPTQ-4bit
+  model_path: maggie/models/llm/neuralmagic-Mistral-7B-Instruct-v0.3-GPTQ-4bit
   model_type: mistral
   offload_strategy: auto
   precision_type: float16
