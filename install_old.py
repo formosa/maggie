@@ -211,8 +211,8 @@ class MaggieInstaller:
 		if returncode!=0:self.color.print(f"Error installing basic packages: {stderr}",'red');return False
 		return True
 	def _install_pytorch(self,python_cmd:str)->bool:
-		if self.cpu_only:self.color.print('Installing PyTorch (CPU version)...','cyan');cmd=[python_cmd,'-m','pip','install','torch==2.1.2','torchvision==0.16.2','torchaudio==2.1.2']
-		else:self.color.print('Installing PyTorch with CUDA 11.8 support (optimized for RTX 3080)...','cyan');cmd=[python_cmd,'-m','pip','install','torch==2.1.2','torchvision==0.16.2','torchaudio==2.1.2','--index-url','https://download.pytorch.org/whl/cu118']
+		if self.cpu_only:self.color.print('Installing PyTorch (CPU version)...','cyan');cmd=[python_cmd,'-m','pip','install','torch==2.0.1','torchvision==0.15.2','torchaudio==2.0.2']
+		else:self.color.print('Installing PyTorch with CUDA 11.8 support (optimized for RTX 3080)...','cyan');cmd=[python_cmd,'-m','pip','install','torch==2.0.1+cu118','torchvision==0.15.2+cu118','torchaudio==2.0.2+cu118','--extra-index-url','https://download.pytorch.org/whl/cu118']
 		returncode,_,stderr=self._run_command(cmd)
 		if returncode!=0:self.color.print(f"Error installing PyTorch: {stderr}",'red');self.color.print('Continuing with installation, but GPU acceleration may not work','yellow');return False
 		verify_cmd=[python_cmd,'-c',"import torch; print(f'PyTorch {torch.__version__} installed successfully'); print(f'CUDA available: {torch.cuda.is_available()}')"];returncode,stdout,_=self._run_command(verify_cmd,check=False)
@@ -226,7 +226,7 @@ class MaggieInstaller:
 		pytorch_success=self._install_pytorch(python_cmd)
 		if not pytorch_success and not self.cpu_only:
 			self.color.print('PyTorch with CUDA failed to install','yellow');response=self.color.input('Try installing CPU version instead? (y/n): ',color='magenta')
-			if response.lower()=='y':cmd=[python_cmd,'-m','pip','install','torch==2.1.2','torchvision==0.16.2','torchaudio==2.1.2'];self._run_command(cmd)
+			if response.lower()=='y':cmd=[python_cmd,'-m','pip','install','torch==2.0.1','torchvision==0.15.2','torchaudio==2.0.2'];self._run_command(cmd)
 		req_path=os.path.join(self.base_dir,'requirements.txt');temp_req_path=os.path.join(self.base_dir,'temp_requirements.txt')
 		try:
 			with open(req_path,'r')as f:req_content=f.read()
@@ -245,35 +245,6 @@ class MaggieInstaller:
 	def _install_specialized_dependencies(self,python_cmd:str)->bool:
 		self._install_pyaudio(python_cmd);self._install_kokoro(python_cmd)
 		if not self._install_whisper(python_cmd):self.color.print('Warning: Failed to install faster-whisper','yellow');self.color.print('Speech recognition functionality may be limited','yellow');return False
-		
-		# Install AutoGPTQ dependencies
-		self.color.print('Installing AutoGPTQ and related dependencies...','cyan')
-		autogptq_deps = [
-			'transformers==4.38.2',
-			'optimum==1.17.1',
-			'auto-gptq==0.7.1',
-			'accelerate==0.27.2',
-			'safetensors>=0.4.0',
-			'sentencepiece>=0.1.99',
-			'protobuf',
-			'ninja>=1.11.1'
-		]
-		returncode,_,stderr=self._run_command([python_cmd,'-m','pip','install']+autogptq_deps)
-		if returncode!=0:
-			self.color.print(f"Error installing AutoGPTQ and dependencies: {stderr}",'red')
-			self.color.print('LLM functionality may be limited','yellow')
-		else:
-			self.color.print('AutoGPTQ and dependencies successfully installed','green')
-		
-		# Install sounddevice for wake word detection
-		self.color.print('Installing sounddevice for wake word detection...','cyan')
-		returncode,_,stderr=self._run_command([python_cmd,'-m','pip','install','sounddevice==0.4.6'])
-		if returncode!=0:
-			self.color.print(f"Error installing sounddevice: {stderr}",'red')
-			self.color.print('Wake word detection may be limited','yellow')
-		else:
-			self.color.print('Sounddevice successfully installed','green')
-		
 		if not self.cpu_only:self.color.print('Installing GPU-specific dependencies...','cyan');self._run_command([python_cmd,'-m','pip','install','onnxruntime-gpu==1.15.1'])
 		return True
 	def _install_pyaudio(self,python_cmd:str)->bool:
@@ -443,101 +414,38 @@ except Exception as e:
 			return False
 	def _download_mistral_model(self)->bool:
 		if self.skip_models:self.color.print('Skipping Mistral model download (--skip-models)','yellow');return True
-		mistral_dir=os.path.join(self.base_dir,'maggie','models','llm','mistral-7b-instruct-v0.3-GPTQ-4bit')
-		essential_files=[
-			'config.json',
-			'tokenizer.json',
-			'tokenizer_config.json',
-			'quantize_config.json',
-			'special_tokens_map.json'
-		]
-		essential_patterns=[
-			lambda files: any(file.endswith('.safetensors') for file in files)
-		]
-		
-		if os.path.exists(mistral_dir) and os.listdir(mistral_dir):
-			files_in_dir=os.listdir(mistral_dir)
-			missing_files=[f for f in essential_files if f not in files_in_dir]
-			failed_patterns=[i for (i, pattern_check) in enumerate(essential_patterns) if not pattern_check(files_in_dir)]
-			
-			if not missing_files and not failed_patterns:
-				self.color.print('Mistral model is available and appears complete','green')
-				return True
+		mistral_dir=os.path.join(self.base_dir,'maggie','models','llm','mistral-7b-instruct-v0.3-GPTQ-4bit');essential_files=['config.json','tokenizer.json','tokenizer_config.json','quantize_config.json','special_tokens_map.json'];essential_patterns=[lambda files:any(file.endswith('.safetensors')for file in files)]
+		if os.path.exists(mistral_dir)and os.listdir(mistral_dir):
+			files_in_dir=os.listdir(mistral_dir);missing_files=[f for f in essential_files if f not in files_in_dir];failed_patterns=[i for(i,pattern_check)in enumerate(essential_patterns)if not pattern_check(files_in_dir)]
+			if not missing_files and not failed_patterns:self.color.print('Mistral model is available and appears complete','green');return True
 			else:
 				self.color.print('Mistral model directory exists but appears incomplete','yellow')
-				if missing_files:
-					self.color.print(f"Missing files: {', '.join(missing_files)}",'yellow')
-				if failed_patterns:
-					self.color.print('Missing model weight files (.safetensors)','yellow')
+				if missing_files:self.color.print(f"Missing files: {', '.join(missing_files)}",'yellow')
+				if failed_patterns:self.color.print('Missing model weight files (.safetensors)','yellow')
 				response=self.color.input('Would you like to try downloading the model again? (y/n): ',color='magenta')
-				if response.lower()!='y':
-					self.color.print('Continuing with existing model files','yellow')
-					return True
-		
+				if response.lower()!='y':self.color.print('Continuing with existing model files','yellow');return True
 		os.makedirs(mistral_dir,exist_ok=True)
-		
 		if not self.skip_models:
-			response=self.color.input('Download Mistral 7B GPTQ model? This requires ~5GB of storage (y/n): ',color='magenta')
-			if response.lower()!='y':
-				self.color.print('Skipping Mistral model download','yellow')
-				return True
-		
+			response=self.color.input('Download Mistral 7B model? This requires ~5GB of storage (y/n): ',color='magenta')
+			if response.lower()!='y':self.color.print('Skipping Mistral model download','yellow');return True
 		if self.has_git:
-			# Testing repository access
-			check_cmd=['git','ls-remote','https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.3-GPTQ']
-			returncode,_,stderr=self._run_command(check_cmd,check=False)
-			
-			if returncode!=0:
-				self.color.print('Cannot access Mistral GPTQ model repository','red')
-				self.color.print(f"Error: {stderr}",'red')
-				response=self.color.input('Continue installation without Mistral model? (y/n): ',color='magenta')
-				return response.lower()=='y'
-			
-			self.color.print('Downloading Mistral 7B GPTQ model using Git (this may take a while)...','cyan')
-			
-			# Clear directory if not empty
-			if os.path.exists(mistral_dir) and os.listdir(mistral_dir):
+			check_cmd=['git','ls-remote','https://huggingface.co/neuralmagic/Mistral-7B-Instruct-v0.3-GPTQ-4bit'];returncode,_,stderr=self._run_command(check_cmd,check=False)
+			if returncode!=0:self.color.print('Cannot access Mistral model repository','red');self.color.print(f"Error: {stderr}",'red');response=self.color.input('Continue installation without Mistral model? (y/n): ',color='magenta');return response.lower()=='y'
+			self.color.print('Downloading Mistral 7B model using Git (this may take a while)...','cyan')
+			if os.path.exists(mistral_dir)and os.listdir(mistral_dir):
 				try:
 					for item in os.listdir(mistral_dir):
 						item_path=os.path.join(mistral_dir,item)
-						if os.path.isfile(item_path):
-							os.remove(item_path)
-						elif os.path.isdir(item_path):
-							shutil.rmtree(item_path)
-				except Exception as e:
-					self.color.print(f"Error cleaning existing model directory: {e}",'red')
-					return False
-			
-			# Clone the repository
-			returncode,_,_=self._run_command([
-				'git', 'clone',
-				'https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.3-GPTQ',
-				mistral_dir
-			], capture_output=False)
-			
+						if os.path.isfile(item_path):os.remove(item_path)
+						elif os.path.isdir(item_path):shutil.rmtree(item_path)
+				except Exception as e:self.color.print(f"Error cleaning existing model directory: {e}",'red');return False
+			returncode,_,_=self._run_command(['git','clone','https://huggingface.co/neuralmagic/Mistral-7B-Instruct-v0.3-GPTQ-4bit',mistral_dir],capture_output=False)
 			if returncode==0:
-				files_in_dir=os.listdir(mistral_dir)
-				missing_files=[f for f in essential_files if f not in files_in_dir]
-				failed_patterns=[i for (i, pattern_check) in enumerate(essential_patterns) if not pattern_check(files_in_dir)]
-				
-				if not missing_files and not failed_patterns:
-					self.color.print('Mistral GPTQ model downloaded and verified successfully','green')
-					return True
-				else:
-					self.color.print('Mistral model download appears incomplete','yellow')
-					response=self.color.input('Continue with potentially incomplete model? (y/n): ',color='magenta')
-					return response.lower()=='y'
-			else:
-				self.color.print('Error downloading Mistral GPTQ model with Git','red')
-				self.color.print('LLM functionality will be limited','yellow')
-				response=self.color.input('Continue installation without Mistral model? (y/n): ',color='magenta')
-				return response.lower()=='y'
-		else:
-			self.color.print('Git not found, cannot download Mistral model','red')
-			self.color.print('Install Git and rerun installation, or download model manually:','yellow')
-			self.color.print('https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.3-GPTQ','yellow')
-			response=self.color.input('Continue installation without Mistral model? (y/n): ',color='magenta')
-			return response.lower()=='y'
+				files_in_dir=os.listdir(mistral_dir);missing_files=[f for f in essential_files if f not in files_in_dir];failed_patterns=[i for(i,pattern_check)in enumerate(essential_patterns)if not pattern_check(files_in_dir)]
+				if not missing_files and not failed_patterns:self.color.print('Mistral model downloaded and verified successfully','green');return True
+				else:self.color.print('Mistral model download appears incomplete','yellow');response=self.color.input('Continue with potentially incomplete model? (y/n): ',color='magenta');return response.lower()=='y'
+			else:self.color.print('Error downloading Mistral model with Git','red');self.color.print('LLM functionality will be limited','yellow');response=self.color.input('Continue installation without Mistral model? (y/n): ',color='magenta');return response.lower()=='y'
+		else:self.color.print('Git not found, cannot download Mistral model','red');self.color.print('Install Git and rerun installation, or download model manually:','yellow');self.color.print('https://huggingface.co/neuralmagic/Mistral-7B-Instruct-v0.3-GPTQ-4bit','yellow');response=self.color.input('Continue installation without Mistral model? (y/n): ',color='magenta');return response.lower()=='y'
 	def _create_recipe_template(self)->bool:
 		template_dir=os.path.join(self.base_dir,'maggie','templates');template_path=os.path.join(template_dir,'recipe_template.docx')
 		if os.path.exists(template_path):self.color.print('Recipe template already exists','green');return True
@@ -627,14 +535,6 @@ if hardware_info['memory']['is_32gb']:
         config['memory'] = {{}}
     config['memory']['max_percent'] = 75
     config['memory']['model_unload_threshold'] = 85
-
-# Update for model path for new AutoGPTQ model
-if 'llm' in config:
-    config['llm']['model_path'] = 'maggie\\\\models\\\\llm\\\\mistral-7b-instruct-v0.3-GPTQ-4bit'
-    config['llm']['model_type'] = 'mistral'
-    config['llm']['use_autogptq'] = True
-    config['llm']['precision_type'] = 'float16'
-    config['llm']['mixed_precision_enabled'] = True
 
 # Write config
 with open(config_path, 'w') as f:
