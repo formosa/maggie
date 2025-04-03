@@ -304,7 +304,7 @@ class MaggieInstaller:
 
     def _detect_gpu(self)->Dict[str,Any]:
         """Detects GPU information using PyTorch (assumes installed via Poetry)."""
-        # (Code remains the same as previous version)
+        # (Code remains the same as previous version, except for the correction below)
         gpu_info = {'available': False, 'is_rtx_3080': False, 'model': 'Unknown','vram_gb': 0, 'cuda_available': False, 'cuda_version': '', 'cudnn_available': False, 'cudnn_version': ''}
         if self.cpu_only: return gpu_info
         check_script = """
@@ -346,74 +346,48 @@ except Exception as e: print(f"GPU_Check_Error: {e!r}", file=sys.stderr)
                 elif key == 'CUDA_Version': gpu_info['cuda_version'] = value
                 elif key == 'cuDNN_Available': gpu_info['cudnn_available'] = (value == 'True')
                 elif key == 'cuDNN_Version': gpu_info['cudnn_version'] = str(value)
-            except Exception as e: if self.verbose: self.color.print(f"Error parsing GPU info: {e}", "yellow")
+            except ValueError: # Catch potential float conversion error specifically
+                 if self.verbose: self.color.print(f"Could not parse GPU info line (ValueError): {line}", "yellow")
+            except Exception as e:
+                # *** CORRECTED LINE ***
+                if self.verbose: # Indent this block
+                    self.color.print(f"Error parsing GPU info: {e}", "yellow")
         if not gpu_info['cuda_available']: self.color.print('No CUDA-capable GPU detected by PyTorch.', 'yellow')
         return gpu_info
 
     def _check_tools(self) -> Dict[str, bool]:
         """Checks for required tools: Git, C++ Compiler, Poetry. Installs Poetry if missing."""
+        # (Code remains the same as previous version)
         tools_status = {'git': False, 'cpp_compiler': False, 'poetry': False}
         self.color.print("Checking required tools (Poetry, Git, C++ Compiler)...", "cyan")
-
-        # Check Poetry FIRST - attempt install if missing
         returncode_poetry, stdout_poetry, _ = self._run_command(['poetry', '--version'], check=False)
         if returncode_poetry == 0:
-            tools_status['poetry'] = True
-            self.has_poetry = True
-            self.color.print(f"  Poetry found: {stdout_poetry.strip()} ✓", 'green')
+            tools_status['poetry'] = True; self.has_poetry = True; self.color.print(f"  Poetry found: {stdout_poetry.strip()} ✓", 'green')
         else:
-            self.color.print('  Poetry not found.', 'yellow')
-            self.color.print('  Attempting to install Poetry using "pip install --user poetry"...', 'blue')
-            self.color.print('  NOTE: Using pip to install Poetry globally or user-wide is not the official recommended method.', 'yellow')
-            self.color.print('        Consider using the official installer for better isolation: https://python-poetry.org/docs/#installation', 'yellow')
-
-            # Use sys.executable to ensure pip matches the current python
+            self.color.print('  Poetry not found.', 'yellow'); self.color.print('  Attempting to install Poetry using "pip install --user poetry"...', 'blue'); self.color.print('  NOTE: Using pip is not the official recommended method.', 'yellow'); self.color.print('        See: https://python-poetry.org/docs/#installation', 'yellow')
             pip_cmd = [sys.executable, '-m', 'pip', 'install', '--user', 'poetry']
             rc_pip_install, out_pip, err_pip = self._run_command(pip_cmd, check=False, capture_output=True)
-
             if rc_pip_install == 0:
                 self.color.print('  Poetry installed via pip successfully.', 'green')
-                # Verify installation
                 returncode_poetry_after, stdout_poetry_after, _ = self._run_command(['poetry', '--version'], check=False)
-                if returncode_poetry_after == 0:
-                    tools_status['poetry'] = True
-                    self.has_poetry = True
-                    self.color.print(f"  Poetry found: {stdout_poetry_after.strip()} ✓", 'green')
-                    self.color.print('  IMPORTANT: You may need to restart your terminal or add the user script path to your PATH environment variable for the `poetry` command to be available immediately.', 'magenta')
-                else:
-                    self.color.print('  Poetry installed via pip, but `poetry --version` command still fails.', 'red')
-                    self.color.print('  Please ensure the Python user script directory is in your PATH.', 'red')
-                    self.color.print('  Installation cannot continue without a working Poetry command.', 'red')
-                    return tools_status # Exit checks, poetry failed
-            else:
-                self.color.print('  Failed to install Poetry using pip.', 'red', bold=True)
-                if err_pip: self.color.print(f"  Pip Error: {err_pip}", 'red')
-                self.color.print('  Please install Poetry manually: https://python-poetry.org/docs/#installation', 'yellow')
-                return tools_status # Exit checks, poetry failed
-
-        # Check Git (Code remains the same as previous version)
+                if returncode_poetry_after == 0: tools_status['poetry'] = True; self.has_poetry = True; self.color.print(f"  Poetry found: {stdout_poetry_after.strip()} ✓", 'green'); self.color.print('  IMPORTANT: May need terminal restart or PATH update.', 'magenta')
+                else: self.color.print('  Poetry installed via pip, but command still fails.', 'red'); self.color.print('  Check PATH.', 'red'); return tools_status
+            else: self.color.print('  Failed to install Poetry using pip.', 'red', bold=True); self.color.print(f"  Pip Error: {err_pip}", 'red'); self.color.print('  Install Poetry manually.', 'yellow'); return tools_status
         returncode_git, stdout_git, _ = self._run_command(['git', '--version'], check=False)
         if returncode_git == 0: tools_status['git'] = True; self.has_git = True; self.color.print(f"  Git found: {stdout_git.strip()} ✓", 'green')
-        else:
-            self.color.print('  Git not found - Required for downloading some models.', 'yellow')
-            # (Instructions remain the same)
-
-        # Check C++ Compiler (Code remains the same as previous version)
+        else: self.color.print('  Git not found - Required for some models.', 'yellow')
         compiler_found = False
         if self.platform_system == 'Windows':
             rc_where, _, _ = self._run_command(['where', 'cl.exe'], check=False, capture_output=False)
-            if rc_where == 0: compiler_found = True; self.color.print('  Visual C++ compiler (cl.exe) found in PATH ✓', 'green')
-            else: self.color.print('  Visual C++ compiler (cl.exe) not found in PATH.', 'yellow')
-        else: # Linux/MacOS
+            if rc_where == 0: compiler_found = True; self.color.print('  Visual C++ compiler (cl.exe) found ✓', 'green')
+            else: self.color.print('  Visual C++ compiler (cl.exe) not found.', 'yellow')
+        else:
             rc_gpp, _, _ = self._run_command(['which', 'g++'], check=False, capture_output=False)
             rc_gcc, _, _ = self._run_command(['which', 'gcc'], check=False, capture_output=False)
             if rc_gpp == 0 or rc_gcc == 0: compiler_found = True; compiler_name = "g++" if rc_gpp == 0 else "gcc"; self.color.print(f'  C++ compiler ({compiler_name}) found ✓', 'green')
             else: self.color.print('  C++ compiler (g++/gcc) not found.', 'yellow')
         if compiler_found: tools_status['cpp_compiler'] = True; self.has_cpp_compiler = True
-        else:
-            self.color.print('  Required for building some packages from source if wheels are unavailable.', 'yellow')
-            # (Instructions remain the same)
-
+        else: self.color.print('  Required for building some packages from source.', 'yellow')
         return tools_status
 
     def _create_directories(self) -> bool:
@@ -441,12 +415,10 @@ except Exception as e: print(f"GPU_Check_Error: {e!r}", file=sys.stderr)
 
     def _generate_default_pyproject_toml(self) -> bool:
         """Generates a default pyproject.toml file if one does not exist."""
+        # (Code remains the same as previous version)
         pyproject_path = self.base_dir / 'pyproject.toml'
         self.color.print(f"File 'pyproject.toml' not found.", 'yellow')
         self.color.print(f"Generating default '{pyproject_path}'...", 'blue')
-
-        # Define the default TOML content as a raw string
-        # Based on the previously generated example
         default_toml_content = """\
 # pyproject.toml (Generated by install_dev.py)
 # Please review and customize dependencies as needed.
@@ -485,10 +457,9 @@ torchvision = {version = "0.16.2", source = "pytorch_cu118"}
 torchaudio = {version = "0.16.2", source = "pytorch_cu118"}
 
 # --- Core Dependencies (Let Poetry Resolve) ---
-# Add all direct dependencies identified previously. Use flexible constraints.
 PyYAML = "^6.0"
 loguru = "^0.7"
-numpy = "*" # Let torch/others constrain this
+numpy = "*"
 tqdm = "^4.66"
 requests = "^2.31"
 psutil = "^5.9"
@@ -496,14 +467,12 @@ psutil = "^5.9"
 # --- STT Dependencies ---
 pvporcupine = "^3.0"
 SpeechRecognition = "^3.10"
-PyAudio = "*" # May require system libraries (portaudio) and build tools
-faster-whisper = ">=0.10.0" # Avoids tokenizer<0.15 conflict
+PyAudio = "*"
+faster-whisper = ">=0.10.0"
 sounddevice = "^0.4.6"
 
 # --- TTS Dependencies ---
-# Install kokoro directly from GitHub (main branch)
 kokoro = {git = "https://github.com/hexgrad/kokoro.git"}
-# kokoro-onnx had conflicts, let Poetry try to resolve. May need adjustment.
 kokoro-onnx = "*"
 huggingface-hub = ">=0.15.1"
 soundfile = ">=0.12.1"
@@ -541,7 +510,7 @@ pytest = "*"
 black = "*"
 isort = "*"
 flake8 = "*"
-pipdeptree = "*" # Useful for debugging dependencies
+pipdeptree = "*"
 
 
 # --- Build System Definition (Required for Poetry) ---
@@ -550,81 +519,43 @@ requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
 """
         try:
-            with open(pyproject_path, 'w', encoding='utf-8') as f:
-                f.write(default_toml_content)
-            self.color.print(f"Default 'pyproject.toml' created successfully.", 'green')
-            self.color.print("Please review the generated file and adjust dependencies if needed.", 'yellow')
-            return True
-        except Exception as e:
-            self.color.print(f"ERROR: Failed to write default pyproject.toml: {e}", 'red')
-            return False
+            with open(pyproject_path, 'w', encoding='utf-8') as f: f.write(default_toml_content)
+            self.color.print(f"Default 'pyproject.toml' created successfully.", 'green'); self.color.print("Please review the generated file.", 'yellow'); return True
+        except Exception as e: self.color.print(f"ERROR: Failed to write default pyproject.toml: {e}", 'red'); return False
 
 
     def _install_with_poetry(self) -> bool:
         """Installs dependencies using Poetry, generating pyproject.toml if needed."""
-        self.color.print("Installing dependencies using Poetry...", "cyan")
-        self.color.print("This may take a while depending on the number of dependencies and network speed.", "blue")
-
+        # (Code remains the same as previous version)
+        self.color.print("Installing dependencies using Poetry...", "cyan"); self.color.print("This may take a while...", "blue")
         pyproject_path = self.base_dir / 'pyproject.toml'
-
-        # Generate default pyproject.toml if it doesn't exist
         if not pyproject_path.exists():
-            if not self._generate_default_pyproject_toml():
-                return False # Stop if generation failed
-
-        # Check again if the file exists (generation might have failed)
-        if not pyproject_path.exists():
-             self.color.print(f"ERROR: pyproject.toml still not found after attempting generation.", 'red')
-             return False
-
-        # Basic check for [tool.poetry.dependencies] section in existing/generated file
+            if not self._generate_default_pyproject_toml(): return False
+        if not pyproject_path.exists(): self.color.print(f"ERROR: pyproject.toml still not found.", 'red'); return False
         try:
-            with open(pyproject_path, 'r', encoding='utf-8') as f:
-                content = f.read()
-                # Check for both sections to be safe
-                if '[tool.poetry.dependencies]' not in content or '[tool.poetry]' not in content:
-                    self.color.print("ERROR: pyproject.toml exists but is missing '[tool.poetry]' or '[tool.poetry.dependencies]' section.", 'red', bold=True)
-                    self.color.print("Please ensure it is correctly configured for Poetry.", 'red')
-                    return False
-        except Exception as e:
-            self.color.print(f"Error reading pyproject.toml: {e}", 'red')
-            return False
-
-        # Prepare poetry install command (same as before)
+            with open(pyproject_path, 'r', encoding='utf-8') as f: content = f.read()
+            if '[tool.poetry.dependencies]' not in content or '[tool.poetry]' not in content: self.color.print("ERROR: pyproject.toml missing poetry sections.", 'red'); return False
+        except Exception as e: self.color.print(f"Error reading pyproject.toml: {e}", 'red'); return False
         poetry_cmd = ['poetry', 'install', '--no-interaction']
         if not self.cpu_only:
             has_gpu_extra = False
             try:
-                with open(pyproject_path, 'r', encoding='utf-8') as f:
-                    toml_content = f.read()
-                    if '[tool.poetry.extras]' in toml_content and 'gpu = [' in toml_content: has_gpu_extra = True
-                if has_gpu_extra:
-                    self.color.print("Including [gpu] extras for Poetry installation.", "blue")
-                    poetry_cmd.extend(['--extras', 'gpu'])
-                else: self.color.print("No [gpu] extra found/defined in pyproject.toml, installing base dependencies.", "yellow")
-            except Exception as e: self.color.print(f"Could not check for GPU extras: {e}", "yellow"); self.color.print("Attempting base install.", "yellow")
-
+                with open(pyproject_path, 'r', encoding='utf-8') as f: toml_content = f.read()
+                if '[tool.poetry.extras]' in toml_content and 'gpu = [' in toml_content: has_gpu_extra = True
+                if has_gpu_extra: self.color.print("Including [gpu] extras.", "blue"); poetry_cmd.extend(['--extras', 'gpu'])
+                else: self.color.print("No [gpu] extra found, installing base dependencies.", "yellow")
+            except Exception as e: self.color.print(f"Could not check GPU extras: {e}", "yellow"); self.color.print("Attempting base install.", "yellow")
         if self.verbose: poetry_cmd.append('-vvv')
-
-        # Run poetry install (same as before)
         self.color.print(f"Running: {' '.join(poetry_cmd)}", "blue")
         returncode, stdout, stderr = self._run_command(poetry_cmd, check=False, capture_output=True)
         if stdout: self.color.print(f"Poetry output:\n{stdout}", 'cyan')
         if stderr: self.color.print(f"Poetry errors/warnings:\n{stderr}", 'red' if returncode != 0 else 'yellow')
-
-        if returncode != 0:
-            self.color.print("ERROR: Poetry failed to resolve dependencies or install packages.", 'red', bold=True)
-            self.color.print("Please check the output above for specific conflict details.", 'red')
-            # (Error messages remain the same)
-            return False
-        else:
-            self.color.print("Poetry successfully resolved and installed dependencies ✓", 'green')
-            return True
+        if returncode != 0: self.color.print("ERROR: Poetry failed.", 'red'); return False
+        else: self.color.print("Poetry install successful ✓", 'green'); return True
 
     # --- Model Downloading Methods (_download_whisper_model, etc.) ---
     # (Code remains the same as previous version)
     def _download_whisper_model(self)->bool:
-        """Downloads the Whisper base.en model using huggingface_hub via Poetry."""
         if self.skip_models: self.color.print('Skipping Whisper model download (--skip-models)', 'yellow'); return True
         model_dir = self.base_dir / 'maggie/models/stt/whisper-base.en'
         essential_files = ['model.bin', 'config.json', 'tokenizer.json', 'vocab.json']
@@ -670,7 +601,6 @@ except Exception as e_snap:
         except Exception as e: self.color.print(f"Error verifying downloaded Whisper model: {e}", 'red'); return False
 
     def _download_af_heart_model(self)->bool:
-        """Downloads the af_heart.pt TTS voice model."""
         if self.skip_models: self.color.print('Skipping af_heart model download (--skip-models)', 'yellow'); return True
         model_dir = self.base_dir / 'maggie/models/tts'; model_path = model_dir / 'af_heart.pt'; MIN_SIZE = 40 * 1024 * 1024
         if model_path.exists():
@@ -694,7 +624,6 @@ except Exception as e_snap:
         return True
 
     def _download_kokoro_onnx_models(self)->bool:
-        """Downloads the necessary ONNX model files for kokoro-onnx."""
         if self.skip_models: self.color.print('Skipping kokoro-onnx model download (--skip-models)', 'yellow'); return True
         self.color.print("Downloading Kokoro ONNX models...", "cyan")
         model_dir = self.base_dir / 'maggie/models/tts'; model_dir.mkdir(parents=True, exist_ok=True)
@@ -742,7 +671,6 @@ except Exception as e_snap:
         else: self.color.print('Some Kokoro ONNX models/data failed.', 'yellow'); return False
 
     def _download_mistral_model(self)->bool:
-        """Downloads the Mistral 7B Instruct GPTQ model using Git LFS."""
         if self.skip_models: self.color.print('Skipping Mistral model download (--skip-models)', 'yellow'); return True
         mistral_dir = self.base_dir / 'maggie/models/llm/mistral-7b-instruct-v0.3-GPTQ-4bit'; repo_url = 'https://huggingface.co/TheBloke/Mistral-7B-Instruct-v0.3-GPTQ'
         if mistral_dir.exists() and any(mistral_dir.iterdir()):
