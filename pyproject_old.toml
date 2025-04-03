@@ -1,0 +1,98 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "maggie"
+version = "0.1.0"
+description = "Maggie AI Assistant - Finite State Machine AI Assistant with modular utilities"
+readme = "README.md"
+requires-python = ">=3.10, <3.11"  # Specific Python 3.10 requirement for compatibility
+license = {text = "MIT"}
+authors = [
+    {name = "Anthony Formosa", email = "emailformosa@gmail.com"}
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    # Core dependencies
+    "PyYAML>=6.0.1",
+    "loguru>=0.7.2",
+    "numpy==1.26.4",
+    "psutil>=5.9.6",
+    "requests>=2.31.0",
+    "tqdm>=4.66.1",
+
+    # STT
+    "pvporcupine==3.0.2",
+    "SpeechRecognition>=3.10.0",
+    "PyAudio>=0.2.14",
+    "faster-whisper>=0.9.0",
+    "sounddevice==0.4.6",  # For accessing microphone input on Windows
+
+    # TTS
+    "kokoro==0.8.4",
+    "kokoro-onnx==0.4.5",
+    "huggingface_hub>=0.15.1",
+    "soundfile>=0.12.1",
+    "librosa>=0.10.0",
+    "phonemizer>=3.2.1",
+    
+    # LLM processing
+    "transformers==4.38.2",
+    "optimum==1.17.1",
+    "accelerate==0.27.2",
+    "safetensors>=0.4.0",
+    "sentencepiece>=0.1.99",
+    "protobuf",
+    "ninja>=1.11.1",
+
+    # UI and document processing
+    "PySide6==6.5.2",
+    "python-docx>=0.8.11",
+    "transitions>=0.9.0",
+    "mammoth>=1.7.0",
+]
+
+[project.optional-dependencies]
+# Note: PyTorch with CUDA 11.8 should be installed separately using:
+# pip install torch==2.1.2 torchvision==0.16.2 torchaudio==2.1.2 --index-url https://download.pytorch.org/whl/cu118
+gpu = [
+    "onnxruntime-gpu>=1.15.1",
+    "auto-gptq==0.7.1",  # Requires CUDA toolkit and potentially C++ build tools
+]
+cuda118 = [
+    # This is only a placeholder - use pip command for actual installation
+    # as PyPI package format doesn't support the index-url parameter
+]
+dev = [
+    "pytest>=7.0.0",
+    "black>=23.0.0",
+    "isort>=5.0.0",
+    "flake8>=6.0.0",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/formosa/maggie"
+"Bug Tracker" = "https://github.com/formosa/maggie/issues"
+
+[tool.setuptools]
+packages = ["maggie", "maggie.core", "maggie.extensions", "maggie.utils", "maggie.service", "maggie.service.llm", "maggie.service.tts", "maggie.service.stt"]
+
+[tool.black]
+line-length = 100
+target-version = ["py310"]
+
+[tool.isort]
+profile = "black"
+line_length = 100
+
+[tool.flake8]
+max-line-length = 100
+exclude = [".git", "__pycache__", "build", "dist"]
