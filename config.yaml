@@ -57,6 +57,7 @@ llm:
   rtx_3080_optimized: true
   tensor_cores_enabled: true
   vram_efficient_loading: true
+  use_autogptq: true  # Added to indicate we're using AutoGPTQ instead of ctransformers
 logging:
   async_enabled: true
   batch_size: 50
@@ -86,6 +87,8 @@ stt:
     minimal_processing: true
     real_time_priority: true
     sensitivity: 0.5
+    pvporcupine_version: 3.0.2  # Updated version
+    use_sounddevice: true  # Added to use the new sounddevice library
   whisper:
     cache_models: true
     chunk_size: 512
