@@ -38,7 +38,7 @@ python = "~3.10" # Specify Python 3.10 compatibility here
 # --- Pinned Dependencies (Using specific source) ---
 torch = {version = "2.1.2", source = "pytorch_cu118"}
 torchvision = {version = "0.16.2", source = "pytorch_cu118"}
-torchaudio = {version = "0.16.2", source = "pytorch_cu118"}
+torchaudio = {version = "2.1.2", source = "pytorch_cu118"} # Corrected version
 
 # --- Core Dependencies (Let Poetry Resolve) ---
 PyYAML = "^6.0"
