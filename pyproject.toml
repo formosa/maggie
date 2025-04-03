@@ -41,16 +41,16 @@ torchaudio = {version = "2.1.2", source = "pytorch_cu118"}
 # --- Core Dependencies (Let Poetry Resolve) ---
 PyYAML = "^6.0"
 loguru = "^0.7"
-numpy = "*"
+numpy = "<2.0" # *** Constrained for PyTorch 2.1 compatibility ***
 tqdm = "^4.66"
 requests = "^2.31"
-psutil = "^5.9" # Already included, used for hardware detection
-WMI = { version = "*", markers = "sys_platform == 'win32'" } # Added: For Windows hardware detection
+psutil = "^5.9"
+WMI = { version = "*", markers = "sys_platform == 'win32'" }
 
 # --- STT Dependencies ---
 pvporcupine = "^3.0"
 SpeechRecognition = "^3.10"
-PyAudio = "*" # May require system libraries (portaudio) and build tools
+PyAudio = "*"
 faster-whisper = ">=0.10.0"
 sounddevice = "^0.4.6"
 
