@@ -65,8 +65,7 @@ if __name__ == "__main__":
             repo_user=repo_user, 
             repo_name=repo_name, 
             parent_dir=parent_path, 
-            token_path=token_path,
-            force_download=force_download
+            token_path=token_path
             )
         )
 
