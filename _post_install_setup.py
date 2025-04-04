@@ -20,8 +20,8 @@ from typing import Dict, Any, List, Tuple, Optional, Union, Callable
 from collections.abc import MutableMapping
 
 # --- Imports for libraries installed by Poetry ---
-# Attempt imports early, but handle failures gracefully in methods that use them
 try:
+    # Import specific exceptions for better handling
     from huggingface_hub import (
         snapshot_download,
         hf_hub_download,
@@ -54,16 +54,15 @@ try:
     import psutil
 except ImportError:
     psutil = None
-    print("Warning: psutil not found, RAM detection will be limited.", file=sys.stderr)
+    # Warning printed in __init__ or detect method
 try:
     import torch
 except ImportError as e:
     torch = None
-    print(f"Warning: PyTorch not found or failed to import ({e}), GPU detection will fail.", file=sys.stderr)
+    # Warning printed in __init__ or detect method
 except UserWarning as w:
     torch = None
-    print(f"Warning: PyTorch import generated a warning (likely NumPy incompatibility): {w}", file=sys.stderr)
-    print("         GPU detection might fail or be inaccurate.", file=sys.stderr)
+    # Warning printed in __init__ or detect method
 
 if platform.system() == "Windows":
     try:
@@ -72,7 +71,7 @@ if platform.system() == "Windows":
         wmi = None
     except Exception:
         wmi = None
-        print("Warning: Failed to import WMI module, detailed Windows CPU info unavailable.", file=sys.stderr)
+        # Warning printed in __init__ or detect method
 else:
     wmi = None
 
@@ -117,7 +116,6 @@ class ColorOutput:
 
 class ProgressTracker:
     """Tracks and displays installation progress."""
-    # (Code remains the same as previous corrected version)
     def __init__(self, color: ColorOutput, total_steps: int = 10, initial_step: int = 0):
         self.color = color; self.total_steps = total_steps; self.current_step = initial_step; self.start_time = time.time()
     def start_step(self, step_name: str):
@@ -130,12 +128,15 @@ class ProgressTracker:
         if message: msg += f": {message}"
         self.color.print(msg, color=color)
     def elapsed_time(self) -> float: return time.time() - self.start_time
+    # *** display_summary method restored ***
     def display_summary(self, success: bool = True):
+        """Displays the final installation summary."""
         elapsed = self.elapsed_time()
         if success: status = 'Installation Completed Successfully'; color = 'green'
         else: status = 'Installation Completed with Errors or Warnings'; color = 'yellow'
         self.color.print(f"\n=== {status} ===", color=color, bold=True)
         self.color.print(f"Total time: {elapsed:.1f} seconds")
+    # *** End of restoration ***
 
 # --- Post-Install Setup Class ---
 
@@ -159,27 +160,24 @@ class PostInstallSetup:
 
     def _setup_hf_token(self):
         """Reads token from _access.token and sets HF_TOKEN environment variable."""
+        # (Code remains the same)
         token_file = self.base_dir / "_access.token"
         self.color.print("Checking for Hugging Face token file...", "blue")
         try:
             if token_file.is_file():
-                with open(token_file, 'r') as f:
-                    token = f.readline().strip()
+                with open(token_file, 'r') as f: token = f.readline().strip()
                 if token:
                     os.environ['HF_TOKEN'] = token
                     self.color.print("  Found _access.token, HF_TOKEN environment variable set.", "green")
                     if self.verbose:
-                         # Use a placeholder to avoid logging the actual token
                          token_display = token[:4] + "..." + token[-4:] if len(token) > 8 else token[:4] + "..."
                          self.color.print(f"    Token: {token_display}", "cyan")
-                else:
-                    self.color.print("  Found _access.token but it is empty.", "yellow")
+                else: self.color.print("  Found _access.token but it is empty.", "yellow")
             else:
                 self.color.print("  _access.token file not found.", "yellow")
                 self.color.print("  Downloads for private/gated models might fail.", "yellow")
                 self.color.print("  Consider creating '_access.token' or using 'huggingface-cli login'.", "yellow")
-        except Exception as e:
-            self.color.print(f"  Error reading _access.token file: {e}", "red")
+        except Exception as e: self.color.print(f"  Error reading _access.token file: {e}", "red")
 
     def _check_git_exists(self) -> bool:
         """Checks if git command is available."""
@@ -381,7 +379,7 @@ class PostInstallSetup:
 
     def _setup_config(self)->bool:
         """Creates or updates the config.yaml based on hardware detection."""
-        # *** MODIFIED: Update Mistral model path ***
+        # *** MODIFIED: Update LLM model path and type ***
         config_path = self.base_dir / 'config.yaml'; example_path = self.base_dir / 'config.yaml.example'
         if not example_path.exists(): example_path = self.base_dir / 'config.yaml.txt'
         if not example_path.exists(): example_path = self.base_dir / 'config-yaml-example.txt'
@@ -422,33 +420,43 @@ class PostInstallSetup:
             # Apply settings
             llm_config = ensure_keys(config, ['llm']); gpu_config = ensure_keys(config, ['gpu']); cpu_config = ensure_keys(config, ['cpu']); mem_config = ensure_keys(config, ['memory']); stt_config = ensure_keys(config, ['stt']); stt_whisper_config = ensure_keys(stt_config, ['whisper']) if stt_config else None; tts_config = ensure_keys(config, ['tts'])
 
-            # *** Use the NEW Mistral directory name ***
-            mistral_dir_name = 'neuralmagic-Mistral-7B-Instruct-v0.3-GPTQ-4bit'
-            if llm_config is not None: llm_config.update({'model_path': f'maggie/models/llm/{mistral_dir_name}', 'model_type': 'mistral', 'use_autogptq': True})
-            if stt_whisper_config is not None: stt_whisper_config['model_path'] = 'maggie/models/stt/whisper-base.en'
-            if tts_config is not None: tts_config.update({'model_path': 'maggie/models/tts', 'voice_model': 'af_heart'}) # Corrected voice name
+            # *** Use the NEW Phi-4 directory name and type ***
+            llm_dir_name = 'microsoft/Phi-4-multimodal-instruct-onnx' # Use repo structure
+            if llm_config is not None:
+                llm_config.update({
+                    'model_path': f'maggie/models/llm/{llm_dir_name}',
+                    'model_type': 'phi-msft', # Use specific type for Phi-4
+                    'use_autogptq': False # ONNX model likely doesn't use AutoGPTQ
+                })
+                llm_config.pop('rtx_3080_optimized', None) # Remove potentially irrelevant flags
+
+            # *** Use the NEW Whisper directory name and size ***
+            whisper_dir_name = 'faster-whisper-large-v3-turbo-ct2'
+            if stt_whisper_config is not None:
+                 stt_whisper_config['model_path'] = f'maggie/models/stt/{whisper_dir_name}'
+                 stt_whisper_config['model_size'] = 'large-v3-turbo' # Update model size
+
+            if tts_config is not None: tts_config.update({'model_path': 'maggie/models/tts', 'voice_model': 'af_heart'})
 
             gpu_hw = self.hardware_info.get('gpu', {}); cpu_hw = self.hardware_info.get('cpu', {}); mem_hw = self.hardware_info.get('memory', {})
             if self.cpu_only:
                 self.color.print("Applying CPU-only optimizations...", "blue")
-                if llm_config: llm_config.update({'gpu_layers': 0, 'gpu_layer_auto_adjust': False}); llm_config.pop('rtx_3080_optimized', None)
+                if llm_config: llm_config.update({'gpu_layers': 0, 'gpu_layer_auto_adjust': False})
                 if gpu_config: gpu_config.update({'max_percent': 0, 'model_unload_threshold': 0}); gpu_config.pop('rtx_3080_optimized', None)
                 if tts_config: tts_config['gpu_acceleration'] = False
                 if stt_whisper_config: stt_whisper_config['compute_type'] = 'int8'
             else:
                 if gpu_hw.get('cuda_available'):
                     self.color.print("Applying GPU optimizations...", "blue")
-                    if llm_config: llm_config.update({'gpu_layer_auto_adjust': True, 'precision_type': 'float16', 'mixed_precision_enabled': True})
+                    if llm_config: llm_config.update({'gpu_layer_auto_adjust': False}) # ONNX might not support auto-adjust
                     if tts_config: tts_config.update({'gpu_acceleration': True})
-                    if stt_whisper_config: stt_whisper_config['compute_type'] = 'float16'
+                    if stt_whisper_config: stt_whisper_config['compute_type'] = 'float16' # Default GPU type
                     if gpu_hw.get('is_rtx_3080'):
                         self.color.print("Applying RTX 3080 specific optimizations...", "blue")
-                        if llm_config: llm_config.update({'gpu_layers': 32, 'rtx_3080_optimized': True})
                         if gpu_config: gpu_config.update({'max_percent': 90, 'model_unload_threshold': 95, 'rtx_3080_optimized': True})
                         if tts_config: tts_config['gpu_precision'] = 'mixed_float16'
                     else:
                         self.color.print("Applying generic GPU optimizations...", "blue")
-                        if llm_config: llm_config.update({'gpu_layers': -1}); llm_config.pop('rtx_3080_optimized', None)
                         if gpu_config: gpu_config.update({'max_percent': 85, 'model_unload_threshold': 90}); gpu_config.pop('rtx_3080_optimized', None)
                         if tts_config: tts_config['gpu_precision'] = 'float16'
                 else:
@@ -480,176 +488,245 @@ class PostInstallSetup:
             return False
         # *** End of modification ***
 
-    def _download_whisper_model(self)->bool:
-        """Downloads the Whisper base.en model using huggingface_hub directly."""
-        # (Code remains the same as previous corrected version)
-        if self.skip_models: self.color.print('Skipping Whisper model download (--skip-models)', 'yellow'); return True
-        if not snapshot_download or not hf_hub_download: self.color.print("ERROR: huggingface-hub not available.", "red"); return False
+    def _download_hf_snapshot(self, repo_user: str, repo_name: str, target_dir: Optional[Path] = None, parent_dir: Optional[Path] = None, force_download: bool = False, **kwargs) -> Optional[str]:
+        """
+        Downloads a model snapshot from Hugging Face Hub using snapshot_download.
+        Relies on HF_TOKEN environment variable for authentication if needed.
+        """
+        # *** Integrated user function (modified) ***
+        if not snapshot_download:
+            self.color.print("ERROR: huggingface-hub not available.", "red")
+            return None
 
-        model_dir = self.base_dir / 'maggie/models/stt/whisper-base.en'
-        essential_files = ['model.bin', 'config.json', 'tokenizer.json', 'vocab.json']
-        repo_id = "openai/whisper-base.en"
-        if model_dir.exists():
-            try:
-                files_in_dir = {f.name for f in model_dir.iterdir() if f.is_file()}
-                if all(essential_file in files_in_dir for essential_file in essential_files): self.color.print('Whisper model already available ✓', 'green'); return True
-                else: self.color.print('Whisper dir exists but incomplete. Re-downloading...', 'yellow')
-            except Exception as e: self.color.print(f"Error checking Whisper dir: {e}", 'yellow')
-        model_dir.mkdir(parents=True, exist_ok=True)
-        self.color.print(f'Downloading Whisper model ({repo_id})...', 'cyan')
-        download_attempted = False
+        repo_id = f"{repo_user}/{repo_name}"
+
+        # Determine local directory path
+        local_dir = None
+        if target_dir:
+            local_dir = Path(target_dir)
+        elif parent_dir:
+            # Use user/repo structure for clarity if parent_dir is used
+            local_dir = Path(parent_dir) / repo_user / repo_name
+        else:
+            # Default to subfolder in current dir if neither is specified (less ideal)
+            local_dir = Path.cwd() / repo_user / repo_name
+
+        self.color.print(f"Downloading snapshot for {repo_id} to {local_dir}...", 'cyan')
+
         try:
-            snapshot_download(repo_id=repo_id, local_dir=str(model_dir), allow_patterns=["*.json", "*.bin", "*.txt", "preprocessor_config.json", "generation_config.json"], ignore_patterns=["*.safetensors", "*.h5", "*.ot", "flax*", "tf*"], local_dir_use_symlinks=False, resume_download=True)
-            self.color.print("Snapshot download attempt complete.", "blue")
-            download_attempted = True
-        except Exception as e_snap:
-            self.color.print(f"Snapshot download failed: {e_snap!r}", "yellow"); self.color.print("Attempting fallback download...", "yellow")
-            # Fallback logic integrated below
+            local_dir.mkdir(parents=True, exist_ok=True)
+            # snapshot_download uses HF_TOKEN env var automatically if set
+            # token= parameter removed from here, relies on _setup_hf_token
+            downloaded_path = snapshot_download(
+                repo_id=repo_id,
+                local_dir=str(local_dir),
+                force_download=force_download,
+                local_dir_use_symlinks=False, # Deprecated but keep for safety
+                resume_download=True,
+                **kwargs # Pass other args like allow_patterns, ignore_patterns
+            )
+            self.color.print(f"Snapshot download complete for {repo_id} ✓", 'green')
+            # Verify directory is not empty after download
+            if not any(local_dir.iterdir()):
+                 self.color.print(f"Warning: Downloaded directory {local_dir} appears empty.", "yellow")
+                 # Decide if this is an error - snapshot_download should raise if failed
+                 # return None
+            return downloaded_path # Return the actual path
 
-        # Verification and Fallback for model.bin
-        try:
-            files_in_dir = {f.name for f in model_dir.iterdir() if f.is_file()}
-            missing_files = [f for f in essential_files if f not in files_in_dir]
-
-            if 'model.bin' in missing_files: # Try fallback only if needed
-                self.color.print("model.bin missing after snapshot/check, attempting individual download...", "yellow")
-                try:
-                    hf_hub_download(repo_id=repo_id, filename='model.bin', local_dir=str(model_dir), resume_download=True)
-                    files_in_dir = {f.name for f in model_dir.iterdir() if f.is_file()} # Recheck files
-                    missing_files = [f for f in essential_files if f not in files_in_dir] # Recheck missing
-                except Exception as e_file:
-                    self.color.print(f"Failed to download model.bin individually: {e_file!r}", "red")
-                    # Keep model.bin in missing_files
-
-            if not missing_files:
-                self.color.print('Whisper base.en model downloaded and verified successfully ✓', 'green'); return True
-            else:
-                self.color.print(f'Whisper download incomplete. Missing: {", ".join(missing_files)}', 'yellow'); return False
+        except (RepositoryNotFoundError, EntryNotFoundError) as e_nf:
+            self.color.print(f"Download failed for {repo_id}: Repository or specific entry not found.", "red")
+            self.color.print(f"  -> Check repo ID or login via 'huggingface-cli login' if private: https://huggingface.co/{repo_id}", "yellow")
+            return None
         except Exception as e:
-            self.color.print(f"Error verifying downloaded Whisper model: {e}", 'red'); return False
+            self.color.print(f"An error occurred while downloading snapshot for {repo_id}: {e!r}", "red")
+            return None
+        # *** End of Integration/Modification ***
 
+    def _download_whisper_model(self)->bool:
+        """Downloads the specified faster-whisper model using snapshot download."""
+        # *** MODIFIED: Use new repo and _download_hf_snapshot ***
+        if self.skip_models: self.color.print('Skipping Whisper model download (--skip-models)', 'yellow'); return True
 
-    def _download_kokoro_onnx_models(self)->bool:
-        """Downloads the necessary ONNX model files for kokoro-onnx."""
-        # (Code remains the same as previous corrected version)
-        if self.skip_models: self.color.print('Skipping kokoro-onnx model download (--skip-models)', 'yellow'); return True
-        if not snapshot_download or not hf_hub_download: self.color.print("ERROR: huggingface-hub not available.", "red"); return False
+        repo_user = "deepdml"
+        repo_name = "faster-whisper-large-v3-turbo-ct2"
+        model_dir_name = "faster-whisper-large-v3-turbo-ct2" # Simpler dir name
+        model_dir = self.base_dir / 'maggie/models/stt' / model_dir_name
 
-        self.color.print("Downloading Kokoro ONNX models...", "cyan")
-        model_dir = self.base_dir / 'maggie/models/tts'; model_dir.mkdir(parents=True, exist_ok=True)
-        kokoro_onnx_repo = "onnx-community/Kokoro-82M-ONNX" # Corrected Repo ID
-        required_assets = [
-            {'type': 'file', 'name': 'model.onnx', 'repo': kokoro_onnx_repo, 'subpath': 'onnx/model.onnx', 'min_size': 10*1024*1024},
-            {'type': 'file', 'name': 'model_quantized.onnx', 'repo': kokoro_onnx_repo, 'subpath': 'onnx/model_quantized.onnx', 'min_size': 5*1024*1024, 'optional': True},
-            {'type': 'file', 'name': 'voices-v1.0.bin', 'repo': kokoro_onnx_repo, 'subpath': 'voices-v1.0.bin', 'min_size': 5*1024*1024},
-            {'type': 'file', 'name': 'tokens.txt', 'repo': kokoro_onnx_repo, 'subpath': 'tokens.txt', 'min_size': 100}, # Try root path
-            {'type': 'dir', 'name': 'espeak-ng-data', 'repo': "rhasspy/espeak-ng-data", 'repo_type': 'dataset'},
-        ]
-        all_successful = True
-        for asset in required_assets:
-            asset_name = asset['name']; asset_path = model_dir / asset_name; min_size = asset.get('min_size', 0); is_optional = asset.get('optional', False)
-            if asset_path.exists():
-                is_ok = False
-                if asset['type'] == 'dir' and asset_path.is_dir() and any(asset_path.iterdir()): is_ok = True
-                elif asset['type'] == 'file' and asset_path.is_file():
-                    try:
-                        file_size = asset_path.stat().st_size
-                        if file_size >= min_size: is_ok = True
-                        else: self.color.print(f"Existing {asset_name} incorrect size. Re-downloading...", 'yellow')
-                    except Exception as e_check: self.color.print(f"Error checking {asset_name}: {e_check}. Re-downloading...", 'yellow')
-                if is_ok: self.color.print(f"{asset_name} already exists ✓", 'green'); continue
-
-            self.color.print(f"Downloading {asset_name} from {asset['repo']}...", 'cyan')
-            repo_id = asset['repo']; repo_type = asset.get('repo_type', 'model'); filename = asset.get('subpath', asset_name)
-            download_success = False
-            downloaded_path_str = None
-            try:
-                if asset['type'] == 'file':
-                    downloaded_path_str = hf_hub_download(repo_id=repo_id, repo_type=repo_type, filename=filename, local_dir=str(model_dir), local_dir_use_symlinks=False, resume_download=True, local_dir_creation=False)
-                    if asset_path.is_file(): download_success = True
-                    else: self.color.print(f"Download call for {asset_name} finished but file not found at {asset_path}", "red")
-                elif asset['type'] == 'dir':
-                    snapshot_download(repo_id=repo_id, repo_type=repo_type, local_dir=str(asset_path), local_dir_use_symlinks=False, resume_download=True)
-                    if asset_path.is_dir() and any(asset_path.iterdir()): download_success = True
-                    else: self.color.print(f"Snapshot download for {asset_name} finished but dir empty/missing.", "red")
-                else: self.color.print(f"Unknown asset type '{asset['type']}'", 'red'); all_successful = False if not is_optional else all_successful; continue
-            except EntryNotFoundError as e_nf:
-                self.color.print(f"Download failed for {asset_name}: File not found in repo.", "red"); self.color.print(f"  -> Tried path: {filename} in {repo_id}", "yellow"); self.color.print(f"  -> Check URL/Repo: https://huggingface.co/{repo_id}/tree/main", "blue"); all_successful = False if not is_optional else all_successful; continue
-            except RepositoryNotFoundError as e_rnf:
-                 self.color.print(f"Download failed for {asset_name}: Repository not found or private.", "red"); self.color.print(f"  -> Tried repo: {repo_id} (type: {repo_type})", "yellow"); self.color.print(f"  -> Check repo exists and consider 'huggingface-cli login' if private.", "blue"); all_successful = False if not is_optional else all_successful; continue
-            except Exception as e: self.color.print(f"Download failed for {asset_name}: {e!r}", "red"); all_successful = False if not is_optional else all_successful; continue
-            if download_success:
-                if asset['type'] == 'file':
-                    try:
-                        file_size = asset_path.stat().st_size
-                        if file_size >= min_size: self.color.print(f"{asset_name} download successful ✓", 'green')
-                        else: self.color.print(f"Downloaded {asset_name} incorrect size.", 'yellow'); asset_path.unlink(missing_ok=True); all_successful = False if not is_optional else all_successful
-                    except FileNotFoundError: self.color.print(f"Verification failed: {asset_name} not found after download.", "red"); all_successful = False if not is_optional else all_successful
-                    except Exception as e_verify: self.color.print(f"Error verifying {asset_name}: {e_verify}", 'red'); all_successful = False if not is_optional else all_successful
-                elif asset['type'] == 'dir': self.color.print(f"{asset_name} download successful ✓", 'green')
-            else: all_successful = False if not is_optional else all_successful
-        if all_successful: self.color.print('Kokoro ONNX models/data downloaded successfully ✓', 'green'); return True
-        else: self.color.print('Some Kokoro ONNX models/data failed.', 'yellow'); return False
-
-
-    def _download_mistral_model(self)->bool:
-        """Downloads the Mistral 7B Instruct GPTQ model using Git LFS."""
-        # *** MODIFIED: Use new repo URL and directory name ***
-        if self.skip_models: self.color.print('Skipping Mistral model download (--skip-models)', 'yellow'); return True
-
-        # Use the new repo specified by the user
-        repo_id = 'neuralmagic/Mistral-7B-Instruct-v0.3-GPTQ-4bit'
-        repo_url = f'https://huggingface.co/{repo_id}'
-        # Use a directory name reflecting the source
-        mistral_dir_name = 'neuralmagic-Mistral-7B-Instruct-v0.3-GPTQ-4bit'
-        mistral_dir = self.base_dir / f'maggie/models/llm/{mistral_dir_name}'
-
-        if mistral_dir.exists() and any(mistral_dir.iterdir()):
-             self.color.print(f"Mistral model directory exists: {mistral_dir}", 'yellow')
+        # Check if directory exists and prompt user if non-empty
+        if model_dir.exists() and any(model_dir.iterdir()):
+             self.color.print(f"Whisper model directory already exists: {model_dir}", 'yellow')
              response = self.color.input("  Download again (y) or keep existing (n)? [n]: ", color='magenta')
              if response.lower() != 'y':
                  self.color.print("Keeping existing model files.", 'green')
                  return True
              else:
                  self.color.print("Removing existing directory before download...", 'yellow')
-                 shutil.rmtree(mistral_dir, ignore_errors=True)
+                 shutil.rmtree(model_dir, ignore_errors=True)
 
-        mistral_dir.parent.mkdir(parents=True, exist_ok=True)
-        if not self.has_git: self.color.print('Git not found. Cannot download Mistral.', 'red'); return False
-        lfs_check_code, _, _ = self._run_command(['git', 'lfs', '--version'], check=False, capture_output=False)
-        if lfs_check_code != 0: self.color.print("Git LFS not found.", 'red'); return False
-        self._run_command(['git', 'lfs', 'install', '--skip-repo'], check=False, capture_output=False)
+        # Use the snapshot download helper
+        # Specify typical CTranslate2 model file patterns
+        downloaded_path = self._download_hf_snapshot(
+            repo_user=repo_user,
+            repo_name=repo_name,
+            target_dir=model_dir, # Use target_dir directly
+            allow_patterns=["*.bin", "*.json", "*.txt", "*.py"], # Common CTranslate2 patterns
+            ignore_patterns=["onnx/*", "*.onnx", "*.ot", "*.pb", "tf_*", "flax_*", "*.h5"], # Ignore other formats
+        )
 
-        self.color.print(f"Downloading Mistral model from {repo_url} using Git LFS...", 'cyan')
-        self.color.print("This is a large download and may take a significant amount of time.", 'blue')
-
-        clone_env = os.environ.copy(); clone_env['GIT_LFS_SKIP_SMUDGE'] = '1'
-        returncode_clone, _, stderr_clone = self._run_command(['git', 'clone', repo_url, str(mistral_dir)], check=False, capture_output=True, env=clone_env)
-        if returncode_clone != 0 and 'already exists' not in stderr_clone:
-             self.color.print('Error initiating Git clone.', 'red'); self.color.print(f"Git error: {stderr_clone}", 'red'); shutil.rmtree(mistral_dir, ignore_errors=True); return False
-
-        self.color.print("Git repo cloned. Pulling LFS files...", 'cyan')
-        returncode_lfs, stdout_lfs, stderr_lfs = self._run_command(['git', 'lfs', 'pull'], check=False, capture_output=True, cwd=str(mistral_dir))
-        if self.verbose and stdout_lfs: self.color.print(f"LFS pull output:\n{stdout_lfs}", "cyan")
-        if stderr_lfs: self.color.print(f"LFS pull stderr:\n{stderr_lfs}", "yellow" if returncode_lfs == 0 else "red")
-        if returncode_lfs != 0:
-            self.color.print('Error pulling Git LFS files.', 'red')
-            self.color.print('  -> Check network connection, disk space, and Git LFS setup.', 'yellow')
-            return False
-
-        # Basic verification - adjust filenames if needed for this specific repo
-        # Check the neuralmagic repo for typical file names
-        essential_configs = ['config.json', 'tokenizer.json', 'quantize_config.json'] # Assume standard names
-        has_safetensors = False
-        try:
-             files_in_dir = {f.name for f in mistral_dir.iterdir()}; missing_configs = [f for f in essential_configs if f not in files_in_dir]; has_safetensors = any(f.endswith('.safetensors') for f in files_in_dir)
-             if not missing_configs and has_safetensors: self.color.print('Mistral model downloaded & verified ✓', 'green'); return True
+        if downloaded_path and Path(downloaded_path).exists():
+             # Basic verification: Check for common CTranslate2 files
+             essential_files = ['model.bin', 'config.json', 'tokenizer.json', 'vocabulary.txt'] # Or vocab.json? Check repo.
+             files_in_dir = {f.name for f in Path(downloaded_path).iterdir()}
+             missing = [f for f in essential_files if f not in files_in_dir]
+             if not missing:
+                 self.color.print(f"{repo_id} model downloaded and verified ✓", 'green')
+                 return True
              else:
-                 self.color.print('Mistral download incomplete.', 'yellow')
-                 if missing_configs: self.color.print(f"  Missing config files: {', '.join(missing_configs)}", 'yellow')
-                 if not has_safetensors: self.color.print("  Missing model weights file (.safetensors)", 'yellow')
+                 self.color.print(f"Whisper download appears incomplete. Missing: {', '.join(missing)}", 'yellow')
                  return False
-        except Exception as e: self.color.print(f"Error verifying Mistral download: {e}", 'red'); return False
+        else:
+            self.color.print(f"Failed to download or verify {repo_id} model.", 'red')
+            return False
+        # *** End of modification ***
+
+    def _download_kokoro_onnx_models(self)->bool:
+        """Downloads the necessary ONNX model files for kokoro using direct GitHub links."""
+        # *** MODIFIED: Use direct download logic from user snippet ***
+        if self.skip_models: self.color.print('Skipping kokoro model download (--skip-models)', 'yellow'); return True
+
+        self.color.print("Downloading Kokoro TTS models (from GitHub Releases)...", "cyan")
+        model_dir= self.base_dir / 'maggie' / 'models' / 'tts' # Use pathlib
+        model_dir.mkdir(parents=True, exist_ok=True)
+
+        # List of models to download with their URLs and minimum expected sizes
+        models=[
+            {
+                'name':'kokoro-v1.0.onnx',
+                'url':'https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx',
+                'min_size':10*1024*1024  # 10 MB minimum size check
+            },
+            {
+                'name':'voices-v1.0.bin',
+                'url':'https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin',
+                'min_size':5*1024*1024   # 5 MB minimum size check
+            }
+            # Add tokens.txt or others here if they are also in GitHub releases
+        ]
+
+        all_successful=True
+        for model in models:
+            model_path = model_dir / model['name']
+            min_size = model['min_size']
+
+            # Check if file already exists and has sufficient size
+            if model_path.exists():
+                try:
+                    file_size=model_path.stat().st_size
+                    if file_size>=min_size:
+                        self.color.print(f"{model['name']} already exists ({file_size/(1024*1024):.2f} MB) ✓",'green')
+                        continue
+                    else:
+                        self.color.print(f"Existing {model['name']} has incorrect size: {file_size/(1024*1024):.2f} MB. Re-downloading...",'yellow')
+                except Exception as e_stat:
+                     self.color.print(f"Error checking existing {model['name']}: {e_stat}. Re-downloading...", 'yellow')
+
+            # Download the file using the internal helper
+            self.color.print(f"Downloading {model['name']}...",'cyan')
+            if self._download_file(model['url'], str(model_path)):
+                try:
+                    file_size=model_path.stat().st_size
+                    if file_size>=min_size:
+                        self.color.print(f"{model['name']} download successful ({file_size/(1024*1024):.2f} MB)",'green')
+                    else:
+                        self.color.print(f"Downloaded file has incorrect size: {file_size/(1024*1024):.2f} MB",'yellow')
+                        model_path.unlink(missing_ok=True)
+                        all_successful=False
+                except FileNotFoundError:
+                     self.color.print(f"Verification failed: {model['name']} not found after download attempt.", "red")
+                     all_successful=False
+                except Exception as e_verify:
+                     self.color.print(f"Error verifying {model['name']}: {e_verify}", 'red')
+                     all_successful=False
+            else:
+                self.color.print(f"Failed to download {model['name']}",'red')
+                all_successful=False
+
+        # Still attempt espeak-ng-data download from HF Hub
+        self.color.print("Downloading espeak-ng-data (required by kokoro)...", 'cyan')
+        espeak_dir = model_dir / 'espeak-ng-data'
+        espeak_ok = False
+        if espeak_dir.exists() and any(espeak_dir.iterdir()):
+            self.color.print("espeak-ng-data directory already exists ✓", "green")
+            espeak_ok = True
+        elif hf_hub_available:
+             try:
+                 snapshot_download(repo_id="rhasspy/espeak-ng-data", repo_type="dataset", local_dir=str(espeak_dir), resume_download=True)
+                 if espeak_dir.is_dir() and any(espeak_dir.iterdir()):
+                     self.color.print("espeak-ng-data downloaded successfully ✓", "green")
+                     espeak_ok = True
+                 else:
+                     self.color.print("espeak-ng-data download finished but directory is empty/missing.", "red")
+             except (RepositoryNotFoundError, EntryNotFoundError) as e_nf:
+                 self.color.print(f"Download failed for espeak-ng-data: Repository not found or private.", "red")
+                 self.color.print(f"  -> Check repo ID/type or login via 'huggingface-cli login'.", "yellow")
+             except Exception as e:
+                 self.color.print(f"Download failed for espeak-ng-data: {e!r}", "red")
+        else:
+             self.color.print("huggingface-hub library not available, cannot download espeak-ng-data.", "red")
+
+        if not espeak_ok: all_successful = False
+
+
+        if all_successful:
+            self.color.print('Kokoro models downloaded successfully ✓','green')
+            return True
+        else:
+            self.color.print('Some Kokoro models/data failed to download','yellow')
+            return False
+        # *** End of modification ***
+
+
+    def _download_llm_model(self)->bool: # Renamed from _download_mistral_model
+        """Downloads the specified LLM model using snapshot download."""
+        # *** MODIFIED: Use _download_hf_snapshot with Phi-4 repo ***
+        if self.skip_models:
+            self.color.print('Skipping LLM model download (--skip-models)', 'yellow')
+            return True
+
+        repo_user = "microsoft"
+        repo_name = "Phi-4-multimodal-instruct-onnx"
+        repo_id = f"{repo_user}/{repo_name}" # For messages
+        # Define parent directory for models
+        parent_dir = self.base_dir / 'maggie/models/llm'
+        # Construct the expected final directory path using user/repo structure
+        llm_dir = parent_dir / repo_user / repo_name
+
+        # Check if directory exists and prompt user if non-empty
+        if llm_dir.exists() and any(llm_dir.iterdir()):
+             self.color.print(f"LLM model directory already exists: {llm_dir}", 'yellow')
+             response = self.color.input("  Download again (y) or keep existing (n)? [n]: ", color='magenta')
+             if response.lower() != 'y':
+                 self.color.print("Keeping existing model files.", 'green')
+                 return True
+             else:
+                 self.color.print("Removing existing directory before download...", 'yellow')
+                 shutil.rmtree(llm_dir, ignore_errors=True)
+
+        # Use the snapshot download helper
+        downloaded_path = self._download_hf_snapshot(
+            repo_user=repo_user,
+            repo_name=repo_name,
+            parent_dir=parent_dir, # Will create microsoft/Phi-4... structure
+            # Add ignore patterns if needed, e.g., ignore_patterns=["*.pt", "*.safetensors"]
+        )
+
+        if downloaded_path and Path(downloaded_path).exists() and any(Path(downloaded_path).iterdir()):
+            # Basic verification: just check if the directory is not empty
+            self.color.print(f"{repo_id} model downloaded successfully ✓", 'green')
+            return True
+        else:
+            self.color.print(f"Failed to download or verify {repo_id} model.", 'red')
+            return False
         # *** End of modification ***
 
     def _create_recipe_template(self)->bool:
@@ -703,14 +780,15 @@ class PostInstallSetup:
         models_ok = True
         # *** REMOVED CALL to _download_af_heart_model ***
         if not self._download_kokoro_onnx_models():
-             self.color.print('Warning: Failed kokoro-onnx download.', 'yellow')
-             # models_ok = False # Decide if this should be fatal
+             self.color.print('Warning: Failed kokoro download.', 'yellow') # Updated message slightly
+             models_ok = False # Decide if this should be fatal
         if not self._download_whisper_model():
              self.color.print('Warning: Failed Whisper download.', 'yellow')
-             # models_ok = False # Decide if this should be fatal
-        if not self._download_mistral_model():
-             self.color.print('Warning: Failed Mistral download.', 'yellow')
-             # models_ok = False # Decide if this should be fatal
+             models_ok = False # Decide if this should be fatal
+        # *** Calls the renamed _download_llm_model ***
+        if not self._download_llm_model():
+             self.color.print('Warning: Failed LLM download.', 'yellow')
+             models_ok = False # Decide if this should be fatal
 
         self.progress.complete_step(models_ok)
 
