@@ -159,25 +159,25 @@ class PostInstallSetup:
         self._setup_hf_token() # Attempt to set HF token from file
 
     def _setup_hf_token(self):
-        """Reads token from _access.token and sets HF_TOKEN environment variable."""
+        """Reads token from _hf_access.token and sets HF_TOKEN environment variable."""
         # (Code remains the same)
-        token_file = self.base_dir / "_access.token"
+        token_file = self.base_dir / "_hf_access.token"
         self.color.print("Checking for Hugging Face token file...", "blue")
         try:
             if token_file.is_file():
                 with open(token_file, 'r') as f: token = f.readline().strip()
                 if token:
                     os.environ['HF_TOKEN'] = token
-                    self.color.print("  Found _access.token, HF_TOKEN environment variable set.", "green")
+                    self.color.print("  Found _hf_access.token, HF_TOKEN environment variable set.", "green")
                     if self.verbose:
                          token_display = token[:4] + "..." + token[-4:] if len(token) > 8 else token[:4] + "..."
                          self.color.print(f"    Token: {token_display}", "cyan")
-                else: self.color.print("  Found _access.token but it is empty.", "yellow")
+                else: self.color.print("  Found _hf_access.token but it is empty.", "yellow")
             else:
-                self.color.print("  _access.token file not found.", "yellow")
+                self.color.print("  _hf_access.token file not found.", "yellow")
                 self.color.print("  Downloads for private/gated models might fail.", "yellow")
-                self.color.print("  Consider creating '_access.token' or using 'huggingface-cli login'.", "yellow")
-        except Exception as e: self.color.print(f"  Error reading _access.token file: {e}", "red")
+                self.color.print("  Consider creating '_hf_access.token' or using 'huggingface-cli login'.", "yellow")
+        except Exception as e: self.color.print(f"  Error reading _hf_access.token file: {e}", "red")
 
     def _check_git_exists(self) -> bool:
         """Checks if git command is available."""

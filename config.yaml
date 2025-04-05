@@ -46,18 +46,17 @@ llm:
   attention_optimization: true
   batch_size: 16
   context_length: 8192
-  gpu_layer_auto_adjust: true
+  gpu_layer_auto_adjust: false
   gpu_layers: 32
   kv_cache_optimization: true
   mixed_precision_enabled: true
-  model_path: maggie/models/llm/neuralmagic-Mistral-7B-Instruct-v0.3-GPTQ-4bit
-  model_type: mistral
+  model_path: maggie/models/llm/microsoft/Phi-4-multimodal-instruct-onnx
+  model_type: phi-msft
   offload_strategy: auto
   precision_type: float16
   tensor_cores_enabled: true
-  use_autogptq: true
+  use_autogptq: false
   vram_efficient_loading: true
-  rtx_3080_optimized: true
 logging:
   async_enabled: true
   batch_size: 50
@@ -96,8 +95,8 @@ stt:
     flash_attention_enabled: true
     max_batch_size: 16
     memory_efficient: true
-    model_path: maggie/models/stt/whisper-base.en
-    model_size: base
+    model_path: maggie/models/stt/faster-whisper-large-v3-turbo-ct2
+    model_size: large-v3-turbo
     parallel_processing: true
     sample_rate: 16000
     simd_optimization: true

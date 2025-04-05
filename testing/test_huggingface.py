@@ -3,7 +3,7 @@ import os
 from huggingface_hub import snapshot_download
 
 
-def download_model(repo_user="", repo_name="", target_dir=None, parent_dir=None, token_path="_access.token", force_download=False, **kwargs) -> str:
+def download_model(repo_user="", repo_name="", target_dir=None, parent_dir=None, token_path="_hf_access.token", force_download=False, **kwargs) -> str:
     """
     
     Downloads a model from Hugging Face Hub and saves it to a specified directory.
@@ -16,7 +16,7 @@ def download_model(repo_user="", repo_name="", target_dir=None, parent_dir=None,
         repo_name (str): The name of the model repository.
         target_dir (str, optional): The directory where the model will be downloaded. Defaults to None.
         parent_dir (str, optional): The parent directory where the model will be downloaded. Defaults to None.
-        token_path (str, optional): Path to the file containing the Hugging Face token. Defaults to "_access.token".
+        token_path (str, optional): Path to the file containing the Hugging Face token. Defaults to "_hf_access.token".
         force_download (bool, optional): If True, forces the download even if the model already exists. Defaults to False.
         **kwargs: Additional arguments for snapshot_download.
 
@@ -57,7 +57,7 @@ if __name__ == "__main__":
     repo_name = "Mistral-7B-Instruct-v0.3-GPTQ-4bit"
 
     parent_path = "C:/AI/claude/service/maggie/maggie/models"
-    token_path = r"C:\AI\claude\service\maggie\_access.token"
+    token_path = r"C:\AI\claude\service\maggie\_hf_access.token"
     
     try:
         print(
